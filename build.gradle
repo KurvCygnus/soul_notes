@@ -1,0 +1,57 @@
+//*
+//*   █████████                      ████     ██████   █████           █████                     ███
+//*  ███░░░░░███                    ░░███    ░░██████ ░░███           ░░███                     ░███
+//* ░███    ░░░   ██████  █████ ████ ░███     ░███░███ ░███   ██████  ███████    ██████   █████ ░███
+//* ░░█████████  ███░░███░░███ ░███  ░███     ░███░░███░███  ███░░███░░░███░    ███░░███ ███░░  ░███
+//*  ░░░░░░░░███░███ ░███ ░███ ░███  ░███     ░███ ░░██████ ░███ ░███  ░███    ░███████ ░░█████ ░███
+//*  ███    ░███░███ ░███ ░███ ░███  ░███     ░███  ░░█████ ░███ ░███  ░███ ███░███░░░   ░░░░███░░░
+//* ░░█████████ ░░██████  ░░████████ █████    █████  ░░█████░░██████   ░░█████ ░░██████  ██████  ███
+//*  ░░░░░░░░░   ░░░░░░    ░░░░░░░░ ░░░░░    ░░░░░    ░░░░░  ░░░░░░     ░░░░░   ░░░░░░  ░░░░░░  ░░░
+
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:quarkus-langchain4j-bom:${quarkusPlatformVersion}")
+    implementation 'io.quarkus:quarkus-hibernate-reactive-panache'
+    implementation 'io.quarkus:quarkus-websockets-next'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+    implementation 'io.quarkus:quarkus-smallrye-jwt'
+    implementation 'io.quarkus:quarkus-reactive-pg-client'
+    implementation 'io.quarkus:quarkus-redis-client'
+    implementation 'io.quarkiverse.langchain4j:quarkus-langchain4j-openai'
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-rest'
+    testImplementation 'io.quarkus:quarkus-junit'
+    testImplementation 'io.rest-assured:rest-assured'
+
+    //* Jetbrains的注解多为语法, 数据流分析标记.
+    //* 我们不应该把它保留到运行时, 只应作为编译时依赖.
+    //* 除此之外, 我们也尽量应该只使用该依赖的注解来标记代码, 避免不同包的[[NotNull]], [[Nullable]]的混用导致的工程一致性灾难.
+    compileOnly("org.jetbrains:annotations:26.1.0")
+}
+
+group = 'kurvcygnus.soulnotes'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-parameters'
+}
+
+compileTestJava {
+    options.encoding = 'UTF-8'
+}
