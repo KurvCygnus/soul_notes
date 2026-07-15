@@ -6,6 +6,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import org.jetbrains.annotations.NotNull;
 
+//? TODO: 该示例 Resource 在上线前应被移除
 @Path("/hello")
 public final class ExampleResource
 {

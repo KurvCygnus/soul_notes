@@ -20,6 +20,37 @@ However, **dangerous operations like `rm -rf` is always forbidden, you should re
 
 ## Develop Guides
 
+### Implementation Details
+
+1. **No Hard-coded Configuration & Secrets**
+    * All business parameters, magic values, URLs, external service tokens, and prompt templates for AI agents must be declared externally in `application.properties` via `@ConfigProperty`.
+    * Local literals or hard-coded connection hooks inside Services, Resources, or AI Agents are strictly forbidden.
+
+2. **Strict Sealed-Interface Architecture & Package Visibility**
+    * Domain-level abstractions must be written as `sealed interface` or `sealed class` with explicit `permits` clauses where applicable.
+    * Business implementations must be package-private (`class` without a visibility modifier) to enforce that consumers always interact via the public `I`-prefixed interface.
+    * Subclass implementations must not bypass this by declaring public or package-private classes in unauthorized scopes.
+
+3. **Defensive Parameter Validation**
+    * Every parameter annotated with `@NotNull` must undergo programmatic verification (e.g. `Objects.requireNonNull`) at the immediate entrance of the method context.
+    * For cross-field data integrity validation in incoming HTTP requests (DTOs), rely on programmatic validation engines or framework-level declarative checks; validation constraints must not be bypassed or ignored.
+
+4. **Zero-Tolerance for Procedural Magic & Boilerplate**
+    * Do not write custom procedural transformations for standard DTO-to-Entity conversions. Utilize strict structural mappings or clean object factories.
+    * Raw map representations of structural entities are completely banned. Domain logic data transfers must rely entirely on Java `record` declarations or immutable POJOs to preserve static type guarantees.
+
+5. **AI Agent & LLM Orchestration Constraints**
+    * Interactions with the LLM via `quarkus-langchain4j-openai` must strictly leverage the declarative AI Agent approach using interfaces annotated with `@AiRegister` or equivalent LangChain4j-Quarkus structures.
+    * Direct programmatic manual JSON assembling, dynamic manual raw string manipulations for complex multi-turn LLM histories, or low-level HTTP requests to AI providers are strictly banned. Use systemic tools, templates, and structured memory providers instead.
+
+6. **Error Handling Architecture**
+    * Global and local exceptional situations must be mapped cleanly into strongly typed domain exceptions inheriting from unified base classes in the `exception/` package.
+    * Do not catch broad generic types like `Throwable` or `Exception` globally to mute log outputs or swallow structural errors. All caught infrastructure exceptions must be transformed cleanly or logged explicitly via the `SLF4J` logging facade(by using `PrintUtils#getLogger`).
+
+7. **Object Allocations & Utility Scopes**
+    * Avoid spawning redundant stateless utility class instances. Utility operations must reside in uninstantiable classes with private constructors, utilizing high-performance, statically analyzable routines.
+    * When compiling string patterns or handling high-frequency text formatting operations, rely consistently on `PrintUtils#quickFormat` or static compilation flags to prevent localized memory allocations.
+
 ### Unit Test
 
 Always write unit tests for a function, or feature that is:
@@ -54,7 +85,7 @@ Write Javadoc with these rules:
    to explain a thing when it is complex enough.
 6. When there exists a definition that is really complex(e.g. `Intermediate representation`, `Monad`), and not for everyone, leaving a link to wiki instead of explaining it is preferred.
 7. Always uses Chinese to write comments and Javadocs.
-8. Add `@author` and `@since` when written Javadoc's target is a top-level declaration, like `class`, `interface`, `enum`, etc. You should add yourself as an author on it. e.g. `${author_name} & ${model_name}`.
+8. Add `@author` and `@since` when written Javadoc's target is a top-level declaration, like `class`, `interface`, `enum`, etc. You should add yourself as an author on it. e.g. `${human_author_name} & ${model_name}`.
 
 ---
 

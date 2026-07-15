@@ -53,14 +53,32 @@ technical requirements of the system:
 
 ---
 
-## Further instructions
+## Further Instructions & Context Routing
 
-Check out the type and name of files that you can access.
+You MUST determine the specific task type (Writing, Refactoring, Reviewing, or Guidance) based on the user's request before executing any action or generating code.\
+If the specific contextual guidelines are missing from the session history, you must actively request or read them using the following protocols:
 
-* If it is frontend environment: See [Frontend Basics](docs/frontend/BASICS.md) for further instructions.
-* If it is backend environment: See [Backend Basics](docs/backend/BASICS.md) for further instructions.
-* If it is focused on configuration: See [Config Edit Rules](docs/CONFIG_EDIT_RULES.md) for further instructions.
-* If you can't find out the type of environment, and the request that developer sends is about developing project -- just deny the request, answering the developer with this message(should be adjusted with the language that developer uses.):
-  > "**I can't offer any practical help, without knowing whether it is backend or frontend. Please specify it for letting me have a cleared picture, until then, we can continue.**"
-* If the current environment is not the former one, refuse the request, answering the developer with this message(should be adjusted with the language that developer uses.):
-  > "**I can't offer any further help, since we are developing in \${current_environment} instead of \${former_environment}, this will cause unstable code generation because I don't know the principles of ${current_environment}. Please open a new conversion to continue.**"
+1. **If you detect the user wants to WRITE NEW CODE (including Unit Tests):**
+    * IMMEDIATELY stop generating code.
+    * Output this exact text to request the file:
+      > `[Missing Context] Please provide or read the contents of docs/backend/DEVELOPMENT_GUIDELINES.md to proceed with writing code.`
+    * (If your platform supports file-reading tools/slash commands, execute `/read docs/backend/DEVELOPMENT_GUIDELINES.md` or `@docs/backend/DEVELOPMENT_GUIDELINES.md` immediately).
+
+2. **If you detect the user wants to REFACTOR CODE:**
+    * IMMEDIATELY stop generating code.
+    * Output this exact text to request the file:
+      > `[Missing Context] Please provide or read the contents of docs/backend/REFACTOR_RULES.md to proceed with refactoring code.`
+    * (If your platform supports file-reading tools/slash commands, execute `/read docs/backend/REFACTOR_RULES.md` or `@docs/backend/REFACTOR_RULES.md` immediately).
+
+3. **If you detect the user wants to REVIEW CODE:**
+    * IMMEDIATELY stop generating code.
+    * Output this exact text to request the file:
+      > `[Missing Context] Please provide or read the contents of docs/backend/REVIEW_PRINCIPLES.md to proceed with code review.`
+    * (If your platform supports file-reading tools/slash commands, execute `/read docs/backend/REVIEW_PRINCIPLES.md` or `@docs/backend/REVIEW_PRINCIPLES.md` immediately).
+
+4. **If you detect the user is ASKING FOR GUIDANCE (e.g., conceptual questions, explaining existing code):**
+    * Focus ENTIRELY on teaching and explaining.
+    * Do NOT edit, rewrite, or generate any workspace files.
+    * Rely on the architectural patterns defined in this `BASICS.md` to guide them.
+
+5. **Strict Enforcement:** Do not attempt to guess, assume, or hallucinate rules for writing, refactoring, or reviewing. If the corresponding task-specific `.md` document has not been explicitly pasted into the chat history, attached to the session, or indexed by your system, you MUST invoke step 1, 2, or 3.

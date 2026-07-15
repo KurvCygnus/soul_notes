@@ -68,11 +68,15 @@ This project doesn't use formatter. And thus, you should follow this code style,
   ```java
   public final class Main extends IFoo
   {
+      private static final Logger = PrintUtils.getLogger();
+      
       //* Always mark [[NotNull]] and [[Nullable]] on params, fields, for local variables, [[Nullable]] is a must but [[NotNull]] does not.
       public static void main(@NotNull String... args)
       {
-          for(final var arg: args)//* For single line sentences, covering the scope with `{}` is not mandatory.
-              System.out.printf("Arg \"%s\" got.\n", arg);//* If `{}` is used at such a case, you should write it like this: `for(...) { ... }`
+          //* For single line sentences, covering the scope with `{}` is not mandatory.
+          //* If `{}` is used at such a case, you should write it like this: `for(...) { ... }`
+          for(final var arg: args)
+              System.out.println(PrintUtils.quickFormat("Arg \"{}\" got.\n", arg));//* When producing formatted strings, always use [[PrintUtils#quickFormat]].
           
           SomeClass.run(args);
       }
