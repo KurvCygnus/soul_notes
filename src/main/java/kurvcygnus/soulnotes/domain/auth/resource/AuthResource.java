@@ -11,8 +11,10 @@ import kurvcygnus.soulnotes.domain.auth.dto.LoginRequest;
 import kurvcygnus.soulnotes.domain.auth.dto.RegisterRequest;
 import kurvcygnus.soulnotes.domain.auth.service.AuthService;
 import kurvcygnus.soulnotes.dto.ApiResponse;
-import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
+import kurvcygnus.soulnotes.exception.IBusinessException;
+import kurvcygnus.soulnotes.utils.constants.ApiEndpointConstants;
+import kurvcygnus.soulnotes.utils.constants.JwtConstants;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -26,7 +28,7 @@ import org.jetbrains.annotations.NotNull;
  * @author Claude Code
  * @since 1.0
  */
-@Path("/api/v1/auth")
+@Path(ApiEndpointConstants.AUTH_BASE)
 public final class AuthResource
 {
     @Inject AuthService authService;
@@ -50,13 +52,27 @@ public final class AuthResource
     public @NotNull Uni<ApiResponse<Void>> logout(@HeaderParam("Authorization") @NotNull String authorization)
     {
         if(authorization.isBlank())
-            return Uni.createFrom().failure(IBusinessException.of(ErrorCode.AUTH_TOKEN_INVALID));
+            return Uni.createFrom().failure(
+                IBusinessException.of(
+                    ErrorCode.AUTH_TOKEN_INVALID,
+                    "Authorization 头为空",
+                    IllegalStateException::new,
+                    "AUTH_LOGOUT_MISSING_HEADER"
+                ).asException()
+            );
         //! 去除 "Bearer " 前缀以提取裸 Token; 若前缀不存在则直接使用原值.
-        final var token = authorization.startsWith("Bearer ") ?
-            authorization.substring(7) :
+        final var token = authorization.startsWith(JwtConstants.TOKEN_PREFIX) ?
+            authorization.substring(JwtConstants.TOKEN_PREFIX_LENGTH) :
             authorization;
         if(token.isBlank())
-            return Uni.createFrom().failure(IBusinessException.of(ErrorCode.AUTH_TOKEN_INVALID));
+            return Uni.createFrom().failure(
+                IBusinessException.of(
+                    ErrorCode.AUTH_TOKEN_INVALID,
+                    "Token 格式错误",
+                    IllegalStateException::new,
+                    "AUTH_LOGOUT_MALFORMED_TOKEN"
+                ).asException()
+            );
         return authService.logout(token).map(v -> ApiResponse.success());
     }
 }

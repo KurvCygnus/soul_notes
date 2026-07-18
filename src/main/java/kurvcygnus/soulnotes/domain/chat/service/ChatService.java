@@ -13,10 +13,13 @@ import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**
@@ -33,6 +36,8 @@ import java.util.UUID;
 @ApplicationScoped
 public final class ChatService
 {
+    private static final Logger LOG = LoggerFactory.getLogger(ChatService.class);
+
     //region 核心业务
     /**
      * <span style="color: 95cc6d">发送消息并获取完整回复 (非流式).</span>
@@ -73,12 +78,13 @@ public final class ChatService
     //! @WithTransaction 不可用于 Multi 返回类型, 事务仅在 Uni 上受支持.
     //? Phase 3 如需事务保证, 应将流式响应拆为: 事务内保存消息 → 非事务流式返回 AI 回复.
     public @NotNull Multi<String> streamMessage(
-        @NotNull String sessionId,
+        @org.jetbrains.annotations.Nullable String sessionId,
         @NotNull String content,
         @NotNull UUID userId
     )
     {
-        return getOrCreateSession(UUID.fromString(sessionId), userId).
+        final var sid = sessionId != null ? UUID.fromString(sessionId) : null;
+        return getOrCreateSession(sid, userId).
             flatMap(session ->
                 {
                     session.addMessage("user", content);
@@ -130,7 +136,14 @@ public final class ChatService
             <AiChatSession>findById(sessionId).
             onItem().
             ifNull().
-            failWith(() -> IBusinessException.of(ErrorCode.SESSION_NOT_FOUND));
+            failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.SESSION_NOT_FOUND,
+                    "会话不存在",
+                    NoSuchElementException::new,
+                    "CHAT_SESSION_LOOKUP_NOT_FOUND"
+                ).asException()
+            );
     }
 
     //* AI 对话占位实现.
@@ -154,9 +167,9 @@ public final class ChatService
         {
             return JsonUtils.parseJson(messagesJson, new TypeReference<List<Map<String, String>>>() { }).size();
         }
-        catch(Exception e) { return 0; }
+        catch(Exception e) { LOG.warn("解析 messages JSON 获取消息数失败: {}", e.getMessage()); return 0; }
     }
-    
+
     //* 使用 JsonUtils 解析 messages JSON 数组, 提取最后一条消息的 content 作为预览.
     //* 空字符串 "" 是合理选择, 用于 VO 展示前端, 表示"无预览内容".
     //! 不应使用 null (导致前端判空) 或 Optional (VO 字段不应包装 Optional).
@@ -174,7 +187,7 @@ public final class ChatService
                 return "";
             return lastContent.length() > 50 ? lastContent.substring(0, 50) + "..." : lastContent;
         }
-        catch(Exception e) { return ""; }
+        catch(Exception e) { LOG.warn("解析 messages JSON 获取预览失败: {}", e.getMessage()); return ""; }
     }
 
     //endregion

@@ -1,15 +1,21 @@
 package kurvcygnus.soulnotes.domain.diary.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.domain.diary.dto.EmotionWeatherVo;
 import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
+import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.TimeUtils;
 import kurvcygnus.soulnotes.utils.enums.EmotionWeatherType;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -22,6 +28,8 @@ import java.util.UUID;
 @ApplicationScoped
 public final class EmotionWeatherService
 {
+    private static final Logger LOG = LoggerFactory.getLogger(EmotionWeatherService.class);
+
     //* 统一使用 TimeUtils 中定义的上海时区, 避免多处硬编码.
 
     /**
@@ -45,23 +53,62 @@ public final class EmotionWeatherService
             list().
             map(this::aggregateByDay);
     }
-    
+
     //region 聚合逻辑
-    //* 将日记列表按日分组, 计算每日的情感均值并映射为天气类型.
+
+    private static final @NotNull TypeReference<Map<String, Object>> ANALYSIS_MAP_TYPE = new TypeReference<>() {};
+
+    /**
+     * <span style="color: 95cc6d">将日记列表按日分组, 计算每日的情感均值并映射为天气类型.</span>
+     *
+     * @param diaries 日记实体列表
+     * @return 按日聚合的情绪天气预报 VO 列表
+     */
     private @NotNull List<EmotionWeatherVo> aggregateByDay(@NotNull List<MoodDiary> diaries)
     {
-        //? TODO Phase 2: 实现按日分组 + 情感均值的聚合逻辑.
-        //?               对于每一日:
-        //?                 1. 解析日记的 analysisResult (JSON), 提取 positive/negative/anxiety
-        //?                 2. 计算当日各指标均值
-        //?                 3. 根据均值映射 EmotionWeatherType
-        //?                 4. 构造 EmotionWeatherVo
-        //?               当前返回空列表占位.
-        return List.of();
+        final var dayMap = new LinkedHashMap<LocalDate, Acc>(32);
+
+        for(final var diary : diaries)
+        {
+            if(diary.analysisResult == null || diary.analysisResult.isBlank())
+                continue;
+
+            try
+            {
+                final var map  = JsonUtils.parseJson(diary.analysisResult, ANALYSIS_MAP_TYPE);
+                final var date = diary.createdAt.atZone(TimeUtils.ZONE_ASIA_SHANGHAI).toLocalDate();
+
+                final var acc = dayMap.computeIfAbsent(date, k -> new Acc());
+                acc.positiveSum += asDouble(map.get("positive"));
+                acc.negativeSum += asDouble(map.get("negative"));
+                acc.anxietySum  += asDouble(map.get("anxiety"));
+                acc.count++;
+            }
+            catch(Exception e)
+            {
+                LOG.warn("解析日记分析结果失败: {}", e.getMessage());
+                //* 单条解析失败跳过, 不影响其他日记的聚合
+            }
+        }
+
+        return dayMap.entrySet().stream().map(entry -> {
+            final var date = entry.getKey();
+            final var acc  = entry.getValue();
+            final var avgPositive = acc.positiveSum / acc.count;
+            final var avgNegative = acc.negativeSum / acc.count;
+            final var avgAnxiety  = acc.anxietySum  / acc.count;
+            return new EmotionWeatherVo(
+                date,
+                mapWeather(avgPositive, avgNegative, avgAnxiety),
+                avgPositive,
+                avgNegative,
+                avgAnxiety,
+                acc.count
+            );
+        }).toList();
     }
 
-    //! 此处为简化天气映射逻辑, Phase 2 应根据实际情感分数做更细致的映射.
-    @SuppressWarnings("unused")
+    //! 此处为简化天气映射逻辑, 后续应根据实际情感分数做更细致的映射.
     private static @NotNull EmotionWeatherType mapWeather(double positive, double negative, double anxiety)
     {
         if(anxiety > 0.8 || negative > 0.8)
@@ -74,5 +121,28 @@ public final class EmotionWeatherService
             return EmotionWeatherType.OVERCAST;
         return EmotionWeatherType.CLOUDY;
     }
+
+    //region 内部聚合累加器
+
+    private static final class Acc
+    {
+        private double positiveSum;
+        private double negativeSum;
+        private double anxietySum;
+        private int    count;
+    }
+
+    //endregion
+
+    //region 辅助方法
+
+    private static double asDouble(@NotNull Object value)
+    {
+        if(value instanceof Number n)  return n.doubleValue();
+        if(value instanceof String s) { try { return Double.parseDouble(s); } catch(NumberFormatException e) { return 0.0; } }
+        return 0.0;
+    }
+
+    //endregion
     //endregion
 }

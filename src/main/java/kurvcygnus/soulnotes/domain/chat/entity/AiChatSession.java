@@ -91,8 +91,7 @@ public final class AiChatSession extends PanacheEntityBase
     //endregion
 
     //region JSON 辅助
-    //* 使用简单的 JSON 序列化/反序列化.
-    //? Phase 2 应替换为 JsonUtils 的统一封装.
+    //* 使用 JsonUtils 的统一封装进行 JSON 序列化/反序列化.
     private @NotNull List<Map<String, String>> getMessageList()
     {
         if(messages == null || messages.isBlank())

@@ -11,6 +11,7 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.domain.auth.service.TokenService;
+import kurvcygnus.soulnotes.utils.constants.JwtConstants;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -41,11 +42,11 @@ public final class JwtAuthenticationMechanism implements HttpAuthenticationMecha
         @NotNull IdentityProviderManager identityProviderManager
     )
     {
-        final var authHeader = context.request().getHeader("Authorization");
-        if(authHeader == null || !authHeader.startsWith("Bearer "))
+        final var authHeader = context.request().getHeader(JwtConstants.AUTH_HEADER);
+        if(authHeader == null || !authHeader.startsWith(JwtConstants.TOKEN_PREFIX))
             return Uni.createFrom().nullItem();
 
-        final var token = authHeader.substring(7);
+        final var token = authHeader.substring(JwtConstants.TOKEN_PREFIX_LENGTH);
         try
         {
             final var jwt = jwtParser.parse(token);
@@ -73,5 +74,5 @@ public final class JwtAuthenticationMechanism implements HttpAuthenticationMecha
     }
 
     @Override public @NotNull Uni<ChallengeData> getChallenge(@NotNull RoutingContext context)
-        { return Uni.createFrom().item(new ChallengeData(401, "WWW-Authenticate", "Bearer")); }
+        { return Uni.createFrom().item(new ChallengeData(401, "WWW-Authenticate", JwtConstants.CHALLENGE_REALM)); }
 }

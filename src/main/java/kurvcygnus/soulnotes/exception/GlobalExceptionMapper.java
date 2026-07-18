@@ -7,22 +7,32 @@ import kurvcygnus.soulnotes.dto.ApiResponse;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * <b>全局业务异常映射器</b>，将 {@link IBusinessException} 统一转换为 JSON 错误响应。<br>
- * 拦截所有业务异常，提取 {@link ErrorCode} 中的 HTTP 状态码和错误信息，
- * 以 {@link ApiResponse#error(ErrorCode)} 格式返回。<hr>
+ * <b>全局结构化异常映射器</b>，将所有 {@link StructuredException} 统一转换为 JSON 错误响应。<br>
+ * 对实现 {@link IBusinessException} 的异常提取 {@link ErrorCode} 确定 HTTP 状态码；
+ * 对其他 {@link StructuredException} 回退为 500 内部错误。<hr>
+ * <p><b>注意:</b></p>
+ * <ul>
+ *     <li>匹配 {@link StructuredException} 而非 {@link HolderException}，因为 {@link DataHolderException}
+ *         是 {@link HolderException} 的兄弟类（均继承 {@link StructuredException}），后者无法被 {@code ExceptionMapper<HolderException>} 捕获。</li>
+ * </ul>
  *
- * @author Kurv Cygnus & Claude Code
+ * @author Kurv Cygnus
  * @since 1.1
  */
 @Provider
-public final class GlobalExceptionMapper implements ExceptionMapper<HolderException>
+public final class GlobalExceptionMapper implements ExceptionMapper<StructuredException>
 {
-    @Override
-    public @NotNull Response toResponse(@NotNull HolderException exception)
+    @Override public @NotNull Response toResponse(@NotNull StructuredException exception)
     {
-        final var errorCode = exception.getErrorCode();
-        return Response.status(errorCode.getHttpStatus()).
-            entity(ApiResponse.error(errorCode)).
+        if(exception instanceof IBusinessException<?> bizEx)
+        {
+            final var errorCode = bizEx.getErrorCode();
+            return Response.status(errorCode.getHttpStatus()).
+                entity(ApiResponse.error(errorCode)).
+                build();
+        }
+        return Response.status(ErrorCode.INTERNAL_ERROR.getHttpStatus()).
+            entity(ApiResponse.error(ErrorCode.INTERNAL_ERROR)).
             build();
     }
 }

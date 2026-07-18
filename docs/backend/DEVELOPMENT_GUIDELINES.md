@@ -1,5 +1,7 @@
 # Backend Development Guidelines
 
+> **Prerequisite:** Read [BASICS.md](./BASICS.md) for shared project context and universal principles before applying these backend-specific rules.
+
 ## Command Permissions
 
 These are the commands you are allowed to use:
@@ -13,8 +15,8 @@ These are the commands you are allowed to use:
 ./gradlew :testNative --tests "${target_native_test_class}" # Build and do native unit tests, same requirement as unit tests'.
 ```
 
-For other commands which excludes from reading files(reading git diff also counts), only when the developer permits, or asks you to use, then you could use.\
-However, **dangerous operations like `rm -rf` is always forbidden, you should refuse to operate even if developer asks you to.**
+Any command other than reading files or git diff requires developer permission.\
+However, **dangerous operations (e.g., `rm -rf`) are always forbidden — refuse even if the developer explicitly requests them.**
 
 ---
 
@@ -27,7 +29,7 @@ However, **dangerous operations like `rm -rf` is always forbidden, you should re
     * Local literals or hard-coded connection hooks inside Services, Resources, or AI Agents are strictly forbidden.
 
 2. **Strict Sealed-Interface Architecture & Package Visibility**
-    * Domain-level abstractions must be written as `sealed interface` or `sealed class` with explicit `permits` clauses where applicable.
+    * Domain-level abstractions must be written as `sealed interface` or `sealed class` with explicit `permits` clauses whenever a parent type defines a restricted subtyping hierarchy.
     * Business implementations must be package-private (`class` without a visibility modifier) to enforce that consumers always interact via the public `I`-prefixed interface.
     * Subclass implementations must not bypass this by declaring public or package-private classes in unauthorized scopes.
 
@@ -59,8 +61,8 @@ Always write unit tests for a function, or feature that is:
 * **edgy**
 * **SQL, I/O, reactive related**
 
-Mock Class/DTO is allowed to create in corresponded test package.\
-If unit tests are unpassable, ***DO NOT* edit CI or hard-coding to pass it, that's meaningless.**
+Mock classes/DTOs may be created in the corresponding test package.\
+If unit tests do not pass, ***DO NOT* edit CI or insert hard-coded values to force them through — fix the actual regression.**
 
 ---
 
@@ -93,10 +95,10 @@ Write Javadoc with these rules:
 
 1. All logics that involves file I/O, synchronous network request, complex computations must be wrapped explicitly in worker thread pools.\
    In Quarkus, using `Uni.createFrom().item(...).runSubscriptionOn(Infrastructure.getDefaultWorkerPool())` or `@Blocking` is required.
-2. No stream downgrading: `.await().indefinitely()` and `.asStream()` are banned in `Service` and `Resource`(a.k.a. `Repository`) layers.
+2. No stream downgrading: `.await().indefinitely()` and `.asStream()` are banned in `Service` and `Resource` layers.
 3. Keep reactive style: The return value of reactive-related logic methods should be `Unit<T>` or `Multi<T>`.
 4. Chain calling style preferred: Using `.map()` and `.flatMap()`, and handle exceptions explicitly(e.g. `onFailure().recoverWithItem()`).
-5. Always grant transactional: The operations that related to multi-table editing, should be handled in methods that has `Pananche.withTransaction(() -> {...})` or annotated with `@ReactiveTransactional`, it keeps session alive.
+5. Always ensure transactional integrity: Multi-table write operations must be wrapped in `Panache.withTransaction(() -> {...})` or annotated with `@ReactiveTransactional` to keep the session alive.
 6. DO NOT operate Entity when context is inactive.
 
 ---

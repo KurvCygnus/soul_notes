@@ -5,6 +5,8 @@ import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -46,13 +48,15 @@ public record DiaryResponse(
         );
     }
 
+    private static final Logger LOG = LoggerFactory.getLogger(DiaryResponse.class);
+
     @SuppressWarnings("unused")
     private static @Nullable OfAnalysisResult parseAnalysisResult(@Nullable String analysisResultJson)
     {
         if(analysisResultJson == null || analysisResultJson.isBlank())
             return null;
         try { return JsonUtils.parseJson(analysisResultJson, OfAnalysisResult.class); }
-        catch(Exception e) { return null; }
+        catch(Exception e) { LOG.warn("解析 analysisResult JSON 失败: {}", e.getMessage()); return null; }
     }
 
     /**

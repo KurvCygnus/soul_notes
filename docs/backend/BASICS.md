@@ -1,6 +1,6 @@
-# Soul Note - Backend Develop Basics
+# Soul Note — Backend Development Basics
 
-## Tech Stacks
+## Tech Stack
 
 * Java 21 - Main programming language used.
 * Gradle - Build tool used.
@@ -58,11 +58,11 @@
 
 ## Code Styles
 
-This project doesn't use formatter. And thus, you should follow this code style, and checks when reviewing codes:
+This project does not use a formatter. Follow this code style when writing and enforce it during review:
 
 * Abstract class should always use `Abstract` as prefix.
-* For interface, `I` prefix is required.
-* Prefer sealed inheritance OOP instead of no restricts. Also, `Impl` or `Implementation` is banned from any file's naming.
+* All interfaces must use `I` as a prefix.
+* Prefer sealed inheritance over open inheritance. `Impl` or `Implementation` must not appear in any filename.
 * Strict Allman-Style is required.\
   Example:
   ```java
@@ -73,9 +73,9 @@ This project doesn't use formatter. And thus, you should follow this code style,
       //* Always mark [[NotNull]] and [[Nullable]] on params, fields, for local variables, [[Nullable]] is a must but [[NotNull]] does not.
       public static void main(@NotNull String... args)
       {
-          //* For single line sentences, covering the scope with `{}` is not mandatory.
+          //* For single line statements, covering the scope with `{}` is not mandatory.
           //* If `{}` is used at such a case, you should write it like this: `for(...) { ... }`
-          for(final var arg: args)
+          for(final var arg: args)//* Using `final` in local varaibles(method params is not included) is recommend.
               System.out.println(PrintUtils.quickFormat("Arg \"{}\" got.\n", arg));//* When producing formatted strings, always use [[PrintUtils#quickFormat]].
           
           SomeClass.run(args);
@@ -104,8 +104,8 @@ This project doesn't use formatter. And thus, you should follow this code style,
   
   //* Also, you should follow the usage of `[[${Ref}]]` from comments above, it can be actually a reference when some plugin is installed, `${Ref}` can be either file reference or class reference.
   ```
-* About `var`: Use it when type is not primitive, and type itself can be deduced easily. Otherwise, the usage is forbidden.
-* Always take JetBrains Annotations at highest lint annotation library, others' annotations, as long as it is not duplicated with JetBrains, you can also use.
+* About `var`: Use it only when the type is non-primitive and obvious from the right-hand side expression (e.g., `var list = new ArrayList<String>()` is OK; `var result = compute()` is not).
+* JetBrains Annotations are the highest-authority lint annotations for this project. Other annotation libraries may be used as long as they do not duplicate JetBrains equivalents.
 
 ---
 

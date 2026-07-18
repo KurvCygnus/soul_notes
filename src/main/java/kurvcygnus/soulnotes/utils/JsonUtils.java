@@ -15,7 +15,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public final class JsonUtils
 {
-    private JsonUtils() { throw new IllegalAccessError(); }
+    private JsonUtils() { throw new IllegalAccessError("Class \"JsonUtils\" is not meant to be instantized!"); }
 
     //* 显式注册 JavaTimeModule, 避免 findAndRegisterModules() 的全 classpath 扫描开销.
     private static final @NotNull ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());

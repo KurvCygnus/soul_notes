@@ -1,6 +1,6 @@
 # Soul Notes 后端早期架构落地设计
 
-> **状态**: v1.0 — 实际实现架构快照, 第一期核心链路已完成, 第二期 AI 接入待开始.
+> **状态**: v2.0 — P1 核心链路已完成, P2 AI 接入文件已实现, 待进入 P2 共情对话/P3 语音模块.
 > **本文件落地 `DEV.md` 中的后端骨架, 细化至每个文件的具体职责、关键方法、数据流向.**
 > **✓ = 已实现, ✗ = 未实现 (标注计划阶段)**
 
@@ -11,46 +11,38 @@
 ```text
 kurvcygnus.soulnotes/
 ├── Entrance.java                         # 应用入口 ✓
-├── ExampleResource.java                  # Demo 端点 (非架构设计) ✓
-
-├── config/                               # 全局配置 ✗ (P4)
-│   ├── JwtConfig.java                    # JWT 密钥/过期配置
-│   ├── CorsConfig.java                   # CORS 跨域配置
-│   ├── AiModelConfig.java                # LangChain4j 模型/端点配置
-│   └── RedisConfig.java                  # Redis 连接与序列化配置
-
+├── config/                               # 全局配置 ✓
+│   ├── JwtConfig.java                    # JWT 密钥/过期配置 ✓
+│   ├── CorsConfig.java                   # CORS 跨域配置 ✓
+│   ├── AiModelConfig.java                # LangChain4j 模型/端点配置 ✓
+│   └── RedisConfig.java                  # Redis 连接与序列化配置 ✓
 ├── utils/                                # 常量、枚举、静态辅助
 │   ├── enums/
 │   │   ├── UserRole.java                 # STUDENT / COUNSELOR / ADMIN ✓
 │   │   ├── EmotionWeatherType.java       # SUNNY / CLOUDY / OVERCAST / RAINY / THUNDERSTORM ✓
 │   │   └── WarningLevel.java             # NONE / YELLOW / RED ✓
-│   ├── constants/                        # 常量 ✗ (P4)
-│   │   ├── JwtConstants.java
-│   │   ├── AiPromptConstants.java
-│   │   ├── RedisKeyConstants.java
-│   │   └── ApiEndpointConstants.java
+│   ├── constants/                        # 常量 ✓
+│   │   ├── JwtConstants.java             # JWT 常量 ✓
+│   │   ├── AiPromptConstants.java        # AI 提示词模板 (占位) ✓
+│   │   ├── RedisKeyConstants.java        # Redis Key 模式 ✓
+│   │   └── ApiEndpointConstants.java     # REST 路径常量 ✓
 │   ├── lint/
 │   │   └── CallerSensitive.java          # 调用者敏感标记注解 ✓
 │   ├── JsonUtils.java                    # Jackson 统一 ObjectMapper 封装 ✓
 │   ├── TimeUtils.java                    # 时区/日期辅助 ✓ (已实现 2026-07-15)
 │   └── PrintUtils.java                   # 日志/字符串相关辅助方法 ✓
-
 ├── exception/                            # 全局异常处理 & 结构化异常体系
 │   ├── IStructuredThrowable.java         # 异常体系基础接口: tag() + cause() ✓ (迁移自 CS)
 │   ├── StructuredException.java          # 具体结构化运行时异常(默认实现) ✓ (迁移自 CS)
 │   ├── IDetailedThrowable.java           # 携带类型化详细数据的异常接口 ✓ (迁移自 CS)
 │   ├── ITransactionalThrowable.java      # 可回滚/可恢复的结构化异常 ✓ (迁移自 CS)
-│   ├── IBusinessException.java           # 业务异常公共门面接口(静态工厂) ✓ (2026-07 新增)
-│   ├── HolderException.java              # 承载 ErrorCode 的结构化异常(sealed, package-private) ✓
-│   ├── DataHolderException.java          # 携带附加数据的业务异常(package-private) ✓ (2026-07 新增)
+│   ├── IBusinessException.java           # 业务异常门面接口 + HolderException + DataHolderException (同文件内包级私有实现) ✓ (2026-07 新增)
 │   ├── ErrorCode.java                    # 枚举: 统一错误码体系 ✓
 │   ├── GlobalExceptionMapper.java        # 响应式全局异常映射器 ✓ (已实现 2026-07-15)
 │   └── ValidationExceptionMapper.java    # 请求参数校验异常映射 ✓ (已实现 2026-07-15)
-
 ├── dto/                                  # 全局共享 DTO (跨模块复用)
 │   ├── ApiResponse.java                  # 统一 JSON 响应外壳 {code, message, data} ✓
 │   └── PageRequest.java                  # 分页查询通用参数 (含边界 clamp) ✓
-
 ├── domain/                               # 核心业务模块
 │   ├── auth/                             # 认证模块 ✓
 │   │   ├── entity/
@@ -81,7 +73,7 @@ kurvcygnus.soulnotes/
 │   │   └── service/
 │   │       ├── DiaryService.java         # 日记增删改查 + 调用 AI 分析 (骨架)
 │   │       ├── EmotionAnalysisService.java   # 分析结果落库 + 天气映射 (骨架)
-│   │       └── EmotionWeatherService.java    # 按时间聚合生成天气预报 (骨架, 聚合逻辑待实现)
+│   │       └── EmotionWeatherService.java    # 按时间聚合生成天气预报 ✓ (含 13 个边界测试)
 │   │
 │   ├── chat/                            # AI 树洞对话模块 ✓
 │   │   ├── entity/
@@ -104,21 +96,19 @@ kurvcygnus.soulnotes/
 │       └── service/
 │           ├── VoiceStorageService.java
 │           └── AsrTranscriptionService.java
-
-├── ai/                                   # AI 能力封装层 ✗ (P1/P2)
+├── ai/                                   # AI 能力封装层 ✓ (P1 核心已完成)
 │   ├── agent/
-│   │   ├── MoodAnalysisAgent.java        # @RegisterAiService — 情感分析专用
-│   │   ├── EmpatheticChatAgent.java      # @RegisterAiService — 共情对话专用
-│   │   └── WarningDetectionAgent.java    # @RegisterAiService — 红线预警检测
+│   │   ├── MoodAnalysisAgent.java        # @RegisterAiService — 情感分析专用 ✓
+│   │   ├── EmpatheticChatAgent.java      # @RegisterAiService — 共情对话专用 ✗ (P2)
+│   │   └── WarningDetectionAgent.java    # @RegisterAiService — 红线预警检测 ✓
 │   ├── dto/
-│   │   ├── MoodAnalysisResult.java       # 情感分析结果 POJO
-│   │   └── WarningDetectionResult.java   # 预警检测结果 POJO
+│   │   ├── MoodAnalysisResult.java       # Record: positive, negative, anxiety, weather, summary ✓
+│   │   └── WarningDetectionResult.java   # Record: warningLevel, reason, suggestedAction ✓
 │   ├── tool/
-│   │   ├── CrisisInterventionTool.java   # @Tool — 触发红线时调用, 返回热线信息
-│   │   └── UserContextTool.java          # @Tool — 提供用户上下文给 AI
+│   │   ├── CrisisInterventionTool.java   # @Tool — 触发红线时调用, 返回热线信息 ✓
+│   │   └── UserContextTool.java          # @Tool — 提供用户上下文给 AI ✗ (P2)
 │   └── retriever/
 │       └── PsychologyTipsRetriever.java  # (可选) 心理小知识检索增强 ✗ (P4)
-
 └── websocket/                            # WebSocket 控制器 ✗ (P2/P3)
     ├── ChatWebSocket.java                # /ws/chat — AI 对话流式文本推送
     └── AlertWebSocket.java               # /ws/alert — 红色预警实时推送
@@ -134,15 +124,14 @@ kurvcygnus.soulnotes/
 
 所有配置类负责读取 `application.properties` 并构造框架所需的 Bean.
 
-| 文件                   | 职责                                   | 关键内容                                                                 | 状态   |
-|----------------------|--------------------------------------|----------------------------------------------------------------------|------|
-| `JwtConfig.java`     | 读取 JWT 密钥、过期时间                       | `@ConfigProperty("jwt.secret")`, `@ConfigProperty("jwt.expiration")` | ✗ P4 |
-| `CorsConfig.java`    | 声明 CORS 允许的来源与方法                     | Quarkus HTTP CORS filter 配置                                          | ✗ P4 |
-| `AiModelConfig.java` | 配置 LLM 的 API Key、endpoint、model name | `@ConfigProperty("ai.openai.api-key")` 等                             | ✗ P4 |
-| `RedisConfig.java`   | Redis 客户端连接配置                        | 默认通过 `application.properties` 的 `quarkus.redis.*` 即可                 | ✗ P4 |
+| 文件                   | 职责                                   | 关键内容                                                                 | 状态 |
+|----------------------|--------------------------------------|----------------------------------------------------------------------|----|
+| `JwtConfig.java`     | 读取 JWT 密钥、过期时间                       | `@ConfigProperty("jwt.secret")`, `@ConfigProperty("jwt.expiration")` | ✓  |
+| `CorsConfig.java`    | 声明 CORS 允许的来源与方法                     | Quarkus HTTP CORS filter 配置                                          | ✓  |
+| `AiModelConfig.java` | 配置 LLM 的 API Key、endpoint、model name | `@ConfigProperty("ai.openai.api-key")` 等                             | ✓  |
+| `RedisConfig.java`   | Redis 客户端连接配置                        | 默认通过 `application.properties` 的 `quarkus.redis.*` 即可                 | ✓  |
 
-> 当前状态: 配置直接通过 `application.properties` 分散管理, 尚未抽取配置类.
-
+> 当前状态: 4 个配置类已实现, 读取 `application.properties` 并通过构造器注入暴露配置值.
 **数据流向**: 其他模块通过 `@Inject` 或 `@ConfigProperty` 获取配置值.
 
 ---
@@ -184,27 +173,27 @@ public enum EmotionWeatherType
 > - `TextUtils` 替换为 `PrintUtils.quickFormat` (SLF4J `MessageFormatter`)
 > - 新增 `HolderException` 解决 `StructuredException` 不能承载数据的问题(方案一)
 
-| 文件                               | 职责                                                           | 关键内容                                                                              | 状态   |
-|----------------------------------|--------------------------------------------------------------|-----------------------------------------------------------------------------------|------|
-| `IStructuredThrowable.java`      | 异常体系基础接口：结构化标签 + 原因链                                         | `tag()`, `cause()` — 所有结构化异常的契约基接口                                                | ✓    |
-| `StructuredException.java`       | 具体的结构化运行时异常（默认实现）                                            | 格式化消息 `<SimpleName:Tag> message`, 标签校验, 非空消息保证                                    | ✓    |
-| `IDetailedThrowable.java`        | 携带类型化详细数据的异常接口(CRTP)                                         | `causeData()`, `asException()`, `throwSelf()` — 去掉 ICRTPCaster, 内联转型              | ✓    |
-| `ITransactionalThrowable.java`   | 可回滚/可恢复的结构化异常                                                | `rollback()` —— 异常自身携带补偿动作                                                        | ✓    |
-| `HolderException.java`           | 承载数据的结构化异常(实现 `IDetailedThrowable<HolderException, Object>`) | 以 `Object` 泛型解决数据承载问题；`BusinessException` 直接继承此类                                  | ✓    |
-| `BusinessException.java`         | 业务异常(继承 `HolderException`)                                   | 携带 `ErrorCode`, `message`, `httpStatus`, 可附加 `data`; `tag()` = `ErrorCode.name()` | ✓    |
-| `ErrorCode.java`                 | 统一错误码枚举                                                      | `AUTH_TOKEN_EXPIRED(401001), DIARY_NOT_FOUND(404001), AI_SERVICE_DOWN(503001)`    | ✓    |
-| `GlobalExceptionMapper.java`     | 全局异常 → JSON 响应                                               | 实现 `ExceptionMapper<BusinessException>`                                           | ✗ P0 |
-| `ValidationExceptionMapper.java` | 参数校验异常处理                                                     | 捕获 REST 校验失败, 返回友好错误                                                              | ✗ P0 |
-
+| 文件                               | 职责                   | 关键内容                                                                                                              | 状态   |
+|----------------------------------|----------------------|-------------------------------------------------------------------------------------------------------------------|------|
+| `IStructuredThrowable.java`      | 异常体系基础接口：结构化标签 + 原因链 | `tag()`, `cause()` — 所有结构化异常的契约基接口                                                                                | ✓    |
+| `StructuredException.java`       | 具体的结构化运行时异常（默认实现）    | 格式化消息 `<SimpleName:Tag> message`, 标签校验, 非空消息保证                                                                    | ✓    |
+| `IDetailedThrowable.java`        | 携带类型化详细数据的异常接口(CRTP) | `causeData()`, `asException()`, `throwSelf()` — 去掉 ICRTPCaster, 内联转型                                              | ✓    |
+| `ITransactionalThrowable.java`   | 可回滚/可恢复的结构化异常        | `rollback()` —— 异常自身携带补偿动作                                                                                        | ✓    |
+| `IBusinessException.java`        | 业务异常门面接口(含包级私有实现)    | 静态工厂 `of(ErrorCode, String, Function, String[, Object])`; tag 格式 `WHERE_WHAT_ACTION`; 禁止 `ErrorCode.name()` 做 tag | ✓    |
+| `ErrorCode.java`                 | 统一错误码枚举              | `AUTH_TOKEN_EXPIRED(401001), DIARY_NOT_FOUND(404001), AI_SERVICE_DOWN(503001)`                                    | ✓    |
+| `GlobalExceptionMapper.java`     | 全局异常 → JSON 响应       | 实现 `ExceptionMapper<StructuredException>`, `instanceof IBusinessException` 分支处理                                   | ✓    |
+| `ValidationExceptionMapper.java` | 参数校验异常处理             | 捕获 REST 校验失败, 返回友好错误                                                                                              | ✗ P0 |
 **继承层次**:
 ```text
 IStructuredThrowable (tag + cause)
 └── StructuredException (RuntimeException 实现)
-    └── HolderException (sealed, implements IBusinessException + IDetailedThrowable)
-        └── DataHolderException (final, package-private, 携带 data)
+    ├── HolderException (final, implements IBusinessException + IDetailedThrowable)
+    └── DataHolderException (final, implements IBusinessException + IDetailedThrowable, 携带 data)
 ```
 
-**标签策略**: `HolderException` 在构造时强制要求有意义的语义标签(如 `"AUTH_LOGIN"`, `"DIARY_CREATE"`)。外部代码通过 `IBusinessException.of(ErrorCode)` 静态工厂统一创建。
+**标签策略**: tag 采用 `WHERE_WHAT_ACTION` 格式（如 `"AUTH_LOGIN_USER_NOT_FOUND"`、`"DIARY_READ_RECORD_NOT_FOUND"`），
+由调用者在 `IBusinessException.of()` 工厂方法中显式传入。<span style="color: f84b4b">禁止将 `ErrorCode.name()` 直接作为 tag 使用</span>。
+构造时校验 tag 合法性，若 tag 与 ErrorCode 枚举名相同则抛出 `IllegalArgumentException`。
 
 **数据承载**: 使用 `DataHolderException` (package-private), `causeData()` 返回附加的上下文数据。
 
@@ -225,7 +214,6 @@ public final class User extends PanacheEntityBase
     public String passwordHash;      // SHA-256 哈希 (原型阶段, 后续升级 BCrypt)
     @Enumerated(STRING) public UserRole role;  // STUDENT / COUNSELOR / ADMIN
     public Instant createdAt;
-
     // 便捷查询
     public static Uni<User> findByUsername(String username) { ... }
 }
@@ -301,7 +289,6 @@ public final class MoodDiary extends PanacheEntityBase
     //  analysisResult 存储 JSON 字符串:
     //  {"positive":0.2, "negative":0.7, "anxiety":0.85, "weather":"thunderstorm", "warningLevel":"RED", "summary":"..."}
     public Instant createdAt;
-
     public static Uni<PanacheQuery<MoodDiary>> findByUserAndDateRange(UUID userId, Instant start, Instant end) { ... }
 }
 ```
@@ -324,16 +311,12 @@ public final class DiaryResource
 {
     @POST                                 // 创建日记(会触发 AI 分析)
     public Uni<ApiResponse<DiaryResponse>> create(DiaryCreateRequest req);
-
     @GET                                  // 分页列表
     public Uni<ApiResponse<List<DiaryResponse>>> list(@BeanParam DiaryListQuery query);
-
     @GET @Path("/{id}")                   // 单条详情
     public Uni<ApiResponse<DiaryResponse>> getById(@PathParam Long id);
-
     @DELETE @Path("/{id}")                // 删除
     public Uni<ApiResponse<Void>> delete(@PathParam Long id);
-
     @GET @Path("/weather")                // 情绪天气预报数据
     public Uni<ApiResponse<List<EmotionWeatherVo>>> getWeather(@QueryParam String startDate, @QueryParam String endDate);
 }
@@ -350,10 +333,13 @@ public final class DiaryResource
 
 #### service/EmotionAnalysisService.java
 
-| 方法                                  | 说明                                             |
-|-------------------------------------|------------------------------------------------|
-| `analyzeAsync(MoodDiary diary)`     | 异步调用 `MoodAnalysisAgent` → 回写 `analysisResult` |
-| `analyzeAndDetect(MoodDiary diary)` | 同步调用(高优场景) → 结果写入 + 预警检测                       |
+| 方法                                  | 说明                                                      |
+|-------------------------------------|---------------------------------------------------------|
+| `analyzeAsync(MoodDiary diary)`     | 异步调用 `MoodAnalysisAgent` → 回写 `analysisResult`, 失败时自动降级 |
+| `analyzeAndDetect(MoodDiary diary)` | 同步调用(高优场景) → 结果写入 + 预警检测 + 持久化                          |
+
+> 实现细节: 使用 `MoodAnalysisAgent.analyze()` + `WarningDetectionAgent.detect()` 分别获取情感分析和预警结果, 合并为 JSON 写入 `diary.analysisResult` JSONB 字段。
+> Mutiny 3.x 注意: `onFailure().invoke()` 后需要二次 `.onFailure()` 再调用 `recoverWithItem()`。
 
 #### service/EmotionWeatherService.java
 
@@ -390,7 +376,6 @@ public final class AiChatSession extends PanacheEntityBase
     //  [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}]
     public boolean warningTriggered;
     public Instant updatedAt;
-
     // 便捷消息追加
     public void addMessage(String role, String content);
     // 截断至最近 N 条, 避免 Token 超限
@@ -415,11 +400,9 @@ public final class ChatResource
 {
     @POST @Path("/send")                         // 发送消息, 获取完整回复(非流式)
     public Uni<ApiResponse<ChatMessageVo>> send(ChatSendRequest req);
-
     @GET @Path("/stream")                        // SSE 流式回复
     @Produces(MediaType.SERVER_SENT_EVENTS)
     public Multi<String> stream(@RestQuery String sessionId, @RestQuery String content);
-
     @GET @Path("/sessions")                      // 历史会话列表
     public Uni<ApiResponse<List<ChatSessionVo>>> listSessions();
 }
@@ -464,7 +447,6 @@ public final class VoiceResource
     @POST @Path("/upload")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     public Uni<ApiResponse<VoiceUploadResponse>> upload(FileUpload file);
-
     @POST @Path("/asr-callback")               // ASR 服务回调
     public Uni<ApiResponse<Void>> handleAsrCallback(AsrCallbackRequest req);
 }
@@ -498,112 +480,82 @@ flowchart TD
 
 ### 8. `ai/` — AI 能力封装层
 
-#### agent/MoodAnalysisAgent.java
+#### agent/MoodAnalysisAgent.java (已实现 ✓)
 
 ```java
-@RegisterAiService(model = "mood-analysis")
+@RegisterAiService
 public interface MoodAnalysisAgent
 {
-    @SystemPrompt("""
-        你是一个情绪分析专家。分析用户日记中的情感倾向。
-        请以 JSON 格式返回分析结果, 包含以下字段:
-        - positive: 0.0~1.0 的正向情感得分
-        - negative: 0.0~1.0 的负向情感得分
-        - anxiety: 0.0~1.0 的焦虑程度
-        - weather: 对应的天气类型 (sunny/cloudy/overcast/rainy/thunderstorm)
-        - summary: 一句话总结
-        注意: 请以共情和非医学化方式描述, 不要给出诊断性标签。
-        """
-    )
-    @UserMessage("日记内容: {content}")
+    @SystemMessage(AiPromptConstants.MOOD_ANALYSIS_SYSTEM_PROMPT)
+    @UserMessage("日记内容: {{content}}")
     MoodAnalysisResult analyze(@V("content") String content);
 }
 ```
 
-#### agent/EmpatheticChatAgent.java
+> System Prompt 存储在 `AiPromptConstants.MOOD_ANALYSIS_SYSTEM_PROMPT` 中。
+
+#### agent/EmpatheticChatAgent.java (待实现 ✗ P2)
 
 ```java
-@RegisterAiService(model = "empathetic-chat")
-public interface EmpatheticChatAgent
-{
-    @SystemPrompt("""
-        你是「心声树洞」— 一个温暖、共情、非评判的心理倾听者。
-        核心原则:
-        1. 用温暖、口语化的语言回应, 像朋友一样
-        2. 不给出医学诊断或标签
-        3. 当用户表达强烈负面情绪时, 先共情再引导
-        4. 如果检测到自残/自杀倾向, 必须触发 CrisisInterventionTool
-        5. 回复控制在 200 字以内
-        """
-    )
-    @UserMessage("""
-        历史对话: {history}
-        用户: {content}
-        """
-    )
-    String chat(@V("history") String history, @V("content") String content);
-}
+@RegisterAiService
+public interface EmpatheticChatAgent { /* P2 */ }
 ```
 
-#### agent/WarningDetectionAgent.java
+#### agent/WarningDetectionAgent.java (已实现 ✓)
 
 ```java
-@RegisterAiService(model = "warning-detection")
+@RegisterAiService
 public interface WarningDetectionAgent
 {
-    @SystemPrompt("""
-        你是一个心理危机预警检测器。分析文本中是否存在自我伤害、自杀倾向等高风险信号。
-        返回 JSON:
-        {"warningLevel":"NONE|YELLOW|RED", "reason":"...", "suggestedAction":"..."}
-        - NONE: 正常
-        - YELLOW: 需要关注 (如: 持续低落、消极言语)
-        - RED: 立即干预 (如: 自残计划、自杀意念)
-        """
-    )
+    @SystemMessage(AiPromptConstants.WARNING_DETECTION_SYSTEM_PROMPT)
+    @UserMessage("{{content}}")
     WarningDetectionResult detect(@V("content") String content);
 }
 ```
 
-#### dto/MoodAnalysisResult.java
+> System Prompt 存储在 `AiPromptConstants.WARNING_DETECTION_SYSTEM_PROMPT` 中。
+> `@RegisterAiService` 需使用 `io.quarkiverse.langchain4j.RegisterAiService` 而非 `dev.langchain4j.service.RegisterAiService`。
+
+#### dto/MoodAnalysisResult.java (Record 已实现 ✓)
 
 ```java
-public final class MoodAnalysisResult
-{
-    public double positive;
-    public double negative;
-    public double anxiety;
-    public String weather;
-    public String summary;
-}
+public record MoodAnalysisResult(
+    double positive,      // 0.0~1.0
+    double negative,      // 0.0~1.0
+    double anxiety,       // 0.0~1.0
+    String weather,       // sunny/cloudy/overcast/rainy/thunderstorm
+    String summary        // 共情风格的一句话总结
+) {}
 ```
 
-#### dto/WarningDetectionResult.java
+#### dto/WarningDetectionResult.java (Record 已实现 ✓)
 
 ```java
-public final class WarningDetectionResult
-{
-    public String warningLevel;   // "NONE" | "YELLOW" | "RED"
-    public String reason;
-    public String suggestedAction;
-}
+public record WarningDetectionResult(
+    String warningLevel,    // "NONE" | "YELLOW" | "RED"
+    String reason,
+    String suggestedAction
+) {}
 ```
 
-#### tool/CrisisInterventionTool.java
+#### tool/CrisisInterventionTool.java (已实现 ✓)
 
 ```java
-@Tool("当检测到红色预警时调用, 返回心理危机干预热线与建议")
+@ApplicationScoped
 public final class CrisisInterventionTool
 {
-    @ToolParam("用户的 userId")
-    public String getCrisisMessage(@ToolParam("userId") String userId)
+    @Tool("当检测到红色预警时调用, 返回心理危机干预热线与建议")
+    public String getCrisisMessage(@ToolMemoryId String userId)
     {
-        // 返回热线信息 + 记录预警日志
+        //! 当前热线为静态默认值, 后续应从 Redis (key: crisis:hotline) 加载.
         return """
             🚨 我们很关心你。
             全国心理援助热线: 400-161-9995
-            学校心理咨询中心: (请在此填写)
+            希望 24 热线: 400-161-9995
+            全国青少年心理咨询热线: 12355
             你的安全是最重要的, 请立即联系专业人士。
-        """;
+            我们一直在你身边。
+            """;
     }
 }
 ```
@@ -655,7 +607,6 @@ public final class ChatWebSocket
     @OnOpen  public Uni<Void> onOpen(Session session, @PathParam("sessionId") String sessionId);
     @OnMessage public Uni<Void> onMessage(String message, Session session);
     @OnClose public Uni<Void> onClose(Session session);
-
     //* 用于 AI 对话的流式文本推送到前端.
     //* 前端通过 WebSocket 发送用户消息, 后端逐块推送 AI 回复.
 }
@@ -669,7 +620,6 @@ public final class AlertWebSocket
 {
     @OnOpen  public Uni<Void> onOpen(Session session, @PathParam("userId") String userId);
     @OnClose public Uni<Void> onClose(Session session);
-
     //* 用于在 RED 预警时主动推送消息给特定用户.
     //* 管理 userId → Session 映射, 支持定向推送.
     public void pushAlert(UUID userId, String message);
@@ -777,18 +727,19 @@ Token 签发后不可变, 通过 Redis 维护黑名单实现"登出"效果:
 5. domain/diary/    — MoodDiary 实体 + Diary CRUD (无 AI 分析)         ✓
 6. domain/chat/     — AiChatSession 实体 + ChatService + ChatResource  ✓
 7. utils/           — JsonUtils, PrintUtils, CallerSensitive, TimeUtils    ✓
+8. utils/constants/ — JwtConstants, RedisKeyConstants, ApiEndpointConstants, AiPromptConstants ✓
+9. config/          — JwtConfig, CorsConfig, AiModelConfig, RedisConfig ✓
 ```
 
-> 剩余: `utils/constants/`, `config/`
-
-### 第二期 (AI 接入) — 待开始
+### 第二期 (AI 接入) — 核心链路已完成 ✓
 
 ```text
-8.  ai/agent/      — MoodAnalysisAgent + WarningDetectionAgent         ✗
-9.  ai/tool/       — CrisisInterventionTool                            ✗
-10. domain/diary/service/ — EmotionAnalysisService (调用 AI 分析)      △ (骨架完成)
-11. domain/diary/service/ — EmotionWeatherService (聚合查询)           △ (骨架完成)
-12. domain/diary/resource/ — 补充 /weather 等端点                      ✗
+8.  ai/agent/      — MoodAnalysisAgent + WarningDetectionAgent         ✓ (2026-07-17)
+9.  ai/dto/        — MoodAnalysisResult + WarningDetectionResult       ✓ (2026-07-17)
+10. ai/tool/       — CrisisInterventionTool                            ✓ (2026-07-17)
+11. domain/diary/service/ — EmotionAnalysisService (analyzeAsync/analyzeAndDetect + 持久化) ✓
+12. domain/diary/service/ — EmotionWeatherService (聚合查询 + 天气映射) ✓
+13. domain/diary/resource/ — /weather 端点                             ✓
 ```
 
 ### 第三期 (对话+语音) — 待开始
@@ -804,11 +755,9 @@ Token 签发后不可变, 通过 Redis 维护黑名单实现"登出"效果:
 
 ```text
 17. ai/retriever/ — PsychologyTipsRetriever                             ✗
-18. config/       — 配置类抽取 (JwtConfig, CorsConfig, etc.)            ✗
-19. utils/constants/ — 常量类抽取                                       ✗
-20. Redis 限流、缓存接入                                                 ✗
-21. 离线安全兜底接口                                                      ✗
-22. 全面测试 + 压力测试 (目标 200+ 测试)                                   △
+18. Redis 限流、缓存接入                                                 ✗
+19. 离线安全兜底接口                                                      ✗
+20. 全面测试 + 压力测试 (目标 200+ 测试)                                   △
 ```
 
 ---

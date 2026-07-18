@@ -9,11 +9,13 @@ import kurvcygnus.soulnotes.domain.auth.dto.RegisterRequest;
 import kurvcygnus.soulnotes.domain.auth.entity.User;
 import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
+import kurvcygnus.soulnotes.utils.PrintUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.NoSuchElementException;
 
 /**
  * <b>认证服务</b>
@@ -45,7 +47,14 @@ public final class AuthService
     @WithTransaction public @NotNull Uni<AuthResponse> register(@NotNull RegisterRequest req)
     {
         return User.findByUsername(req.username()).
-            onItem().ifNotNull().failWith(() -> IBusinessException.of(ErrorCode.USERNAME_DUPLICATE)).
+            onItem().ifNotNull().failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.USERNAME_DUPLICATE,
+                    "用户名已被占用",
+                    RuntimeException::new,
+                    "AUTH_REGISTER_USERNAME_CONFLICT"
+                ).asException()
+            ).
             onItem().ifNull().switchTo(createUser(req)).
             flatMap(
                 user ->
@@ -66,12 +75,26 @@ public final class AuthService
     public @NotNull Uni<AuthResponse> login(@NotNull LoginRequest req)
     {
         return User.findByUsername(req.username()).
-            onItem().ifNull().failWith(() -> IBusinessException.of(ErrorCode.USER_NOT_FOUND)).
+            onItem().ifNull().failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.USER_NOT_FOUND,
+                    "用户不存在",
+                    NoSuchElementException::new,
+                    "AUTH_LOGIN_USER_NOT_FOUND"
+                ).asException()
+            ).
             flatMap(
                 user ->
                 {
                     if(!verifyPassword(req.password(), user.passwordHash))
-                        return Uni.createFrom().failure(IBusinessException.of(ErrorCode.AUTH_UNAUTHORIZED));
+                        return Uni.createFrom().failure(
+                            IBusinessException.of(
+                                ErrorCode.AUTH_UNAUTHORIZED,
+                                "密码错误",
+                                IllegalStateException::new,
+                                "AUTH_LOGIN_PASSWORD_MISMATCH"
+                            ).asException()
+                        );
                     final var token = tokenService.generateToken(user);
                     return Uni.createFrom().item(new AuthResponse(token, user.id, user.username, user.role));
                 }
@@ -113,9 +136,19 @@ public final class AuthService
         final var password = req.password();
         
         if(password.length() < MIN_PASSWORD_LENGTH)
-            throw IBusinessException.of(ErrorCode.BAD_REQUEST, "密码长度不能少于 " + MIN_PASSWORD_LENGTH + " 位");
+            throw IBusinessException.of(
+                ErrorCode.BAD_REQUEST,
+                PrintUtils.quickFormat("密码长度不能少于{}位", MIN_PASSWORD_LENGTH),
+                IllegalArgumentException::new,
+                "AUTH_REGISTER_WEAK_PASSWORD_LENGTH"
+            ).asException();
         if(!password.matches(".*[a-zA-Z].*") || !password.matches(".*\\d.*"))
-            throw IBusinessException.of(ErrorCode.BAD_REQUEST, "密码必须包含字母和数字");
+            throw IBusinessException.of(
+                ErrorCode.BAD_REQUEST,
+                "密码必须包含字母和数字",
+                IllegalArgumentException::new,
+                "AUTH_REGISTER_WEAK_PASSWORD_COMPLEXITY"
+            ).asException();
         final var user = User.create(req.username(), hashPassword(req.password()), req.role());
         return user.persistAndFlush().replaceWith(user);
     }

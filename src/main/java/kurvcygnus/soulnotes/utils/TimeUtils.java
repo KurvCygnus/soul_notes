@@ -20,7 +20,7 @@ public final class TimeUtils
 {
     public static final @NotNull ZoneId ZONE_ASIA_SHANGHAI = ZoneId.of("Asia/Shanghai");
 
-    private TimeUtils() {}
+    private TimeUtils() { throw new IllegalAccessError("Class \"TimeUtils\" is not meant to be instantized!"); }
 
     /**
      * <span style="color: 95cc6d">获取当前时刻 (上海时区).</span>

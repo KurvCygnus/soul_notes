@@ -7,12 +7,13 @@ import kurvcygnus.soulnotes.domain.diary.dto.DiaryCreateRequest;
 import kurvcygnus.soulnotes.domain.diary.dto.DiaryListQuery;
 import kurvcygnus.soulnotes.domain.diary.dto.DiaryResponse;
 import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
-import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
+import kurvcygnus.soulnotes.exception.IBusinessException;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 /**
@@ -28,6 +29,10 @@ import java.util.UUID;
 @ApplicationScoped
 public final class  DiaryService
 {
+    private final @NotNull EmotionAnalysisService emotionAnalysisService;
+
+    public DiaryService(@NotNull EmotionAnalysisService emotionAnalysisService) { this.emotionAnalysisService = emotionAnalysisService; }
+
     //region 核心业务
     /**
      * <span style="color: 95cc6d">创建日记并触发 AI 分析.</span>
@@ -45,6 +50,16 @@ public final class  DiaryService
     @WithTransaction
     public @NotNull Uni<DiaryResponse> create(@NotNull DiaryCreateRequest req, @NotNull UUID userId)
     {
+        if(req.content() == null && req.audioData() == null)
+            return Uni.createFrom().failure(
+                IBusinessException.of(
+                    ErrorCode.BAD_REQUEST,
+                    "日记内容不能为空: 至少提供 content 或 audioData 一项",
+                    IllegalArgumentException::new,
+                    "DIARY_CREATE_BOTH_NULL"
+                ).asException()
+            );
+
         final var diary = new MoodDiary();
         diary.userId    = userId;
         diary.content   = req.content();
@@ -86,16 +101,30 @@ public final class  DiaryService
      * @return 日记响应
      * @throws IBusinessException 当日记不存在或不属于该用户时抛出
      */
-    @WithTransaction
+    @SuppressWarnings("JavadocDeclaration") @WithTransaction
     public @NotNull Uni<DiaryResponse> getById(long id, @NotNull UUID userId)
     {
         return MoodDiary.findById(id).
             onItem().
-            ifNull().failWith(() -> IBusinessException.of(ErrorCode.DIARY_NOT_FOUND)).
+            ifNull().failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.DIARY_NOT_FOUND,
+                    "日记不存在",
+                    NoSuchElementException::new,
+                    "DIARY_READ_RECORD_NOT_FOUND"
+                ).asException()
+            ).
             map(MoodDiary.class::cast).
             flatMap(
                 diary -> !diary.userId.equals(userId) ?
-                    Uni.createFrom().failure(IBusinessException.of(ErrorCode.DIARY_NOT_FOUND)) :
+                    Uni.createFrom().failure(
+                        IBusinessException.of(
+                            ErrorCode.DIARY_NOT_FOUND,
+                            "无权访问此日记",
+                            IllegalStateException::new,
+                            "DIARY_READ_ACCESS_DENIED"
+                        ).asException()
+                    ) :
                     Uni.createFrom().item(DiaryResponse.fromEntity(diary))
             );
     }
@@ -112,24 +141,31 @@ public final class  DiaryService
     {
         return MoodDiary.<MoodDiary>findById(id).
             onItem().
-            ifNull().failWith(() -> IBusinessException.of(ErrorCode.DIARY_NOT_FOUND)).
+            ifNull().failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.DIARY_NOT_FOUND,
+                    "日记不存在",
+                    NoSuchElementException::new,
+                    "DIARY_DELETE_RECORD_NOT_FOUND"
+                ).asException()
+            ).
             flatMap(
                 diary -> !diary.userId.equals(userId) ?
-                    Uni.createFrom().failure(IBusinessException.of(ErrorCode.DIARY_NOT_FOUND)) :
+                    Uni.createFrom().failure(
+                        IBusinessException.of(
+                            ErrorCode.DIARY_NOT_FOUND,
+                            "无权删除此日记",
+                            IllegalStateException::new,
+                            "DIARY_DELETE_ACCESS_DENIED"
+                        ).asException()
+                    ) :
                     diary.delete()
             );
     }
     //endregion
 
-    //region AI 分析占位
-    //* 此处为 AI 分析链路的占位实现.
-    //! Phase 2 将替换为实际调用 MoodAnalysisAgent + WarningDetectionAgent.
-    private @NotNull Uni<MoodDiary> analyzeAndDetect(@NotNull MoodDiary diary)
-    {
-        //? TODO Phase 2: 异步调用 MoodAnalysisAgent 分析情感并回写 analysisResult
-        //? TODO Phase 2: 同步调用 WarningDetectionAgent 检测预警等级
-        //? TODO Phase 2: RED 预警时推送 AlertWebSocket
-        return Uni.createFrom().item(diary);
-    }
+    //region AI 分析
+    //* 委托 EmotionAnalysisService 执行 AI 情感分析与预警检测.
+    private @NotNull Uni<MoodDiary> analyzeAndDetect(@NotNull MoodDiary diary) { return emotionAnalysisService.analyzeAsync(diary); }
     //endregion
 }

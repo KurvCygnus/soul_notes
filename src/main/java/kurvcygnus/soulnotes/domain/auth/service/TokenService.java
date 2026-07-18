@@ -6,6 +6,8 @@ import io.smallrye.jwt.build.Jwt;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.domain.auth.entity.User;
+import kurvcygnus.soulnotes.utils.constants.JwtConstants;
+import kurvcygnus.soulnotes.utils.constants.RedisKeyConstants;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jetbrains.annotations.NotNull;
 
@@ -31,11 +33,6 @@ import java.util.Set;
 @ApplicationScoped
 public final class TokenService
 {
-    //region 常量
-    //! jti 前缀, 用于 Redis 黑名单 Key 的构建与 JWT 声明的匹配.
-    private static final @NotNull String BLACKLIST_PREFIX = "jwt:blacklist:";
-    //endregion
-
     //region 注入
     private final @NotNull ReactiveValueCommands<String, String> redisValues;
     private final @NotNull String jwtSecret;
@@ -68,7 +65,7 @@ public final class TokenService
         final var now        = Instant.now();
         final var expiration = now.plus(Duration.ofSeconds(ttlSeconds));
 
-        return Jwt.issuer("soul-notes").
+        return Jwt.issuer(JwtConstants.ISSUER).
             subject(user.id.toString()).
             upn(user.username).
             groups(Set.of(user.role.name())).
@@ -95,7 +92,7 @@ public final class TokenService
 
         //! 使用配置的 TTL 作为黑名单过期时间; 实际可解析 exp 声明精确计算剩余时间.
         return redisValues.
-            setex(BLACKLIST_PREFIX + jti, ttlSeconds, "true").
+            setex(RedisKeyConstants.TOKEN_BLACKLIST.formatted(jti), ttlSeconds, "true").
             replaceWithVoid();
     }
 
@@ -105,7 +102,7 @@ public final class TokenService
      * @param jti JWT 的 jti 声明
      * @return {@code true} 若该 Token 已被注销
      */
-    public @NotNull Uni<Boolean> isBlacklisted(@NotNull String jti) { return redisValues.get(BLACKLIST_PREFIX + jti).map(Objects::nonNull); }
+    public @NotNull Uni<Boolean> isBlacklisted(@NotNull String jti) { return redisValues.get(RedisKeyConstants.TOKEN_BLACKLIST.formatted(jti)).map(Objects::nonNull); }
     //endregion
 
     //region 辅助方法

@@ -15,6 +15,8 @@ import kurvcygnus.soulnotes.domain.chat.dto.ChatSendRequest;
 import kurvcygnus.soulnotes.domain.chat.dto.ChatSessionVo;
 import kurvcygnus.soulnotes.domain.chat.service.ChatService;
 import kurvcygnus.soulnotes.dto.ApiResponse;
+import kurvcygnus.soulnotes.utils.constants.ApiEndpointConstants;
+import kurvcygnus.soulnotes.utils.enums.UserRole;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -31,8 +33,8 @@ import java.util.UUID;
  * @author Claude Code
  * @since 1.0
  */
-@Path("/api/v1/chat")
-@RolesAllowed("STUDENT")
+@Path(ApiEndpointConstants.CHAT_BASE)
+@RolesAllowed(UserRole.ROLE_STUDENT)
 public final class ChatResource
 {
     @Inject ChatService chatService;
@@ -54,7 +56,7 @@ public final class ChatResource
     public @NotNull Multi<String> stream(@NotNull ChatSendRequest req)
     {
         return chatService.streamMessage(
-            req.sessionId() != null ? req.sessionId().toString() : "",
+            req.sessionId() != null ? req.sessionId().toString() : null,
             req.content(),
             currentUserId()
         );

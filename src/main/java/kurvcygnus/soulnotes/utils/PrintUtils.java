@@ -14,7 +14,7 @@ import java.util.Objects;
  */
 public final class PrintUtils
 {
-    private PrintUtils() { throw new IllegalAccessError(); }
+    private PrintUtils() { throw new IllegalAccessError("Class \"PrintUtils\" is not meant to be instantized!"); }
 
     private static final StackWalker STACK_WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
     private static final String STACKTRACE_SENSITIVE = "涉及调用栈抓取.";

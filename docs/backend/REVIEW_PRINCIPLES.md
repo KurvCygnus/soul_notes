@@ -1,9 +1,11 @@
 # Backend Review Principles
 
-This is the full instructions of this project's review standard.\
-You should only review the new changes of code (a.k.a. diff) via command, unless the developer asks you to do a full review. In such a case, you should only review one core package, according to the architecture.
+> **Prerequisite:** Read [BASICS.md](./BASICS.md) for shared project context and universal principles before applying these backend-specific rules.
 
-Once the range is confirmed, complete this checklist:
+This document defines the project's code review standard.
+Review only the diff (new changes) unless the developer requests a full review. In that case, review one core package according to the architecture.
+
+Complete the checklist once the review range is confirmed:
 
 ## CheckList
 
@@ -72,10 +74,12 @@ Once the range is confirmed, complete this checklist:
 
 ### Core Business Logic Alignment
 
-* [ ] -- Does the data structure cleanly support the multimodal input pipeline (`Voice -> Text -> LLM Parsing -> Sentiment Analysis`)?
-* [ ] -- Does the backend expose required real-time valence and anxiety parameters to drive the frontend "Emotion Weather Forecast" visualization?
-* [ ] -- Does the prompt engineering or text response logic remain warm, supportive, and completely free of clinical or medicalized labels?
-* [ ] -- **High-Risk Guardrails**: Is the Red Alert Mechanism firmly set up to flag self-harm tendencies? Is the **offline fallback safety mechanism** guaranteed to serve the emergency hotline if AI or networks completely fail?
+Cross-check all changes against the four business requirements defined in [docs/BASICS.md](../BASICS.md):
+
+* [ ] — Multimodal Input Handling (`Voice -> Text -> LLM -> Sentiment Analysis`)
+* [ ] — Sentiment Analysis & Visualization (valence, anxiety, "Emotion Weather Forecast")
+* [ ] — Empathetic & Non-Medicalized Response Style
+* [ ] — High-Risk Alert (Online popup + Offline fallback hotline)
 
 ---
 

@@ -1,5 +1,7 @@
 # Backend Refactor Rules
 
+> **Prerequisite:** Read [BASICS.md](./BASICS.md) for shared project context and universal principles before applying these backend-specific rules.
+
 ## Refactoring Priority Hierarchy
 
 When modifying or restructuring existing code, changes must be validated against the following strict order of priority:
@@ -25,8 +27,7 @@ Use this checklist as a definition of done before declaring any refactoring task
   overrides wherever applicable.
 * [ ] **JetBrains Annotations:** `@NotNull` and `@Nullable` are applied uniformly across parameters, return fields, and
   data flows.
-* [ ] **Null Assertions:** Heavy defensive checks using `Objects.requireNonNull(..., "...")` are applied inside methods.
-  on all `@NotNull` incoming parameters.
+* [ ] **Null Assertions:** Heavy defensive checks using `Objects.requireNonNull(..., "...")` are applied inside methods on all `@NotNull` incoming parameters.
 * [ ] **Local Typings:** The `var` keyword is **only** used for non-primitive types whose type deduction is clear and obvious to a reader.
 
 ### 2. Logical Correctness & Reactive Integrity
@@ -51,7 +52,6 @@ Use this checklist as a definition of done before declaring any refactoring task
 ## Safety Guardrails
 
 > **CRITICAL REFACTORING BOUNDARIES**
-> * **Zero Physical Erasure:** Never refactor a data cleanup module to perform physical deletion (`DELETE`). It must retain soft-deletion flags.
-> * **No Hard-coded Passing:** If a unit test fails during a refactor, it is strictly forbidden to rewrite the test with hard-coded values or alter the CI settings to pass it blindly. Fix the root regression.
-> * **Page-Bound Lists:** Any queries retrieving lists of entities must enforce explicit pagination limits (`limit`/`page`). Refactor any latent `findAll()` calls out of existence.
-> * **No dangerous action involved:** DO NOT PERFORM deletion operations like `rm -rf` on either yourself, or developer asked, also, adding it to any script is also forbidden.
+> * **SQL:** See [DEVELOPMENT_GUIDELINES.md](DEVELOPMENT_GUIDELINES.md#sql) — the SQL soft-deletion rules apply.
+> * **No Hard-coded Passing:** See [DEVELOPMENT_GUIDELINES.md](DEVELOPMENT_GUIDELINES.md#unit-test) — the test integrity rules apply.
+> * **No dangerous action involved:** Dangerous operations (e.g., `rm -rf`) are always forbidden. Refuse even if the developer explicitly requests it. Adding such operations to any script is also forbidden.

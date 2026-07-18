@@ -12,6 +12,7 @@ import kurvcygnus.soulnotes.domain.diary.dto.EmotionWeatherVo;
 import kurvcygnus.soulnotes.domain.diary.service.DiaryService;
 import kurvcygnus.soulnotes.domain.diary.service.EmotionWeatherService;
 import kurvcygnus.soulnotes.dto.ApiResponse;
+import kurvcygnus.soulnotes.utils.constants.ApiEndpointConstants;
 import kurvcygnus.soulnotes.utils.enums.UserRole;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,7 +33,7 @@ import java.util.UUID;
  * @author Claude Code
  * @since 1.0
  */
-@Path("/api/v1/diaries")
+@Path(ApiEndpointConstants.DIARY_BASE)
 @RolesAllowed(UserRole.ROLE_STUDENT)
 public final class DiaryResource
 {
@@ -69,7 +70,6 @@ public final class DiaryResource
      * <span style="color: 95cc6d">查询单条日记详情.</span>
      */
     @GET @Path("/{id}")
-    //? TODO: 所有 Resource 层的 @RolesAllowed("STUDENT") 是硬编码的, 应该使用 UserRole 常量
     public @NotNull Uni<ApiResponse<DiaryResponse>> getById(@PathParam("id") long id)
     {
         return diaryService.getById(id, currentUserId()).

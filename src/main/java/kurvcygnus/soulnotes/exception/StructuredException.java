@@ -48,21 +48,6 @@ public class StructuredException extends RuntimeException implements IStructured
     }
 
     /**
-     * 构造一个新的结构化异常，仅携带消息和类型标签，无包装的原始异常。
-     *
-     * @param message 异常详情消息
-     * @param tag     非空类型标签（如 {@code "VALIDATION"}）
-     * @throws NullPointerException     如果任一参数为 null
-     * @throws IllegalArgumentException 如果标签为空白
-     */
-    public StructuredException(@NotNull String message, @NotNull String tag)
-    {
-        super(PrintUtils.quickFormat("<{}> {}", checkType(tag), message));
-        this.wrappedException = null;
-        this.tag = tag;
-    }
-
-    /**
      * {@inheritDoc}
      */
     @Override public @NotNull Throwable cause()
