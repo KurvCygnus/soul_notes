@@ -1,6 +1,7 @@
 package kurvcygnus.soulnotes.domain.diary.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.domain.diary.dto.EmotionWeatherVo;
@@ -8,6 +9,7 @@ import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.TimeUtils;
 import kurvcygnus.soulnotes.utils.enums.EmotionWeatherType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +32,25 @@ public final class EmotionWeatherService
 {
     private static final Logger LOG = LoggerFactory.getLogger(EmotionWeatherService.class);
 
+    //* 天气映射阈值 (可由 application.properties 的 weather.threshold.* 覆盖).
+    private final double stormThreshold;
+    private final double rainyThreshold;
+    private final double overcastThreshold;
+    private final double sunnyThreshold;
+
+    public EmotionWeatherService(
+        @ConfigProperty(name = "weather.threshold.storm", defaultValue = "0.8") double stormThreshold,
+        @ConfigProperty(name = "weather.threshold.rainy", defaultValue = "0.6") double rainyThreshold,
+        @ConfigProperty(name = "weather.threshold.overcast", defaultValue = "0.4") double overcastThreshold,
+        @ConfigProperty(name = "weather.threshold.sunny", defaultValue = "0.6") double sunnyThreshold
+    )
+    {
+        this.stormThreshold   = stormThreshold;
+        this.rainyThreshold   = rainyThreshold;
+        this.overcastThreshold = overcastThreshold;
+        this.sunnyThreshold   = sunnyThreshold;
+    }
+
     //* 统一使用 TimeUtils 中定义的上海时区, 避免多处硬编码.
 
     /**
@@ -40,6 +61,7 @@ public final class EmotionWeatherService
      * @param end    结束日期 (含)
      * @return 按天排列的情绪天气预报 VO 列表
      */
+    @WithTransaction
     public @NotNull Uni<List<EmotionWeatherVo>> getWeatherData(
         @NotNull UUID userId,
         @NotNull LocalDate start,
@@ -108,16 +130,16 @@ public final class EmotionWeatherService
         }).toList();
     }
 
-    //! 此处为简化天气映射逻辑, 后续应根据实际情感分数做更细致的映射.
-    private static @NotNull EmotionWeatherType mapWeather(double positive, double negative, double anxiety)
+    //* 天气映射阈值外置, 边界统一使用 >= 确保行为确定.
+    private @NotNull EmotionWeatherType mapWeather(double positive, double negative, double anxiety)
     {
-        if(anxiety > 0.8 || negative > 0.8)
+        if(anxiety >= stormThreshold || negative >= stormThreshold)
             return EmotionWeatherType.THUNDERSTORM;
-        if(negative > 0.6)
+        if(negative >= rainyThreshold)
             return EmotionWeatherType.RAINY;
-        if(positive > 0.6)
+        if(positive >= sunnyThreshold)
             return EmotionWeatherType.SUNNY;
-        if(negative > 0.4)
+        if(negative >= overcastThreshold)
             return EmotionWeatherType.OVERCAST;
         return EmotionWeatherType.CLOUDY;
     }

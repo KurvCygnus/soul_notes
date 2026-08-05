@@ -50,7 +50,7 @@ class ErrorCodeTest
     @Test void authForbidden_ShouldHaveCorrectFields()
     {
         assertEquals(403, ErrorCode.AUTH_FORBIDDEN.getHttpStatus());
-        assertEquals(401004, ErrorCode.AUTH_FORBIDDEN.getCode());
+        assertEquals(403001, ErrorCode.AUTH_FORBIDDEN.getCode());
         assertEquals("权限不足", ErrorCode.AUTH_FORBIDDEN.getMessage());
     }
 
@@ -64,7 +64,7 @@ class ErrorCodeTest
     @Test void usernameDuplicate_ShouldHaveHttp409()
     {
         assertEquals(409, ErrorCode.USERNAME_DUPLICATE.getHttpStatus());
-        assertEquals(404002, ErrorCode.USERNAME_DUPLICATE.getCode());
+        assertEquals(409001, ErrorCode.USERNAME_DUPLICATE.getCode());
     }
 
     @Test void diaryNotFound_ShouldHaveCorrectFields()

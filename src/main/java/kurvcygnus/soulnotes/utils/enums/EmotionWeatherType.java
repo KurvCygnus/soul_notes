@@ -26,6 +26,9 @@ public enum EmotionWeatherType
         this.icon  = icon;
     }
 
+    //! getLabel/getIcon 参与 Jackson JSON 序列化 (反射调用), IDE 静态分析误报为未使用.
+    @SuppressWarnings("unused")
     public @NotNull String getLabel() { return label; }
+    @SuppressWarnings("unused")
     public @NotNull String getIcon()  { return icon;  }
 }

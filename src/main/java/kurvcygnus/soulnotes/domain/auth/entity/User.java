@@ -58,6 +58,6 @@ public final class User extends PanacheEntityBase
      * @param username 用户名 (非空)
      * @return 包含 {@link User} 的 {@link Uni}, 未找到时为 {@code null}
      */
-    public static @NotNull Uni<User> findByUsername(@NotNull String username) { return find("user_name", username).firstResult(); }
+    public static @NotNull Uni<User> findByUsername(@NotNull String username) { return find("username", username).firstResult(); }
     //endregion
 }

@@ -7,11 +7,15 @@ import kurvcygnus.soulnotes.domain.diary.dto.DiaryCreateRequest;
 import kurvcygnus.soulnotes.domain.diary.dto.DiaryListQuery;
 import kurvcygnus.soulnotes.domain.diary.dto.DiaryResponse;
 import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
+import kurvcygnus.soulnotes.domain.voice.dto.VoiceUploadResponse;
+import kurvcygnus.soulnotes.domain.voice.service.VoiceStorageService;
 import kurvcygnus.soulnotes.exception.ErrorCode;
 import kurvcygnus.soulnotes.exception.IBusinessException;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.ByteArrayInputStream;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -21,6 +25,7 @@ import java.util.UUID;
  * <ul>
  *     <li>创建日记 (写入 DB → 触发 AI 分析)</li>
  *     <li>分页查询、单条查询、删除 (校验归属)</li>
+ *     <li>语音来源: audioData(Base64) 解码落盘并生成 audioUrl</li>
  * </ul>
  *
  * @author Claude Code
@@ -30,17 +35,24 @@ import java.util.UUID;
 public final class  DiaryService
 {
     private final @NotNull EmotionAnalysisService emotionAnalysisService;
+    private final @NotNull VoiceStorageService voiceStorageService;
 
-    public DiaryService(@NotNull EmotionAnalysisService emotionAnalysisService) { this.emotionAnalysisService = emotionAnalysisService; }
+    public DiaryService(
+        @NotNull EmotionAnalysisService emotionAnalysisService,
+        @NotNull VoiceStorageService voiceStorageService
+    )
+    {
+        this.emotionAnalysisService = emotionAnalysisService;
+        this.voiceStorageService    = voiceStorageService;
+    }
 
     //region 核心业务
     /**
      * <span style="color: 95cc6d">创建日记并触发 AI 分析.</span>
      * <ul>
-     *     <li>保存日记至 DB</li>
+     *     <li>保存日记至 DB (语音来源时先解码 Base64 落盘并生成 audioUrl)</li>
      *     <li>异步调用 {@code MoodAnalysisAgent} 分析情感</li>
      *     <li>检测 {@code WarningDetectionAgent} 预警等级</li>
-     *     <li>预警时推送 AlertWebSocket</li>
      * </ul>
      *
      * @param req    创建请求
@@ -63,13 +75,18 @@ public final class  DiaryService
         final var diary = new MoodDiary();
         diary.userId    = userId;
         diary.content   = req.content();
-        diary.audioUrl  = null; //! 语音上传流程暂未集成, 此处为占位.
-        //? FIX: 语音上传流程完全未实现, audioData (Base64) 的转换/存储/清理均缺失.
         diary.createdAt = Instant.now();
 
-        return diary.persistAndFlush().
-            flatMap(v -> analyzeAndDetect(diary)).
-            map(DiaryResponse::fromEntity);
+        return resolveAudioUrl(req).
+            flatMap(
+                audioUrl ->
+                {
+                    diary.audioUrl = audioUrl;
+                    return diary.persistAndFlush().
+                        flatMap(v -> analyzeAndDetect(diary)).
+                        map(DiaryResponse::fromEntity);
+                }
+            );
     }
 
     /**
@@ -167,5 +184,31 @@ public final class  DiaryService
     //region AI 分析
     //* 委托 EmotionAnalysisService 执行 AI 情感分析与预警检测.
     private @NotNull Uni<MoodDiary> analyzeAndDetect(@NotNull MoodDiary diary) { return emotionAnalysisService.analyzeAsync(diary); }
+    //endregion
+
+    //region 语音处理
+    //* 解码 audioData(Base64) 并落盘, 返回生成的 audioUrl; 无语音数据时返回 null.
+    private @NotNull Uni<String> resolveAudioUrl(@NotNull DiaryCreateRequest req)
+    {
+        if(req.audioData() == null || req.audioData().isBlank())
+            return Uni.createFrom().nullItem();
+        try
+        {
+            final var bytes = Base64.getDecoder().decode(req.audioData());
+            return voiceStorageService.store(
+                "diary-" + UUID.randomUUID() + ".m4a",
+                new ByteArrayInputStream(bytes)
+            ).map(VoiceUploadResponse::audioUrl);
+        }
+        catch(IllegalArgumentException e)
+        {
+            throw IBusinessException.of(
+                ErrorCode.BAD_REQUEST,
+                "audioData 不是合法的 Base64 编码",
+                IllegalArgumentException::new,
+                "DIARY_CREATE_INVALID_BASE64"
+            ).asException();
+        }
+    }
     //endregion
 }

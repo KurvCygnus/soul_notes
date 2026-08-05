@@ -28,30 +28,13 @@ public final class PrintUtils
     @CallerSensitive(STACKTRACE_SENSITIVE)
     public static @NotNull Logger getLogger() { return LoggerFactory.getLogger(STACK_WALKER.getCallerClass()); }
 
-    @CallerSensitive(STACKTRACE_SENSITIVE)
-    public static @NotNull String getCallerStackTrace()
-    {
-        return STACK_WALKER.walk(//* "1" 跳过了当前方法的调用栈, 使其指向调用者.
-            frames -> frames.skip(1).findFirst()
-        ).map(
-            frame -> quickFormat(
-                "{}#{}({}:{})",//* Classic Java StackTrace Style Info.
-                frame.getClass().getSimpleName(),
-                frame.getMethodName(),
-                //! 见 [[StackFrame#getFileName]] 的注释.
-                Objects.requireNonNullElse(frame.getFileName(), "UnknownSource"),
-                frame.getLineNumber()
-            )
-        ).orElseThrow(() -> new IllegalStateException("The layer of caller's StackTrace is too shallow!"));
-    }
-
     /**
      * 获取一个格式化的字符串.
      * @apiNote 该方法使用 {@code {}} 作为占位符.
      * @implNote <u>{@link String#format(String, Object...)}</u> 和 <u>{@link String#formatted(Object...)}</u> 都涉及复杂的正则解析式, 太慢了.<br>
      * 因此在需要格式化字符串时请使用这个方法来保证性能.
      */
-    public static @NotNull String quickFormat(@NotNull String format, @NotNull Object... args)
+    public static @NotNull String quickFormat(@NotNull String format, @NotNull Object @NotNull ... args)
     {
         Objects.requireNonNull(format, "Param \"format\" must not be null!");
         Objects.requireNonNull(args, "Param \"args\" must not be null!");

@@ -10,6 +10,7 @@ import kurvcygnus.soulnotes.domain.auth.entity.User;
 import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
 import kurvcygnus.soulnotes.utils.PrintUtils;
+import kurvcygnus.soulnotes.utils.enums.UserRole;
 import org.jetbrains.annotations.NotNull;
 
 import java.security.MessageDigest;
@@ -46,6 +47,17 @@ public final class AuthService
      */
     @WithTransaction public @NotNull Uni<AuthResponse> register(@NotNull RegisterRequest req)
     {
+        //* 角色提权防护: 注册仅允许 STUDENT, 忽略/拒绝客户端传入的管理员等角色.
+        if(req.role() != UserRole.STUDENT)
+            return Uni.createFrom().failure(
+                IBusinessException.of(
+                    ErrorCode.BAD_REQUEST,
+                    "注册仅允许 STUDENT 角色",
+                    IllegalArgumentException::new,
+                    "AUTH_REGISTER_ROLE_NOT_ALLOWED"
+                ).asException()
+            );
+
         return User.findByUsername(req.username()).
             onItem().ifNotNull().failWith(
                 () -> IBusinessException.of(
@@ -71,8 +83,7 @@ public final class AuthService
      * @param req 登录请求
      * @return 认证成功响应 (含 Token)
      */
-    @WithTransaction
-    public @NotNull Uni<AuthResponse> login(@NotNull LoginRequest req)
+    @WithTransaction public @NotNull Uni<AuthResponse> login(@NotNull LoginRequest req)
     {
         return User.findByUsername(req.username()).
             onItem().ifNull().failWith(
@@ -122,7 +133,7 @@ public final class AuthService
         try
         {
             final var digest = MessageDigest.getInstance("SHA-256");
-            final var hash   = digest.digest(password.getBytes());
+            final var hash = digest.digest(password.getBytes());
             return HexFormat.of().formatHex(hash);
         }
         catch(NoSuchAlgorithmException e) { throw new RuntimeException("SHA-256 不可用", e); }
@@ -142,13 +153,17 @@ public final class AuthService
                 IllegalArgumentException::new,
                 "AUTH_REGISTER_WEAK_PASSWORD_LENGTH"
             ).asException();
-        if(!password.matches(".*[a-zA-Z].*") || !password.matches(".*\\d.*"))
-            throw IBusinessException.of(
-                ErrorCode.BAD_REQUEST,
-                "密码必须包含字母和数字",
-                IllegalArgumentException::new,
-                "AUTH_REGISTER_WEAK_PASSWORD_COMPLEXITY"
-            ).asException();
+        if(
+            !password.matches(".*[a-zA-Z].*") ||
+            !password.matches(".*\\d.*") ||
+            !password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*")
+        ) throw IBusinessException.of(
+            ErrorCode.BAD_REQUEST,
+            "密码必须包含字母、数字和特殊字符",
+            IllegalArgumentException::new,
+            "AUTH_REGISTER_WEAK_PASSWORD_COMPLEXITY"
+        ).asException();
+        
         final var user = User.create(req.username(), hashPassword(req.password()), req.role());
         return user.persistAndFlush().replaceWith(user);
     }

@@ -1,0 +1,138 @@
+package kurvcygnus.soulnotes.ai.tool;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolMemoryId;
+import io.quarkus.hibernate.reactive.panache.Panache;
+import jakarta.enterprise.context.ApplicationScoped;
+import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
+import kurvcygnus.soulnotes.utils.JsonUtils;
+import kurvcygnus.soulnotes.utils.TimeUtils;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Duration;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * <b>用户上下文工具</b>
+ * <p>AI Agent 可调用此工具获取用户近期的情绪状态摘要,
+ * 以便在对话中提供更有针对性的共情回应.</p>
+ *
+ * @author Claude Code
+ * @since 2.0
+ */
+@ApplicationScoped
+public final class UserContextTool
+{
+    private static final Logger LOG = LoggerFactory.getLogger(UserContextTool.class);
+
+    private static final int RECENT_DAYS = 7;
+
+    private static final @NotNull TypeReference<Map<String, Object>> ANALYSIS_MAP_TYPE = new TypeReference<>() {};
+
+    /**
+     * <b>获取用户近期情绪摘要</b>
+     * <p>查询最近 {@value RECENT_DAYS} 天的日记分析结果, 返回自然语言摘要.</p>
+     *
+     * @param userId 用户 ID
+     * @return 情绪摘要文本
+     */
+    @Tool("获取用户近期情绪状态摘要, 以便提供更贴近用户当前心境的回应")
+    @SuppressWarnings("unused")
+    public @NotNull String getRecentMoodSummary(@ToolMemoryId String userId)
+    {
+        try
+        {
+            final var uuid    = java.util.UUID.fromString(userId);
+            final var end     = LocalDate.now(TimeUtils.ZONE_ASIA_SHANGHAI);
+            final var start   = end.minusDays(RECENT_DAYS);
+            final var startTs = start.atStartOfDay(TimeUtils.ZONE_ASIA_SHANGHAI).toInstant();
+            final var endTs   = end.plusDays(1).atStartOfDay(TimeUtils.ZONE_ASIA_SHANGHAI).toInstant();
+
+            //* @Tool 方法运行在 LLM 工具调用线程, 无现成 Hibernate 上下文,
+            //! 必须用 Panache.withTransaction 显式开启 Session, 否则响应式查询会因缺上下文而失败.
+            final var diaries = Panache.withTransaction(() -> MoodDiary.findByUserAndDateRange(uuid, startTs, endTs).list()).
+                await().
+                atMost(Duration.ofSeconds(5));
+
+            if(diaries.isEmpty())
+                return "用户在过去" + RECENT_DAYS + "天内没有日记记录。";
+
+            return buildSummary(diaries);
+        }
+        catch(Exception e)
+        {
+            LOG.warn("获取用户情绪摘要失败: {}", e.getMessage());
+            return "暂时无法获取用户近期情绪状态。";
+        }
+    }
+
+    //region 摘要构建
+    private static @NotNull String buildSummary(@NotNull List<MoodDiary> diaries)
+    {
+        var totalPositive = 0.0;
+        var totalNegative = 0.0;
+        var totalAnxiety  = 0.0;
+        var parsedCount   = 0;
+
+        for(final var diary : diaries)
+        {
+            if(diary.analysisResult == null || diary.analysisResult.isBlank())
+                continue;
+
+            try
+            {
+                final var map = JsonUtils.parseJson(diary.analysisResult, ANALYSIS_MAP_TYPE);
+                totalPositive += asDouble(map.get("positive"));
+                totalNegative += asDouble(map.get("negative"));
+                totalAnxiety  += asDouble(map.get("anxiety"));
+                parsedCount++;
+            }
+            catch(Exception e) { LOG.warn("解析日记分析结果失败: {}", e.getMessage()); }
+        }
+
+        if(parsedCount == 0)
+        {
+            final var diaryCount = diaries.size();
+            return "用户最近有 " + diaryCount + " 条日记记录，但暂无情感分析结果。";
+        }
+
+        final var avgPositive = totalPositive / parsedCount;
+        final var avgNegative = totalNegative / parsedCount;
+        final var avgAnxiety  = totalAnxiety  / parsedCount;
+
+        final var sb = new StringBuilder();
+        sb.append("用户近 ").
+            append(RECENT_DAYS).
+            append(" 天共记录了 ").
+            append(diaries.size()).
+            append(" 篇日记，其中 ").
+            append(parsedCount).
+            append(" 篇已分析。");
+
+        if(avgPositive > avgNegative)
+            sb.append("整体情绪偏向积极。");
+        else if(avgNegative > 0.6)
+            sb.append("近期负向情绪较为明显，需要更多关注和支持。");
+        else
+            sb.append("情绪状态整体平稳，有一定程度的波动。");
+
+        if(avgAnxiety > 0.6)
+            sb.append("焦虑水平偏高，值得关注。");
+
+        return sb.toString();
+    }
+
+    private static double asDouble(Object value)
+    {
+        if(value instanceof Number n)
+            return n.doubleValue();
+        if(value instanceof String s) { try { return Double.parseDouble(s); } catch(NumberFormatException e) { return .0; } }
+        return .0;
+    }
+    //endregion
+}

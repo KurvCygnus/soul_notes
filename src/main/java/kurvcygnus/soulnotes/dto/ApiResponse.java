@@ -34,12 +34,7 @@ public final class ApiResponse<T>
 
     public static <T> @NotNull ApiResponse<T> success() { return new ApiResponse<>(ErrorCode.SUCCESS.getCode(), ErrorCode.SUCCESS.getMessage(), null); }
 
-    public static <T> @NotNull ApiResponse<T> error(int code, @NotNull String message) { return new ApiResponse<>(code, message, null); }
-
     public static <T> @NotNull ApiResponse<T> error(@NotNull ErrorCode errorCode)
         { return new ApiResponse<>(errorCode.getCode(), errorCode.getMessage(), null); }
-
-    public static <T> @NotNull ApiResponse<T> error(@NotNull ErrorCode errorCode, @NotNull String detail)
-        { return new ApiResponse<>(errorCode.getCode(), detail, null); }
     //endregion
 }

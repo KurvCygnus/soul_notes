@@ -42,6 +42,7 @@ public interface IDetailedThrowable<E extends StructuredException & IDetailedThr
      * 以具体类型 {@code E} 抛出此异常。
      * @throws E 始终抛出，因为这是一个失败结果
      */
+    @SuppressWarnings("unused")//! 保留作为异常 API 的便捷方法, 供调用方显式抛出, 当前项目以 Uni 管道代替.
     default void throwSelf() throws E { throw asException(); }
 
     /**

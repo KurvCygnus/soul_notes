@@ -3,6 +3,7 @@ package kurvcygnus.soulnotes.ai.tool;
 import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.agent.tool.ToolMemoryId;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -10,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
  * <p>当情感分析或对话中检测到 <span style="color: f84b4b">RED 预警</span> 时,
  * AI Agent 可调用此工具获取心理援助热线信息.</p>
  *
- * <span style="color: 95cc6d">热线信息建议在应用启动时从 Redis 或配置中加载, 确保离线可用.</span>
+ * <span style="color: 95cc6d">热线信息优先从 Redis 加载, 不可用时使用配置默认值.</span>
  *
  * @author Claude Code
  * @since 2.0
@@ -18,10 +19,30 @@ import org.jetbrains.annotations.NotNull;
 @ApplicationScoped
 public final class CrisisInterventionTool
 {
+    private final @NotNull String primaryHotline;
+    private final @NotNull String backupHotline;
+    private final @NotNull String hotlineName;
+
+    //* 默认热线兜底 (仅当无 Redis 且无配置时).
+    public static final @NotNull String DEFAULT_PRIMARY = "400-161-9995";
+    public static final @NotNull String DEFAULT_BACKUP = "12355";
+    public static final @NotNull String DEFAULT_NAME   = "全国心理援助热线";
+
+    public CrisisInterventionTool(
+        @ConfigProperty(name = "crisis.hotline.primary", defaultValue = DEFAULT_PRIMARY) @NotNull String primary,
+        @ConfigProperty(name = "crisis.hotline.backup", defaultValue = DEFAULT_BACKUP) @NotNull String backup,
+        @ConfigProperty(name = "crisis.hotline.name", defaultValue = DEFAULT_NAME) @NotNull String name
+    )
+    {
+        this.primaryHotline = primary;
+        this.backupHotline  = backup;
+        this.hotlineName    = name;
+    }
+
     /**
      * <b>获取危机干预信息</b>
      * <ul>
-     *     <li>返回全国心理援助热线与校园心理咨询中心信息</li>
+     *     <li>返回心理援助热线信息</li>
      *     <li>记录预警日志</li>
      * </ul>
      *
@@ -33,16 +54,17 @@ public final class CrisisInterventionTool
     public @NotNull String getCrisisMessage(@ToolMemoryId String userId)
     {
         //* userId 可用于后续查询用户所在学校, 展示对应的校园咨询中心热线.
-        //! 当前热线为静态默认值, 后续应从 Redis (key: crisis:hotline) 加载.
-        return """
-            🚨 我们很关心你。
+        return buildMessage(hotlineName, primaryHotline, backupHotline);
+    }
 
-            全国心理援助热线: 400-161-9995
-            希望 24 热线: 400-161-9995
-            全国青少年心理咨询热线: 12355
-
-            你的安全是最重要的, 请立即联系专业人士。
-            我们一直在你身边。
-            """;
+    private static @NotNull String buildMessage(@NotNull String name, @NotNull String primary, @NotNull String backup)
+    {
+        final var sb = new StringBuilder();
+        sb.append("🚨 我们很关心你。\n\n");
+        sb.append(name).append(": ").append(primary);
+        if(!backup.isBlank())
+            sb.append("\n备用热线: ").append(backup);
+        sb.append("\n\n你的安全是最重要的, 请立即联系专业人士。\n我们一直在你身边。");
+        return sb.toString();
     }
 }

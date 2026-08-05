@@ -1,0 +1,4 @@
+#* 提交过滤器: application-dev.properties 内含本地开发密钥.
+#* clean (提交时) 将真实密钥替换为占位符, smudge (检出时) 还原为本地密钥.
+#* 过滤器定义在 .git/config (git config filter.devsecrets.clean/smudge), 不入库.
+src/main/resources/application-dev.properties filter=devsecrets

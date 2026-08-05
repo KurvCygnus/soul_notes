@@ -1,7 +1,7 @@
 package kurvcygnus.soulnotes.domain.diary.service;
 
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.ai.agent.MoodAnalysisAgent;
 import kurvcygnus.soulnotes.ai.agent.WarningDetectionAgent;
@@ -10,6 +10,7 @@ import kurvcygnus.soulnotes.ai.dto.WarningDetectionResult;
 import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.PrintUtils;
+import kurvcygnus.soulnotes.websocket.AlertWebSocket;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
@@ -26,20 +27,27 @@ import java.util.LinkedHashMap;
  * @since 2.0
  */
 @ApplicationScoped
+@SuppressWarnings("unused")//! AI Agent / AlertWebSocket 为 Quarkus 运行时生成 Bean, IDE 静态分析误报未满足依赖.
 public final class EmotionAnalysisService
 {
     private static final @NotNull Logger LOG = PrintUtils.getLogger();
 
     private final @NotNull MoodAnalysisAgent moodAnalysisAgent;
     private final @NotNull WarningDetectionAgent warningDetectionAgent;
+    private final @NotNull AlertWebSocket alertWebSocket;
+    private final @NotNull Vertx vertx;
 
     public EmotionAnalysisService(
         @NotNull MoodAnalysisAgent moodAnalysisAgent,
-        @NotNull WarningDetectionAgent warningDetectionAgent
+        @NotNull WarningDetectionAgent warningDetectionAgent,
+        @NotNull AlertWebSocket alertWebSocket,
+        @NotNull Vertx vertx
     )
     {
         this.moodAnalysisAgent = moodAnalysisAgent;
         this.warningDetectionAgent = warningDetectionAgent;
+        this.alertWebSocket = alertWebSocket;
+        this.vertx = vertx;
     }
 
     /**
@@ -47,7 +55,7 @@ public final class EmotionAnalysisService
      * <p>适用于创建日记等场景 — 先保存 Diary, 后台线程执行 AI 分析, 完成后再回写结果.</p>
      *
      * <span style="color: f84b4b">AI 调用是同步 HTTP 请求, 通过 {@code runSubscriptionOn} 移交 worker 线程池,
-     * 避免阻塞事件循环.</span>
+     * 避免阻塞事件循环; 持久化前必须 {@code emitOn} 回到事件循环上下文, 否则触发 HR000069.</span>
      *
      * @param diary 已持久化的日记实体
      * @return 更新后的日记实体 (含 analysisResult)
@@ -55,8 +63,6 @@ public final class EmotionAnalysisService
     public @NotNull Uni<MoodDiary> analyzeAsync(@NotNull MoodDiary diary)
     {
         return analyzeAndDetect(diary).
-            runSubscriptionOn(Infrastructure.getDefaultWorkerPool()).
-            chain(d -> d.persistAndFlush().onItem().transform(v -> d)).//! 持久化 AI 分析结果
             onFailure().invoke(t -> LOG.error("AI 分析失败, 跳过 analysisResult 回写", t)).
             onFailure().recoverWithItem(diary);
     }
@@ -70,16 +76,29 @@ public final class EmotionAnalysisService
      */
     public @NotNull Uni<MoodDiary> analyzeAndDetect(@NotNull MoodDiary diary)
     {
-        return Uni.createFrom().item(
+        //! HR000068/069: Hibernate reactive Session 只能在打开它的 Vert.x 事件循环线程使用.
+        //! 必须用 vertx.executeBlocking 执行阻塞 AI 调用 (worker 线程), 其结果在事件循环回调,
+        //! 之后的 persistAndFlush 才能安全访问请求上下文中的 Session.
+        return vertx.executeBlocking(
                 () ->
                 {
                     final var moodResult = moodAnalysisAgent.analyze(diary.content);
                     final var warningResult = warningDetectionAgent.detect(diary.content);
                     diary.analysisResult = mergeResults(moodResult, warningResult);
+
+                    //* 日记场景在线 RED 预警: 立即推送至用户 /ws/alert 连接.
+                    if("RED".equals(warningResult.warningLevel()))
+                    {
+                        alertWebSocket.pushAlert(diary.userId, warningResult.reason()).
+                            subscribe().with(
+                                v -> {},
+                                t -> LOG.warn("日记 RED 预警推送失败: userId={}, {}", diary.userId, t.getMessage())
+                            );
+                    }
                     return diary;
-                }
+                },
+                false
             ).
-            runSubscriptionOn(Infrastructure.getDefaultWorkerPool()).
             chain(d -> d.persistAndFlush().onItem().transform(v -> d));//! 持久化 AI 分析结果
     }
 

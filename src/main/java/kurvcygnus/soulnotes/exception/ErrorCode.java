@@ -18,16 +18,16 @@ public enum ErrorCode
     INTERNAL_ERROR     (500, 500000,  "服务器内部错误"),
     //endregion
 
-    //region 认证 (401xxx)
+    //region 认证 (401xxx / 403xxx)
     AUTH_TOKEN_EXPIRED (401, 401001,  "Token 已过期"),
     AUTH_TOKEN_INVALID (401, 401002,  "Token 无效"),
     AUTH_UNAUTHORIZED  (401, 401003,  "未登录"),
-    AUTH_FORBIDDEN     (403, 401004,  "权限不足"),
+    AUTH_FORBIDDEN     (403, 403001,  "权限不足"),
     //endregion
 
-    //region 用户 (404xxx)
+    //region 用户 (404xxx / 409xxx)
     USER_NOT_FOUND     (404, 404001,  "用户不存在"),
-    USERNAME_DUPLICATE (409, 404002,  "用户名已被占用"),
+    USERNAME_DUPLICATE (409, 409001,  "用户名已被占用"),
     //endregion
 
     //region 日记 (40401x)
