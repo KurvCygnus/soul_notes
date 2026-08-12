@@ -37,6 +37,9 @@ class VoiceResourceTest
     @Test void methods_UploadAndCallbackExist() throws Exception
     {
         assertNotNull(VoiceResource.class.getMethod("upload", org.jboss.resteasy.reactive.multipart.FileUpload.class));
-        assertNotNull(VoiceResource.class.getMethod("handleAsrCallback", kurvcygnus.soulnotes.domain.voice.dto.AsrCallbackRequest.class));
+        assertNotNull(VoiceResource.class.getMethod(
+            "handleAsrCallback",
+            String.class, kurvcygnus.soulnotes.domain.voice.dto.AsrCallbackRequest.class
+        ));
     }
 }

@@ -1,6 +1,7 @@
 package kurvcygnus.soulnotes.domain.diary.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import org.jetbrains.annotations.NotNull;
@@ -64,6 +65,7 @@ public record DiaryResponse(
      * <p>对应 {@code analysisResult} JSONB 字段的结构化映射.</p>
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @RegisterForReflection//! native 下 Jackson 反序列化该 record 需要反射注册 (JsonUtils 手动 mapper 路径).
     public record OfAnalysisResult(
         double positive,
         double negative,

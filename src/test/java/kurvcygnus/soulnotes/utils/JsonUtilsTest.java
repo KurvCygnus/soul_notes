@@ -1,6 +1,9 @@
 package kurvcygnus.soulnotes.utils;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -16,6 +19,14 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class JsonUtilsTest
 {
+    @BeforeAll
+    @SuppressWarnings("InstantiationOfUtilityClass")//! JsonUtils 为 final 全静态成员类, IDE 误报实例化; 构造器正是 CDI 桥接注入入口.
+    static void initMapper()
+    {
+        //* 纯单元测试无 CDI 容器, 手动构造与生产等价的 mapper (含 JavaTimeModule).
+        new JsonUtils(new ObjectMapper().registerModule(new JavaTimeModule()));
+    }
+
     @Test void toJson_ShouldSerializeSimpleObject()
     {
         final var result = JsonUtils.toJson(Map.of("key", "value"));
