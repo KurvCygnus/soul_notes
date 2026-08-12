@@ -7,16 +7,21 @@ import kurvcygnus.soulnotes.domain.auth.dto.AuthResponse;
 import kurvcygnus.soulnotes.domain.auth.dto.LoginRequest;
 import kurvcygnus.soulnotes.domain.auth.dto.RegisterRequest;
 import kurvcygnus.soulnotes.domain.auth.entity.User;
-import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.exception.ErrorCode;
+import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.utils.PrintUtils;
 import kurvcygnus.soulnotes.utils.enums.UserRole;
 import org.jetbrains.annotations.NotNull;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
 import java.util.HexFormat;
 import java.util.NoSuchElementException;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 /**
  * <b>认证服务</b>
@@ -125,21 +130,72 @@ public final class AuthService
     //* 密码最小长度.
     private static final int MIN_PASSWORD_LENGTH = 8;
 
-    //* 使用 SHA-256 作为临时密码哈希方案.
-    //! 生产环境必须替换为 BCrypt, 当前方案仅用于原型阶段.
-    //? 等到 BCrypt 依赖 (如 spring-security-crypto / jbcrypt) 加入后, 更新此方法.
+    //* 密码哈希: PBKDF2WithHmacSHA256 (JDK 内置, 零新增依赖), 迭代次数采用 OWASP 推荐值.
+    //* 存储格式: "pbkdf2$<iterations>$<saltHex>$<hashHex>", 随机盐保证相同密码每次哈希不同.
+    private static final int PBKDF2_ITERATIONS = 210_000;
+    private static final int PBKDF2_SALT_BYTES = 16;
+    private static final int PBKDF2_KEY_BITS = 256;
+    private static final @NotNull String PBKDF2_PREFIX = "pbkdf2$";
+    private static final @NotNull SecureRandom PBKDF2_RANDOM = new SecureRandom();
+
     private static @NotNull String hashPassword(@NotNull String password)
+    {
+        final var salt = new byte[PBKDF2_SALT_BYTES];
+        PBKDF2_RANDOM.nextBytes(salt);
+        final var spec = new PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, PBKDF2_KEY_BITS);
+        try
+        {
+            final var hash = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            return PrintUtils.quickFormat(
+                "{}{}${}${}",
+                PBKDF2_PREFIX, PBKDF2_ITERATIONS, HexFormat.of().formatHex(salt), HexFormat.of().formatHex(hash)
+            );
+        }
+        catch(NoSuchAlgorithmException | InvalidKeySpecException e)
+        {
+            throw new RuntimeException("PBKDF2 不可用", e);
+        }
+        finally { spec.clearPassword(); }//! 及时清除密钥材料, 减少内存残留风险.
+    }
+
+    private static boolean verifyPassword(@NotNull String rawPassword, @NotNull String storedHash)
+    {
+        //! 兼容原型阶段遗留的 SHA-256 无盐哈希 (无前缀), 该批用户建议后续登录时重哈希迁移.
+        if(!storedHash.startsWith(PBKDF2_PREFIX))
+            return sha256Hex(rawPassword).equals(storedHash);
+
+        final var parts = storedHash.split("\\$");
+        if(parts.length != 4)
+            return false;
+
+        try
+        {
+            final var spec = new PBEKeySpec(
+                rawPassword.toCharArray(),
+                HexFormat.of().parseHex(parts[2]),
+                Integer.parseInt(parts[1]),
+                HexFormat.of().parseHex(parts[3]).length * 8
+            );
+            final var actual = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+            //* 常量时间比较, 防时序侧信道.
+            return MessageDigest.isEqual(actual, HexFormat.of().parseHex(parts[3]));
+        }
+        catch(NoSuchAlgorithmException | InvalidKeySpecException | IllegalArgumentException e)
+        {
+            //! 存储值损坏时按校验失败处理, 不抛异常避免登录接口暴露内部细节.
+            return false;
+        }
+    }
+
+    private static @NotNull String sha256Hex(@NotNull String input)
     {
         try
         {
             final var digest = MessageDigest.getInstance("SHA-256");
-            final var hash = digest.digest(password.getBytes());
-            return HexFormat.of().formatHex(hash);
+            return HexFormat.of().formatHex(digest.digest(input.getBytes()));//* 与旧实现保持相同编码, 确保旧哈希可验证.
         }
         catch(NoSuchAlgorithmException e) { throw new RuntimeException("SHA-256 不可用", e); }
     }
-
-    private static boolean verifyPassword(@NotNull String rawPassword, @NotNull String storedHash) { return hashPassword(rawPassword).equals(storedHash); }
     
     //* 校验密码强度: 至少 8 位, 包含字母和数字.
     private static @NotNull Uni<User> createUser(@NotNull RegisterRequest req)

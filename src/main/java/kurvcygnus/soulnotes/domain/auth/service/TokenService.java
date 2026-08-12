@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -24,8 +25,6 @@ import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-
-//? 配置已在构造函数中通过 [[ReactiveRedisDataSource]] 注入完成.
 
 /**
  * <b>JWT 令牌服务</b>
@@ -57,7 +56,7 @@ public final class TokenService
     )
     {
         //! 启动 fail-fast: 未配置或强度不足的密钥直接拒绝启动, 防止生产环境静默使用弱密钥.
-        if(jwtSecret.isBlank() || jwtSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32)
+        if(jwtSecret.isBlank() || jwtSecret.getBytes(StandardCharsets.UTF_8).length < 32)
             throw new IllegalStateException("jwt.secret 未配置或强度不足: 请通过 HASH_KEY 环境变量提供至少 32 字节的签名密钥");
 
         this.redisValues = redisDS.value(String.class);

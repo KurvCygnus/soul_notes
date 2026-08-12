@@ -82,6 +82,11 @@ public final class JwtAuthenticationMechanism implements HttpAuthenticationMecha
         }
     }
 
+    //! quarkus-smallrye-jwt 自带机制 (priority 1000) 用 JWTParser.parse() 依赖 mp.jwt.verify.publickey 验签,
+    //! 本项目为 HS256 对称密钥 (publickey 配置为 NONE), 自带机制必然失败并直接 401, 必须先于它执行.
+    //! HttpAuthenticationMechanism 按 getPriority() 降序排序 (见 HttpSecurityConfiguration), 返回更高值即可优先.
+    @Override public int getPriority() { return 2000; }
+
     @Override public @NotNull Uni<ChallengeData> getChallenge(@NotNull RoutingContext context)
         { return Uni.createFrom().item(new ChallengeData(401, "WWW-Authenticate", JwtConstants.CHALLENGE_REALM)); }
 }

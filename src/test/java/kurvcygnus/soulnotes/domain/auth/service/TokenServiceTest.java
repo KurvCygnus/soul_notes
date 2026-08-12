@@ -1,5 +1,9 @@
 package kurvcygnus.soulnotes.domain.auth.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import kurvcygnus.soulnotes.utils.JsonUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -17,6 +21,15 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class TokenServiceTest
 {
+    @BeforeAll
+    @SuppressWarnings("InstantiationOfUtilityClass")//! JsonUtils 为 final 全静态成员类, IDE 误报实例化; 构造器正是 CDI 桥接注入入口.
+    static void initMapper()
+    {
+        //* 纯单元测试无 CDI 容器, 手动构造与生产等价的 mapper (含 JavaTimeModule);
+        //! TokenService.extractJti 静态调用 JsonUtils, 必须预初始化静态桥接否则回退哈希.
+        new JsonUtils(new ObjectMapper().registerModule(new JavaTimeModule()));
+    }
+
     //region extractJti
     @Test void extractJti_ShouldReturnJtiClaimFromPayload() throws Exception
     {
