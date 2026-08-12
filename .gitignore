@@ -43,4 +43,9 @@ voice_uploads/
 # TLS Certificates
 .certs/
 
+# Agent/工具缓存与工作区 (不属项目源码)
+.codegraph/
+.superpowers/
+docs/superpowers/
+
 DEV.md

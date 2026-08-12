@@ -30,6 +30,8 @@ dependencies {
     implementation 'io.quarkiverse.langchain4j:quarkus-langchain4j-openai'
     implementation 'io.quarkus:quarkus-arc'
     implementation 'io.quarkus:quarkus-rest'
+    //* K8s 存活/就绪探针依赖 /q/health 端点, 由 quarkus-smallrye-health 提供 (团队已确认引入).
+    implementation 'io.quarkus:quarkus-smallrye-health'
     testImplementation 'io.quarkus:quarkus-junit'
     testImplementation 'io.rest-assured:rest-assured'
 
