@@ -205,6 +205,9 @@ public class ClinicalAssessmentService
     //endregion
 
     //region 保留期清理
+    //* //! 单事务包裹 (recordAsync 同款): 本方法的唯一生产消费方 ClinicalRetentionCleaner 在无请求上下文的
+    //* duplicated context 上执行 (跳转先例 ChatWebSocket#onMessage), 静态 delete 虽会在当前 context 上
+    //* 惰性开会话, 但变更操作缺显式事务边界时批量删除的提交语义不可靠 — 故统一收口到 withTransaction.
     /**
      * 启动时保留期清理: 删除早于保留天数的评估.
      *
@@ -216,7 +219,7 @@ public class ClinicalAssessmentService
         if(retentionDays <= 0)
             return Uni.createFrom().item(0L);
         final var cutoff = Instant.now().minus(Duration.ofDays(retentionDays));
-        return ClinicalAssessment.deleteOlderThan(cutoff).
+        return Panache.withTransaction(() -> ClinicalAssessment.deleteOlderThan(cutoff)).
             invoke(deleted -> { if(deleted > 0) LOG.info(PrintUtils.quickFormat("临床评估保留期清理完成: 删除 {} 条", deleted)); });
     }
     //endregion
