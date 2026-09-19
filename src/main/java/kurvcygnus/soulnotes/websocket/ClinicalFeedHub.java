@@ -38,9 +38,16 @@ public class ClinicalFeedHub
     }
 
     /**
-     * 移除咨询员连接.
+     * 移除咨询员连接 (条件移除: 仅当映射中的存活连接正是本次关闭的那条时才清除).
+     * <p>//! 咨询员重连竞态: 旧 socket 的 close 回调晚于新连接 register 到达时, 若无条件 remove
+     * 会把刚注册的新连接一并踢掉 — 携带 connection 比对后旧连接的关闭不再误伤新连接.</p>
      */
-    public void unregister(@NotNull UUID counselorId) { connections.remove(counselorId); }
+    public void unregister(@NotNull UUID counselorId, @NotNull WebSocketConnection connection)
+    {
+        Objects.requireNonNull(counselorId, "Param \"counselorId\" must not be null!");
+        Objects.requireNonNull(connection, "Param \"connection\" must not be null!");
+        connections.remove(counselorId, connection);
+    }
 
     /**
      * 向全部在线咨询员广播 JSON 负载.
