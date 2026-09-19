@@ -92,7 +92,8 @@ public final class ClinicalAssessment extends PanacheEntityBase
             params.add(since);
         }
         query.append(" ORDER BY createdAt DESC");
-        return find(query.toString(), params.toArray()).page(io.quarkus.panache.common.Page.of(limit, offset / limit)).list();
+        //* Page.of 首参为 index 次参为 size (io.quarkus.panache.common.Page 契约), 倒序会致 page=1 恒抛 "size must be > 0".
+        return find(query.toString(), params.toArray()).page(io.quarkus.panache.common.Page.of(offset / limit, limit)).list();
     }
 
     /**
@@ -121,7 +122,7 @@ public final class ClinicalAssessment extends PanacheEntityBase
     public static @NotNull Uni<List<ClinicalAssessment>> findByStudent(@NotNull UUID userId, int limit, int offset)
     {
         return find("userId = ?1 ORDER BY createdAt DESC", userId).
-            page(io.quarkus.panache.common.Page.of(limit, offset / limit)).list();
+            page(io.quarkus.panache.common.Page.of(offset / limit, limit)).list();
     }
 
     /**

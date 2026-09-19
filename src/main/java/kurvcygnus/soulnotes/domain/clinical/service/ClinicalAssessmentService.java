@@ -2,6 +2,7 @@ package kurvcygnus.soulnotes.domain.clinical.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.reactive.panache.Panache;
+import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
 import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.domain.auth.entity.User;
@@ -118,6 +119,8 @@ public class ClinicalAssessmentService
     //endregion
 
     //region 查询
+    //* 三视图显式绑定事务 (DiaryService 同款): REST 自动开 session 的装配在测试构建
+    //* (quarkus.hibernate-orm.active=false) 下缺席, 服务自身保证 session 存在才可独立复用.
     /**
      * 风险队列: 按等级与时间窗倒序分页.
      *
@@ -126,6 +129,7 @@ public class ClinicalAssessmentService
      * @param page  分页参数
      * @return 当前页评估视图
      */
+    @WithTransaction
     public @NotNull Uni<List<AssessmentVo>> listAssessments(@Nullable String level, int days, @NotNull PageRequest page)
     {
         final var since = days > 0 ? Instant.now().minus(Duration.ofDays(days)) : null;
@@ -136,6 +140,7 @@ public class ClinicalAssessmentService
     /**
      * 学生时间线: 单学生评估倒序分页.
      */
+    @WithTransaction
     public @NotNull Uni<List<AssessmentVo>> listByStudent(@NotNull UUID studentId, @NotNull PageRequest page)
     {
         return ClinicalAssessment.findByStudent(studentId, page.getSize(), page.getOffset()).
@@ -148,6 +153,7 @@ public class ClinicalAssessmentService
      * @param days 时间窗天数 (<=0 不限)
      * @return 统计摘要
      */
+    @WithTransaction
     public @NotNull Uni<StatsSummary> statsSummary(int days)
     {
         final var since = days > 0 ? Instant.now().minus(Duration.ofDays(days)) : null;
