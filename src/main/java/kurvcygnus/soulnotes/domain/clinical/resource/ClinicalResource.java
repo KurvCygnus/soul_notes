@@ -43,7 +43,7 @@ import java.util.UUID;
 @RolesAllowed({UserRole.ROLE_COUNSELOR, UserRole.ROLE_ADMIN})
 public final class ClinicalResource
 {
-    //* 等级过滤白名单: 非 WHITE 值直接 400 (防注入与脏查询语义).
+    //* 等级过滤白名单: 非白名单值直接 400 (防注入与脏查询语义).
     private static final @NotNull Set<String> LEVELS = Set.of("YELLOW", "RED");
 
     @Inject ClinicalAssessmentService assessmentService;

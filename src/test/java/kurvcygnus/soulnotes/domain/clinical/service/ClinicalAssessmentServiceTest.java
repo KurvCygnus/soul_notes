@@ -42,6 +42,18 @@ class ClinicalAssessmentServiceTest
         assertNull(ClinicalAssessmentService.lastPersistedId, "NONE 不得触碰数据库");
     }
 
+    //* 回归 (终审必修 3): LLM 违约输出越域值 (如 "PURPLE") 原样落库会成幽灵行, statsSummary 的 else
+    //* 分支还会误计入 YELLOW — 唯一写入口必须白名单放行 (仅 YELLOW/RED), 越域值与 NONE 同短路且不抛.
+    @Test void recordAsync_OutOfDomainLevel_ShortsCircuitWithoutTouchingDb()
+    {
+        var payload = JsonUtils.parseJson("{\"riskLevel\":\"PURPLE\",\"tags\":[],\"summary\":\"越域\"}", JsonNode.class);
+        assertDoesNotThrow(
+            () -> service.recordAsync(UUID.randomUUID(), UUID.randomUUID(), payload, null).
+                await().atMost(java.time.Duration.ofSeconds(5)),
+            "越域 riskLevel 应与 NONE 同短路, 不得进入落库分支 (纯单测无 Panache 上下文, 落库即抛)");
+        assertNull(ClinicalAssessmentService.lastPersistedId, "越域 riskLevel 不得触碰数据库");
+    }
+
     @Test void summaryExtraction_ToleratesMissingField()
     {
         var payload = JsonUtils.parseJson("{\"riskLevel\":\"YELLOW\"}", JsonNode.class);

@@ -483,8 +483,9 @@ public final class ChatService
         final var effective = promptProvider.clinicalSchema();
         if(AiPromptConstants.CLINICAL_OUTPUT_SCHEMA_DEFAULT.equals(effective))
             return null;
-        return schemaNormalizer.cachedFor(ClinicalSchemaNormalizer.sha256Hex(effective)) == null ?
-            null : ClinicalSchemaNormalizer.sha256Hex(effective);
+        //* 指纹只算一次: 三目两侧各调一次 sha256Hex 是纯重复计算 (与 resolveSchemaForContract 下发判定的重复不同, 那处跨方法边界).
+        final var hash = ClinicalSchemaNormalizer.sha256Hex(effective);
+        return schemaNormalizer.cachedFor(hash) == null ? null : hash;
     }
 
     //* 对用户最新消息执行预警等级检测.

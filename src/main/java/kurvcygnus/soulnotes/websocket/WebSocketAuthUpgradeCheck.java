@@ -8,6 +8,7 @@ import io.smallrye.mutiny.Uni;
 import jakarta.inject.Singleton;
 import kurvcygnus.soulnotes.domain.auth.service.TokenService;
 import kurvcygnus.soulnotes.utils.constants.JwtConstants;
+import kurvcygnus.soulnotes.utils.enums.UserRole;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -109,7 +110,8 @@ public final class WebSocketAuthUpgradeCheck implements HttpUpgradeCheck
                     if(request.path().startsWith("/ws/clinical"))
                     {
                         final var groups = jwt.getGroups();
-                        if(groups == null || !(groups.contains("COUNSELOR") || groups.contains("ADMIN")))
+                        //* 角色字面量引用 UserRole 常量 (ClinicalResource @RolesAllowed 同源, 单一来源防漂移).
+                        if(groups == null || !(groups.contains(UserRole.ROLE_COUNSELOR) || groups.contains(UserRole.ROLE_ADMIN)))
                         {
                             LOG.warn("WebSocket 升级拒绝: 工作台端点非咨询员角色");
                             return CheckResult.rejectUpgrade(403);

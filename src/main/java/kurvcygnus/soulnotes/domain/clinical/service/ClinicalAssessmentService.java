@@ -82,8 +82,15 @@ public class ClinicalAssessmentService
         Objects.requireNonNull(sessionId, "Param \"sessionId\" must not be null!");
         Objects.requireNonNull(payload, "Param \"payload\" must not be null!");
         final var riskLevel = payload.path("riskLevel").asText("NONE");
-        if("NONE".equals(riskLevel))
+        //* 域校验唯一写入口: 白名单仅放行 YELLOW/RED — LLM 违约输出越域值 (如 "PURPLE") 原样落库会成
+        //* 幽灵行 (工作台队列查不到), statsSummary 的 else 分支还会把它误计入 YELLOW 桶.
+        if(!"YELLOW".equals(riskLevel) && !"RED".equals(riskLevel))
+        {
+            //* 越域值与 NONE 同短路跳过, 但必须 WARN 留痕把违约值带进日志; NONE 是正常静默路径, 不告警.
+            if(!"NONE".equals(riskLevel))
+                LOG.warn(PrintUtils.quickFormat("临床评估 riskLevel 越域, 已跳过落库: riskLevel={}", riskLevel));
             return Uni.createFrom().voidItem();//* 工作台是处置视图, 无风险记录不入库 (Spec §4).
+        }
 
         final var assessment = new ClinicalAssessment();
         assessment.id = UUID.randomUUID();
