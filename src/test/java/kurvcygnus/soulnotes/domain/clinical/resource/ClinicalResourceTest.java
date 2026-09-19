@@ -111,6 +111,19 @@ class ClinicalResourceTest
             body("data[0].displayName", equalTo(student.username));
     }
 
+    //* 回归 (审查修复轮 1): 缺席 page/size 须经 normalize 收敛为契约默认 (每页 20) 而非钳位 1 —
+    //* 造 2 条同等级数据断言不被 LIMIT 1 截断.
+    @Test void queue_AbsentPagingParams_ShouldApplyContractDefault()
+    {
+        recordAssessment(RED_PAYLOAD);
+        recordAssessment(RED_PAYLOAD);
+        given().header("Authorization", "Bearer " + counselorToken()).
+            queryParam("level", "RED").queryParam("days", 7).
+        when().get("/api/v1/clinical/assessments").
+        then().statusCode(200).
+            body("data.size()", greaterThanOrEqualTo(2));
+    }
+
     @Test void timeline_ListsStudentEntriesNewestFirst()
     {
         final var student = recordAssessment(RED_PAYLOAD);
