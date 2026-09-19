@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -26,6 +27,12 @@ class ClinicalAssessmentServiceTest
     }
 
     private final ClinicalAssessmentService service = new ClinicalAssessmentService("RED", new StubHub());
+
+    @BeforeEach void resetProbe()
+    {
+        //* 跨测试复位静态探针: 同 JVM 内真库用例 (@QuarkusTest) 先跑并 persist 时, NONE 用例不再被残留值误伤.
+        ClinicalAssessmentService.lastPersistedId = null;
+    }
 
     @Test void recordAsync_SkipsNoneWithoutTouchingDb()
     {

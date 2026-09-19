@@ -46,7 +46,7 @@ public class ClinicalAssessmentService
     //* 业务时区统一 Asia/Shanghai (TimeUtils 同源), 按日聚合的日期边界据此划分.
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
-    //* 测试观测探针: 非 null 即 persist 被真实调用 (仅包内可见, 生产路径无读写).
+    //* 测试观测探针: 非 null 即 persist 被真实调用 (仅包内可见, 生产路径仅写不读).
     static @Nullable UUID lastPersistedId;
 
     //region 注入
@@ -164,6 +164,7 @@ public class ClinicalAssessmentService
                 else counters[0]++;
             }
             final var daily = byDay.entrySet().stream().
+                sorted(Map.Entry.comparingByKey()).//* listSince 为 DESC / listAll 无序, 按 DTO 契约统一升序输出.
                 map(e -> new StatsSummary.DailyCount(e.getKey(), e.getValue()[0], e.getValue()[1])).
                 toList();
             final var totalStudents = assessments.stream().map(a -> a.userId).distinct().count();
