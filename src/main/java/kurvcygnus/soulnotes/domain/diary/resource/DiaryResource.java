@@ -38,7 +38,7 @@ import java.util.UUID;
  * @implNote userId 从 JWT subject 解析 (认证由全局机制保证), 所有读写均限定当前用户自己的日记.
  * @since 1.0
  */
-@Path(ApiEndpointConstants.DIARY_BASE)
+@SuppressWarnings("JavadocDeclaration") @Path(ApiEndpointConstants.DIARY_BASE)
 @RolesAllowed(UserRole.ROLE_STUDENT)
 public final class DiaryResource
 {

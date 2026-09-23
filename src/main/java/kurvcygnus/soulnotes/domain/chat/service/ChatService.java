@@ -54,8 +54,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *           LLM 失败不向外抛错: send 与 stream 两条路径对称地补发固定兜底文案并正常收尾 (离线安全网).
  * @since 1.0
  */
-@ApplicationScoped
-@SuppressWarnings("unused")//! AI Agent 为 Quarkus 运行时生成 Bean, IDE 静态分析误报未满足依赖; transformToMulti 返回的 Multi 即流, 非误用.
+@SuppressWarnings("JavadocDeclaration") @ApplicationScoped
 public final class ChatService
 {
     private static final Logger LOG = LoggerFactory.getLogger(ChatService.class);
@@ -129,9 +128,11 @@ public final class ChatService
         //* 同 id 重 INSERT, 集成测试实证 duplicate key 23505) — 加载与持久化必须同事务, 实体经原子引用
         //* 带出事务供挂点取 id/userId (单链顺序写读, 无并发竞争).
         final var sessionRef = new AtomicReference<AiChatSession>();
-        return Panache.withTransaction(() ->
+        return Panache.withTransaction(
+            () ->
             getOrCreateSession(req.sessionId(), userId).
-                flatMap(session ->
+                flatMap(
+                    session ->
                     {
                         sessionRef.set(session);
                         session.addMessage("user", req.content());
@@ -140,8 +141,17 @@ public final class ChatService
                     }
                 )
             ).
-            invoke(outcome -> fireClinicalRecord(Objects.requireNonNull(sessionRef.get(), "Param \"session\" must not be null!"), outcome.clinicalPayload())).
-            map(outcome -> new ChatMessageVo("assistant", outcome.visible(), Instant.now()));
+            invoke(outcome ->
+                fireClinicalRecord(
+                    Objects.requireNonNull(
+                        sessionRef.get(),
+                        "Param \"session\" must not be null!"
+                    ),
+                    outcome.clinicalPayload()
+                )
+            ).
+            map(outcome -> new ChatMessageVo("assistant", outcome.visible(), Instant.now())
+        );
     }
 
     /**
@@ -206,9 +216,7 @@ public final class ChatService
      */
     @WithTransaction
     public @NotNull Uni<List<ChatHistoryMessage>> listMessages(@NotNull UUID sessionId, @NotNull UUID userId)
-    {
-        return loadOwnedSession(sessionId, userId).map(session -> parseHistory(session.messages));
-    }
+        { return loadOwnedSession(sessionId, userId).map(session -> parseHistory(session.messages)); }
 
     /**
      * 删除指定会话 (硬删除, 含全部消息历史).
@@ -221,10 +229,7 @@ public final class ChatService
      * @since 1.2.1
      */
     @WithTransaction
-    public @NotNull Uni<Void> deleteSession(@NotNull UUID sessionId, @NotNull UUID userId)
-    {
-        return loadOwnedSession(sessionId, userId).chain(AiChatSession::delete);
-    }
+    public @NotNull Uni<Void> deleteSession(@NotNull UUID sessionId, @NotNull UUID userId) { return loadOwnedSession(sessionId, userId).chain(AiChatSession::delete); }
     //endregion
 
     //region 辅助方法
@@ -247,15 +252,19 @@ public final class ChatService
                     "CHAT_SESSION_LOOKUP_NOT_FOUND"
                 ).asException()
             ).
-            flatMap(session -> session.userId.equals(userId)
-                ? Uni.createFrom().item(session)
-                : Uni.createFrom().failure(
-                    IBusinessException.of(
-                        ErrorCode.SESSION_NOT_FOUND,
-                        "会话不存在",
-                        NoSuchElementException::new,
-                        "CHAT_SESSION_FOREIGN_ACCESS"
-                    ).asException()));
+            flatMap(
+                session ->
+                session.userId.equals(userId) ?
+                    Uni.createFrom().item(session) :
+                    Uni.createFrom().failure(
+                        IBusinessException.of(
+                            ErrorCode.SESSION_NOT_FOUND,
+                            "会话不存在",
+                            NoSuchElementException::new,
+                            "CHAT_SESSION_FOREIGN_ACCESS"
+                        ).asException()
+                    )
+            );
     }
 
     //* 加载已有 Session, 或创建新的 Session.
@@ -278,7 +287,8 @@ public final class ChatService
     //* 非 static: 历史截断需引用构造器注入的配置字段 maxHistoryMessages.
     private @NotNull Uni<AiChatSession> appendUserMessage(@NotNull UUID sessionId, @NotNull String content)
     {
-        return Panache.withTransaction(() ->
+        return Panache.withTransaction(
+            () ->
             AiChatSession.
                 <AiChatSession>findById(sessionId).
                 onItem().
@@ -291,7 +301,8 @@ public final class ChatService
                         "CHAT_STREAM_SESSION_NOT_FOUND"
                     ).asException()
                 ).
-                flatMap(s ->
+                flatMap(
+                    s ->
                     {
                         s.addMessage("user", content);
                         s.truncate(maxHistoryMessages);
@@ -307,8 +318,10 @@ public final class ChatService
     //! 非 static: 内部调用实例方法 applyWarning (依赖 alertNotifiers 注入).
     private @NotNull Uni<Void> appendAssistantReply(@NotNull UUID sessionId, @NotNull String userContent, @NotNull String reply)
     {
-        return detectWarning(userContent).flatMap(detection ->
-            Panache.withTransaction(() ->
+        return detectWarning(userContent).flatMap(
+            detection ->
+            Panache.withTransaction(
+                () ->
                 AiChatSession.
                     <AiChatSession>findById(sessionId).
                     onItem().
@@ -342,7 +355,8 @@ public final class ChatService
     private @NotNull Multi<String> streamAiReply(@NotNull AiChatSession session, @NotNull String content)
     {
         final var history = buildConversationHistory(session);
-        return Multi.createFrom().<String>emitter(emitter ->
+        return Multi.createFrom().<String>emitter(
+            emitter ->
             {
                 final var fullReply = new StringBuilder();
                 empatheticChatAgent.chat(buildSystemPrompt(), session.userId.toString(), history, content).
@@ -356,7 +370,7 @@ public final class ChatService
                         }
                     ).
                     onCompleteResponse(
-                        response ->
+                        _ ->
                         //* 回调线程为 langchain4j 流式线程, 无 Vertx 上下文, 直接执行响应式事务会失败;
                         //* 经 executeBlocking 切至 Vertx worker 线程 (与 callAiAndRespond 同一模式) 阻塞等待持久化完成.
                         {
@@ -372,7 +386,7 @@ public final class ChatService
                                 },
                                 false
                             ).subscribe().with(
-                                v -> emitter.complete(),
+                                _ -> emitter.complete(),
                                 t ->
                                 {
                                     LOG.warn("流式回复持久化失败: {}", t.getMessage());
@@ -391,7 +405,7 @@ public final class ChatService
                                 () -> appendAssistantReply(session.id, content, FALLBACK_REPLY).await().atMost(Duration.ofSeconds(60)),
                                 false
                             ).subscribe().with(
-                                v ->
+                                _ ->
                                 {
                                     emitter.emit(FALLBACK_REPLY);
                                     emitter.complete();
@@ -501,10 +515,7 @@ public final class ChatService
     //* fire-and-forget 落库: 拆流 payload 为 null (tagging off / 无块 / 解析失败) 时零开销直通;
     //* 失败仅 WARN — 对话可用性 > 评估完整性 (Spec §7 best-effort 边界).
     //* send 挂点经此出口订阅即弃 (响应映射不等落库); stream 挂点直接 await 记录 Uni 保活 worker 上下文.
-    private void fireClinicalRecord(@NotNull AiChatSession session, @Nullable JsonNode payload)
-    {
-        recordClinicalAssessment(session, payload).subscribe().with(v -> {});
-    }
+    private void fireClinicalRecord(@NotNull AiChatSession session, @Nullable JsonNode payload) { recordClinicalAssessment(session, payload).subscribe().with(v -> {}); }
 
     //* 落库 Uni 构造 (两挂点共享, 各自恰好订阅一次): 失败在内部归一为正常完成 — 订阅方无需失败分支.
     private @NotNull Uni<Void> recordClinicalAssessment(@NotNull AiChatSession session, @Nullable JsonNode payload)
@@ -588,7 +599,7 @@ public final class ChatService
             final var messages = JsonUtils.parseJson(session.messages, new TypeReference<List<Map<String, String>>>() {});
             final var sb       = new StringBuilder();
             final var start    = Math.max(0, messages.size() - maxHistoryMessages);
-            for(int i = start; i < messages.size(); i++)
+            for(var i = start; i < messages.size(); i++)
             {
                 final var msg     = messages.get(i);
                 final var role    = msg.getOrDefault("role", "unknown");

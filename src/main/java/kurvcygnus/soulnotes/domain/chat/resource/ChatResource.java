@@ -40,7 +40,7 @@ import java.util.UUID;
  * @implNote userId 从 JWT subject 解析 (认证由全局机制保证), 用户只能访问自己的会话.
  * @since 1.0
  */
-@Path(ApiEndpointConstants.CHAT_BASE)
+@SuppressWarnings("JavadocDeclaration") @Path(ApiEndpointConstants.CHAT_BASE)
 @RolesAllowed(UserRole.ROLE_STUDENT)
 public final class ChatResource
 {
@@ -111,7 +111,10 @@ public final class ChatResource
     @DELETE @Path("/sessions/{sessionId}")
     public @NotNull Uni<ApiResponse<Void>> deleteSession(@PathParam("sessionId") @NotNull String sessionId)
     {
-        return chatService.deleteSession(parseSessionIdOrNotFound(sessionId), currentUserId()).map(v -> ApiResponse.success());
+        return chatService.deleteSession(
+            parseSessionIdOrNotFound(sessionId),
+            currentUserId()
+        ).map(_ -> ApiResponse.success());
     }
 
     //* 路径参数 UUID 解析: 非法格式与 "不存在" 同码同文案回应 — 不向客户端区分两种失败形态, 防会话枚举.
