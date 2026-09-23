@@ -31,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -317,6 +318,114 @@ class ChatPipelineTest
 
         assertTrue(body.contains("404020"), PrintUtils.quickFormat("业务码应为 404020 (会话不存在): {}", body));
         assertTrue(body.contains("会话不存在"), PrintUtils.quickFormat("响应必须以'不存在'回应, 不泄露资源存在性: {}", body));
+    }
+    //endregion
+
+    //region ⑦ 会话消息历史与删除
+    //* 回归 (前端对接反馈, 1.2.1): GET /chat/sessions 仅返回概览 (preview 为末条 50 字截断), 完整 LLM
+    //! 回复无处可取 — 补 /sessions/{id}/messages 端点, 本组用例钉死消息序列/越权同码/非法 ID 同码/删除闭环.
+    @Test
+    void chatHistory_ShouldReturnFullMessagesInOrder()
+    {
+        final var account = PipelineUsers.register();
+        final var sessionId = seedSession(account.userId(),
+            "[{\"role\":\"user\",\"content\":\"今天有点累\"},{\"role\":\"assistant\",\"content\":\"愿意说出来, 已经很有勇气了。\"}]");
+
+        RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions/" + sessionId + "/messages").
+            then().
+            statusCode(200).
+            body("code", equalTo(0)).
+            body("data.size()", equalTo(2)).
+            body("data[0].role", equalTo("user")).
+            body("data[0].content", equalTo("今天有点累")).
+            body("data[1].role", equalTo("assistant")).
+            body("data[1].content", equalTo("愿意说出来, 已经很有勇气了。"));
+    }
+
+    @Test
+    void chatHistory_ForeignSession_ShouldRejectWithSameCodeAsMissing()
+    {
+        final var owner = PipelineUsers.register();
+        final var sessionId = seedSession(owner.userId(), "[{\"role\":\"user\",\"content\":\"主人的私聊\"}]");
+        final var intruder = PipelineUsers.register();
+
+        final var body = RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(intruder.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions/" + sessionId + "/messages").
+            then().
+            statusCode(404).
+            extract().asString();
+
+        assertTrue(body.contains("404020"), PrintUtils.quickFormat("越权拉取历史应与缺失同码 (防枚举): {}", body));
+    }
+
+    @Test
+    void chatHistory_MalformedSessionId_ShouldRejectAsNotFound()
+    {
+        final var account = PipelineUsers.register();
+
+        final var body = RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions/not-a-uuid/messages").
+            then().
+            statusCode(404).
+            extract().asString();
+
+        assertTrue(body.contains("404020"), PrintUtils.quickFormat("非法 UUID 应与缺失同码 (防枚举): {}", body));
+    }
+
+    @Test
+    void deleteSession_ShouldRemoveHistoryAndSubsequentReadsReturnNotFound()
+    {
+        final var account = PipelineUsers.register();
+        final var sessionId = seedSession(account.userId(),
+            "[{\"role\":\"user\",\"content\":\"先记一笔\"},{\"role\":\"assistant\",\"content\":\"收到。\"}]");
+
+        RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            delete(ApiEndpointConstants.CHAT_BASE + "/sessions/" + sessionId).
+            then().
+            statusCode(200).
+            body("code", equalTo(0));
+
+        RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions/" + sessionId + "/messages").
+            then().
+            statusCode(404);
+
+        RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            delete(ApiEndpointConstants.CHAT_BASE + "/sessions/" + sessionId).
+            then().
+            statusCode(404);
+    }
+
+    //* 真库直插会话 (指定 messages JSONB): 不经对话链路 (AI 依赖与本题无关), 与 DiaryListContractTest 造数同款取舍.
+    private UUID seedSession(String userId, String messagesJson)
+    {
+        final var session = new AiChatSession();
+        session.id               = UUID.randomUUID();
+        session.userId           = UUID.fromString(userId);
+        session.messages         = messagesJson;
+        session.warningTriggered = false;
+        session.updatedAt        = java.time.Instant.now();
+        sessionFactory.withTransaction((s, tx) -> session.persist()).await().atMost(AWAIT);
+        return session.id;
     }
     //endregion
 

@@ -16,6 +16,7 @@ import kurvcygnus.soulnotes.ai.agent.WarningDetectionAgent;
 import kurvcygnus.soulnotes.ai.dto.WarningDetectionResult;
 import kurvcygnus.soulnotes.config.ClinicalSchemaNormalizer;
 import kurvcygnus.soulnotes.config.PromptProvider;
+import kurvcygnus.soulnotes.domain.chat.dto.ChatHistoryMessage;
 import kurvcygnus.soulnotes.domain.chat.dto.ChatMessageVo;
 import kurvcygnus.soulnotes.domain.chat.dto.ChatSendRequest;
 import kurvcygnus.soulnotes.domain.chat.dto.ChatSessionVo;
@@ -70,7 +71,7 @@ public final class ChatService
     private final @NotNull ClinicalSchemaNormalizer schemaNormalizer;
     //* 临床评估落库: 拆流挂点的 best-effort 消费方 — 失败仅 WARN, 对话可用性 > 评估完整性 (Spec §7).
     private final @NotNull ClinicalAssessmentService clinicalAssessmentService;
-    //* 预警渠道 fan-out: CDI 注入全部 IAlertNotifier 实现 (websocket/webhook), 渠道可插拔.
+    //* 预警渠道 fan-out: CDI 注入全部 IAlertNotifier 实现 (渠道矩阵, 配置即启用), 渠道可插拔.
     //* @All 是 Arc 集合注入的必要限定符: 缺失时注入点退化为对 List 类型 bean 的普通解析, 应用启动即
     //! UnsatisfiedResolutionException (渠道全部缺席时 @All 语义为注入空集合, 不阻断启动).
     private final @NotNull List<IAlertNotifier> alertNotifiers;
@@ -192,9 +193,71 @@ public final class ChatService
                 ).toList()
             );
     }
+
+    /**
+     * 拉取指定会话的完整消息历史 (按对话顺序, 含 LLM 回复).
+     *
+     * @param sessionId 会话 ID
+     * @param userId    当前认证用户 ID (归属校验依据)
+     * @return 消息列表 (role/content 按对话顺序; 空会话为空列表, 恒非 null)
+     * @throws IBusinessException 会话不存在或不属于当前用户时 (SESSION_NOT_FOUND, 同码同文案防枚举)
+     * @implNote 消息 JSONB 仅存 role/content, 历史回放不带时间戳; 损坏 JSON 按空列表降级 (与预览/计数同款容错).
+     * @since 1.2.1
+     */
+    @WithTransaction
+    public @NotNull Uni<List<ChatHistoryMessage>> listMessages(@NotNull UUID sessionId, @NotNull UUID userId)
+    {
+        return loadOwnedSession(sessionId, userId).map(session -> parseHistory(session.messages));
+    }
+
+    /**
+     * 删除指定会话 (硬删除, 含全部消息历史).
+     *
+     * @param sessionId 会话 ID
+     * @param userId    当前认证用户 ID (归属校验依据)
+     * @return 完成信号
+     * @throws IBusinessException 会话不存在或不属于当前用户时 (SESSION_NOT_FOUND, 同码同文案防枚举)
+     * @implNote 硬删除与日记域先例一致; 关联的 RED 预警已推送记录不受影响 (预警渠道为 fire-and-forget 外呼, 无会话外键).
+     * @since 1.2.1
+     */
+    @WithTransaction
+    public @NotNull Uni<Void> deleteSession(@NotNull UUID sessionId, @NotNull UUID userId)
+    {
+        return loadOwnedSession(sessionId, userId).chain(AiChatSession::delete);
+    }
     //endregion
 
     //region 辅助方法
+    /**
+     * 加载会话并校验归属.
+     *
+     * @implNote 不存在与越权一律以 "不存在" 同码同文案回应, 不泄露资源存在性, 防会话枚举越权.
+     */
+    private static @NotNull Uni<AiChatSession> loadOwnedSession(@NotNull UUID sessionId, @NotNull UUID userId)
+    {
+        return AiChatSession.
+            <AiChatSession>findById(sessionId).
+            onItem().
+            ifNull().
+            failWith(
+                () -> IBusinessException.of(
+                    ErrorCode.SESSION_NOT_FOUND,
+                    "会话不存在",
+                    NoSuchElementException::new,
+                    "CHAT_SESSION_LOOKUP_NOT_FOUND"
+                ).asException()
+            ).
+            flatMap(session -> session.userId.equals(userId)
+                ? Uni.createFrom().item(session)
+                : Uni.createFrom().failure(
+                    IBusinessException.of(
+                        ErrorCode.SESSION_NOT_FOUND,
+                        "会话不存在",
+                        NoSuchElementException::new,
+                        "CHAT_SESSION_FOREIGN_ACCESS"
+                    ).asException()));
+    }
+
     //* 加载已有 Session, 或创建新的 Session.
     private static @NotNull Uni<AiChatSession> getOrCreateSession(@Nullable UUID sessionId, @NotNull UUID userId)
     {
@@ -208,28 +271,7 @@ public final class ChatService
             session.updatedAt        = Instant.now();
             return Panache.withTransaction(session::persist).replaceWith(session);
         }
-        return AiChatSession.
-            <AiChatSession>findById(sessionId).
-            onItem().
-            ifNull().
-            failWith(
-                () -> IBusinessException.of(
-                    ErrorCode.SESSION_NOT_FOUND,
-                    "会话不存在",
-                    NoSuchElementException::new,
-                    "CHAT_SESSION_LOOKUP_NOT_FOUND"
-                ).asException()
-            ).
-            //* 归属校验: 他人会话一律以"不存在"回应 (同码同文案), 不泄露资源存在性, 防会话枚举越权.
-            flatMap(session -> session.userId.equals(userId)
-                ? Uni.createFrom().item(session)
-                : Uni.createFrom().failure(
-                    IBusinessException.of(
-                        ErrorCode.SESSION_NOT_FOUND,
-                        "会话不存在",
-                        NoSuchElementException::new,
-                        "CHAT_SESSION_FOREIGN_ACCESS"
-                    ).asException()));
+        return loadOwnedSession(sessionId, userId);
     }
 
     //* 在独立事务中追加并持久化用户消息, 返回受管的 Session (含最新历史).
@@ -501,7 +543,7 @@ public final class ChatService
             onFailure().recoverWithItem(() -> null);
     }
 
-    //* 依据检测结果标记会话预警位, RED 等级立即经通知渠道逐渠道 fire-and-forget 推送热线 (websocket + webhook).
+    //* 依据检测结果标记会话预警位, RED 等级立即经通知渠道矩阵逐渠道 fire-and-forget 推送热线 (配置即启用的五渠道).
     //! 必须在持久化前调用 (受管 Session), 确保 warningTriggered 随消息一并落库.
     private void applyWarning(@NotNull AiChatSession session, @Nullable WarningDetectionResult detection)
     {
@@ -510,7 +552,7 @@ public final class ChatService
         if("RED".equals(detection.warningLevel()))
         {
             session.warningTriggered = true;
-            //* 渠道全空的 WARN 哨兵: 双渠道配置全丢时 RED 分发退化为纯标记, 必须留痕而非静默.
+            //* 渠道全空的 WARN 哨兵: 渠道矩阵配置全丢时 RED 分发退化为纯标记, 必须留痕而非静默.
             if(alertNotifiers.isEmpty())
                 LOG.warn("RED 预警无任何通知渠道可用 (IAlertNotifier 实现缺失), 仅标记会话: userId={}", session.userId);
             //* Uni 是惰性的, 必须订阅才真正触发推送; 渠道实现保证失败仅日志 (接口契约),
@@ -559,6 +601,31 @@ public final class ChatService
         {
             LOG.warn("构建对话历史失败: {}", e.getMessage());
             return "";
+        }
+    }
+
+    /**
+     * 解析会话消息 JSON 为历史条目列表 (按对话顺序).
+     *
+     * @param messagesJson 会话消息 JSONB 原文
+     * @return 消息条目列表; 空白/损坏 JSON 按空列表降级 (与预览/计数同款容错)
+     * @since 1.2.1
+     */
+    private static @NotNull List<ChatHistoryMessage> parseHistory(@Nullable String messagesJson)
+    {
+        if(messagesJson == null || messagesJson.isBlank())
+            return List.of();
+        try
+        {
+            return JsonUtils.parseJson(messagesJson, new TypeReference<List<Map<String, String>>>() {}).
+                stream().
+                map(m -> new ChatHistoryMessage(m.getOrDefault("role", "unknown"), m.getOrDefault("content", ""))).
+                toList();
+        }
+        catch(Exception e)
+        {
+            LOG.warn("解析会话消息历史失败: {}", e.getMessage());
+            return List.of();
         }
     }
 
