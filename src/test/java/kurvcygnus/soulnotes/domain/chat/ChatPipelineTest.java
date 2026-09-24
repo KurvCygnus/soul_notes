@@ -61,6 +61,10 @@ class ChatPipelineTest
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
     private static final Duration AWAIT = Duration.ofSeconds(20);
+    //* WS 帧集合/落库轮询的 CI 加固窗口: CI runner 冷链路 (langchain4j 流式客户端首调初始化 + 双流并发)
+    //! 曾在 20s 窗口内帧未到齐 (v1.3.0 tag 构建实测), 本机秒级完成 — 窗口提到 60s/30s 只影响慢环境的等待上限.
+    private static final long FRAME_DEADLINE_MS  = 60_000;
+    private static final long DB_POLL_DEADLINE_MS = 30_000;
 
     @Inject Mutiny.SessionFactory sessionFactory;
 
@@ -215,12 +219,12 @@ class ChatPipelineTest
 
         try
         {
-            joined.get(20, TimeUnit.SECONDS);
+            joined.get(FRAME_DEADLINE_MS, TimeUnit.MILLISECONDS);
         }
         catch(java.util.concurrent.TimeoutException e)
         {
-            fail(PrintUtils.quickFormat("20s 内未集齐流式帧; 已收: {}; mock 请求数: {}; 末请求片段: {}",
-                received, MockLlmProfile.server().requests().size(),
+            fail(PrintUtils.quickFormat("{}ms 内未集齐流式帧; 已收: {}; mock 请求数: {}; 末请求片段: {}",
+                FRAME_DEADLINE_MS, received, MockLlmProfile.server().requests().size(),
                 MockLlmProfile.server().requests().isEmpty() ? "-" : MockLlmProfile.server().requests().getLast().substring(0, Math.min(300, MockLlmProfile.server().requests().getLast().length()))));
         }
         assertEquals(expected, received.toString(), "流式帧拼接应等于 mock 文本");
@@ -257,7 +261,7 @@ class ChatPipelineTest
         webSocket.sendText(PrintUtils.quickFormat("{\"content\":\"{}\"}", "第二条消息"), true).join();
 
         //* 等两条流的帧全部到齐 (字符数守恒), 超时视为丢帧.
-        final var frameDeadline = System.currentTimeMillis() + 20000;
+        final var frameDeadline = System.currentTimeMillis() + FRAME_DEADLINE_MS;
         while(System.currentTimeMillis() < frameDeadline && received.length() < bothStreams.length())
             Thread.sleep(100);
         //* 两条流并发执行, 帧交错序不固定: 以字符多重集等价断言内容完整 (既不少帧也不重复帧).
@@ -265,7 +269,7 @@ class ChatPipelineTest
         assertEquals(sortedChars(bothStreams), sortedChars(received.toString()), PrintUtils.quickFormat("帧内容应恰为两条流的 chunk 多重集; 已收: {}", received));
 
         //* 帧到齐后轮询等落库 (持久化在各自流完成时异步执行): 2 个会话 x [user, assistant] 共 4 条消息.
-        final var dbDeadline = System.currentTimeMillis() + 15000;
+        final var dbDeadline = System.currentTimeMillis() + DB_POLL_DEADLINE_MS;
         var sessionCount = 0;
         var totalMessages = 0;
         while(System.currentTimeMillis() < dbDeadline)
