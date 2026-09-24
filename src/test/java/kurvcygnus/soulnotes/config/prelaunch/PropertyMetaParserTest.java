@@ -147,6 +147,19 @@ class PropertyMetaParserTest
         assertTrue(items.get(schema).explain().contains("soulnotes"), "说明必须写明标识符由系统固定");
     }
 
+    //* 心理咨询预约入口 (1.4.0): 带标签进入危机热线组, url 类型 + 默认空 (空 = 不展示预约入口).
+    @Test void parseResourceCrisisAppointmentTaggedInCrisisGroup()
+    {
+        final var items = PropertyMetaParser.parseResource();
+        final var appointment = indexOfEnv(items, "SOULNOTES_CRISIS_APPOINTMENT_URL");
+        final var backup = indexOfEnv(items, "SOULNOTES_CRISIS_HOTLINE_BACKUP");
+        assertTrue(appointment >= 0, "crisis.appointment.url 必须带标签进入向导");
+        assertEquals("危机热线", items.get(appointment).group(), "预约入口必须与热线键同组 (危机热线)");
+        assertTrue(appointment > backup, "预约入口必须排在热线键之后 (向导展示顺序即文件顺序)");
+        assertEquals("", items.get(appointment).defaultValue(), "默认必须为空 (空 = 不展示预约入口)");
+        assertTrue(items.get(appointment).explain().contains("留空"), "说明必须写明空 = 不展示预约入口");
+    }
+
     private static int indexOfEnv(List<PropertyMetaParser.ConfigItemMeta> items, String env)
     {
         return IntStream.range(0, items.size()).filter(i -> env.equals(items.get(i).envName())).findFirst().orElse(-1);

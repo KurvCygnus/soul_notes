@@ -121,7 +121,7 @@ kurvcygnus.soulnotes/
 │   │   ├── RevealPolicy.java          # 风险分级实名解锁 (未解锁 = UUID 前 8 位稳定短码)
 │   │   └── ClinicalRetentionCleaner.java  # 启动时异步保留期清理 (<=0 禁用)
 │   └── crisis/
-│       └── CrisisResource.java        # GET /crisis/hotline (离线兜底)
+│       └── CrisisResource.java        # GET /crisis/hotline (离线兜底, 含 appointmentUrl 预约入口)
 └── websocket/
     ├── WebSocketAuthUpgradeCheck.java # HttpUpgradeCheck JWT 认证网关 (/ws/clinical 前缀额外 COUNSELOR/ADMIN 断言 403)
     ├── ChatWebSocket.java             # /ws/chat 流式文本推送
