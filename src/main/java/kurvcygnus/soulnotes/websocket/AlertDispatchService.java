@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  * RED 预警统一分发收口: per-user Redis 冷却闸门 + 逐渠道 fan-out.
  * <p>预警渠道的 fan-out 自 {@code ChatService#applyWarning} 收口至此 (Task 2 拆除原处):
  * 同一 RED 短窗口内多次触发 (多轮对话连续命中自伤语义) 只应外呼一次, 由 Redis 冷却 Key
- * 去重, 抑制电话/短信渠道被重复轰炸; 命中抑制仅留痕不外呼, 放行则逐渠道 fire-and-forget.</p>
+ * 去重, 抑制短信/IM 等外呼渠道被重复轰炸; 命中抑制仅留痕不外呼, 放行则逐渠道 fire-and-forget.</p>
  *
  * <p>失败语义全部内部收口: {@link #dispatchRed} 恒成功完成 (fire-and-forget 契约与渠道同款),
  * 冷却判定与渠道推送的任何故障仅 WARN, 绝不拖垮调用方 (对话主流程) — 与离线安全网红线一致,
@@ -78,6 +78,8 @@ public class AlertDispatchService
         if(cooldownMinutes <= 0)
         {
             fanOut(userId, reason);
+            //* 契约钉死: 返回 Uni 预期仅单次订阅 (防未来误用) — 本分支 fan-out 已于装配期同步执行 (重复订阅不重放),
+            //* 冷却启用分支重复订阅则可重复外呼 (fail-open 路径无窗口去重兜底).
             return Uni.createFrom().voidItem();
         }
 
@@ -167,7 +169,7 @@ public class AlertDispatchService
     private void fanOut(@NotNull UUID userId, @NotNull String reason)
     {
         if(channels.isEmpty())
-            LOG.warn("RED 预警无任何通知渠道可用 (IAlertNotifier 实现缺失), 仅标记会话: userId={}", userId);
+            LOG.warn("RED 预警无任何通知渠道可用 (IAlertNotifier 实现缺失), 仅落库标记: userId={}", userId);
 
         //* Uni 是惰性的, 必须订阅才真正触发推送; 渠道实现保证失败仅日志 (接口契约),
         //! 订阅级兜底仅防渠道外的意外实现缺陷, 不允许预警分发拖垮调用方主流程.
