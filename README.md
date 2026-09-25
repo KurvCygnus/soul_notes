@@ -73,7 +73,7 @@ AI 以"心声树洞"倾听者角色回应: 温暖, 不评判, **严格规避医�
 | AI 集成      | quarkus-langchain4j-openai, 兼容任意 OpenAI 协议端点 (官方/中转/自建网关) |
 | 数据         | PostgreSQL (JSONB 情绪指标) + Redis (缓存/限流/热线兜底)               |
 | 实时通信     | WebSocket (预警推送) + SSE (AI 流式打字机输出)                         |
-| 质量门禁     | 531 个测试 (含 Mock-LLM 全链路集成), GitHub Actions 四工作流全自动化   |
+| 质量门禁     | 550 个测试 (含 Mock-LLM 全链路集成), GitHub Actions 四工作流全自动化   |
 
 ## 快速开始
 
