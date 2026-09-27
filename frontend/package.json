@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "build:dev": "tsc --noEmit && vite build --mode development",
+    "preview": "vite preview",
+    "check:sse": "node --experimental-strip-types scripts/check-sse.ts"
   },
   "dependencies": {
     "react": "^19.1.0",

@@ -18,6 +18,11 @@ const DEMO_ACCOUNTS = [
 ];
 const DEMO_PASSWORD = "Soulnotes123!";
 
+//* 演示账号只在开发构建里出现: npm run dev / npm run build:dev 的 MODE 是 development, 正式构建是 production。
+//! 正式构建时这行被静态替换成 "production" === "development" (false), 整块 JSX 连同上面的账号与口令
+//! 一起被打包器剔除 —— 否则演示口令会随产物公开 (含咨询师/管理员账号)。
+const SHOW_DEMO_ACCOUNTS = import.meta.env.MODE === "development";
+
 export default function LoginView() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -163,22 +168,24 @@ export default function LoginView() {
           还没有账号? <Link to="/register">注册一个</Link> ·{" "}
           <Link to="/crisis">需要帮助?</Link>
         </p>
-        <details className="demo-box">
-          <summary>演示账号 (点击填充)</summary>
-          <div className="demo-list">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button
-                key={a.username}
-                type="button"
-                className="btn ghost sm demo-item"
-                onClick={() => fillDemo(a.username)}
-              >
-                <span className="demo-name">{a.username}</span>
-                <span className="demo-role">{a.role}</span>
-              </button>
-            ))}
-          </div>
-        </details>
+        {SHOW_DEMO_ACCOUNTS && (
+          <details className="demo-box">
+            <summary>演示账号 (点击填充)</summary>
+            <div className="demo-list">
+              {DEMO_ACCOUNTS.map((a) => (
+                <button
+                  key={a.username}
+                  type="button"
+                  className="btn ghost sm demo-item"
+                  onClick={() => fillDemo(a.username)}
+                >
+                  <span className="demo-name">{a.username}</span>
+                  <span className="demo-role">{a.role}</span>
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
       {showAgreement && (
         <AgreementModal

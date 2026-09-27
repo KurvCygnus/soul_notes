@@ -1,6 +1,7 @@
 //* 树洞对话接口: /api/v1/chat/* (非流式 / SSE 流式 / 会话列表 / 历史消息 / 删除会话)
 
 import { api, ApiError, getToken } from './http'
+import { sseEventData, takeSseEvents } from '../utils/sse'
 import type { ApiResponse, ChatMessage, ChatSessionVo } from '../types'
 
 export function listSessions(): Promise<ChatSessionVo[]> {
@@ -62,12 +63,17 @@ export async function streamMessage(options: StreamOptions): Promise<void> {
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })
-    let idx: number
-    while ((idx = buffer.indexOf('\n')) >= 0) {
-      const line = buffer.slice(0, idx).replace(/\r$/, '')
-      buffer = buffer.slice(idx + 1)
-      
-      if (line.startsWith('data:')) onChunk(line.slice(5).replace(/^ /, ''))
+    //! 只按空行切完整事件: 同一事件的多条 data: 行属于同一段正文 (见 utils/sse.ts) ——
+    //! 服务端把正文里的换行按规范拆成了多条 data: 行, 逐行当 chunk 会把换行吃掉.
+    //! 跨 chunk 的半截事件留在 buffer 里等下一块, 拆开解析会把一段正文劈成两半.
+    const { events, rest } = takeSseEvents(buffer)
+    buffer = rest
+    for (const event of events) {
+      const chunk = sseEventData(event)
+      if (chunk !== null) onChunk(chunk)
     }
   }
+  //* 收尾: 服务端若没补末尾空行, 最后一段仍要吐出去, 否则最后几个字会丢.
+  const tail = sseEventData(buffer)
+  if (tail) onChunk(tail)
 }

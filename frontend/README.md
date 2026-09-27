@@ -27,15 +27,17 @@ npm run dev      # http://localhost:5173
 其他脚本:
 
 ```bash
-npm run build    # tsc 类型检查 + 产物构建 (dist/)
-npm run preview  # 本地预览构建产物
+npm run build     # 正式构建: tsc 类型检查 + 产物构建 (dist/), 登录页的演示账号与口令会被剔除
+npm run build:dev # 开发构建: 同上但保留演示账号一键填充 (联调用, 产物不可对外)
+npm run preview   # 本地预览构建产物
+npm run check:sse # SSE 帧解析自检 (需 Node >= 22.6)
 ```
 
 ## 页面与功能
 
 | 路由      | 功能                                                                 |
 |-----------|----------------------------------------------------------------------|
-| `/login` / `/register` | 登录注册 (演示账号一键填充, 密码规则与后端一致)           |
+| `/login` / `/register` | 登录注册 (演示账号一键填充仅开发构建可见, 密码规则与后端一致) |
 | `/diaries` | 日记列表 (分页 + 日期过滤) / 新建 (文字 + 语音录制) / 详情 (AI 情绪分析) / 删除 |
 | `/weather` | 情绪天气预报: 日期范围过滤, 天气日卡, 积极/消极/焦虑趋势图, 数据表 |
 | `/chat`   | 树洞对话: 会话列表, SSE 流式逐字回复 (失败降级非流式)               |
@@ -52,6 +54,7 @@ npm run preview  # 本地预览构建产物
 
 1. **会话历史**: 经 `GET /chat/sessions/{id}/messages` 拉取并回放 (该 DTO 只有 role/content, 无时间戳); 删除会话走 `DELETE /chat/sessions/{id}`。历史气泡不带时间, 仅在线新消息带。
 2. **流式接口不返回 sessionId**: 新会话首轮回复后, 前端经会话列表回查最近会话实现"续聊" (启发式, 见 `ChatView.tsx`)。
+2.1 **SSE 必须按事件聚合**: 后端 (`Multi<String>`) 把正文里的换行按 SSE 规范拆成多条 `data:` 行, 逐行当 chunk 会吃掉换行 — 解析收在 `utils/sse.ts`, 自检 `npm run check:sse`。
 3. **日记列表无总条数**: 后端 `GET /diaries` 只返回数组, 分页的"下一页"以本页是否满页推断。
 4. **AI 占位符**: 后端 `ai.openai.api-key=placeholder` 时所有 LLM 调用走降级 (日记无 analysisResult, 聊天返回兜底文案), 前端已按此展示提示。
-5. **语音分析链路**: 录音/选文件后前端经 Web Audio 转码为 16kHz 单声道 PCM16 WAV (后端仅接受该格式), 上传 `/voice/upload` 同步本地转录; 转写文本回填编辑器 (可修改) 并与语音一并提交 (VOICE + content); 转录失败 (`status=FAILED` / 上传异常 / 静音) 时回落纯语音提交, 行为与旧版一致。
+5. **语音分析链路**: 录音/选文件后前端经 Web Audio 转码为 16kHz 单声道 PCM16 WAV (后端仅接受该格式), 上传 `/voice/upload` 同步本地转录; 转写文本回填编辑器 (可修改) 并与语音一并提交 (VOICE + content); 转录失败 (`status=FAILED` / 上传异常 / 静音) 时回落纯语音提交, 行为与旧版一致。音频上限 7MB (比后端 `voice.storage.max-size` 的 10MB 更严): 音频以 Base64 进 `audioData` 后约膨胀 4/3, 10MB 会算出 ~13.9MB 的请求体, 撞上 Quarkus 默认 `quarkus.http.limits.max-body-size` (10MiB) 报 413。

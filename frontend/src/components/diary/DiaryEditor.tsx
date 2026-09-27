@@ -51,8 +51,10 @@ function writeDraft(key: string, content: string): void {
 //* 输入停顿多久落盘: 每次按键都写会拖慢输入, 停顿写入 + 卸载兜底 (见下) 已覆盖丢字场景.
 const DRAFT_DEBOUNCE_MS = 800
 
-//* 与后端 voice.storage.max-size 默认值 (10MB) 对齐.
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024
+//! 上限取 7MiB, 比后端 voice.storage.max-size 的 10MiB 更严: 日记提交把音频塞进 JSON 的 audioData
+//! (Base64), 体积膨胀约 4/3, 再加 JSON 外壳 —— 10MiB 音频会算出约 13.9MiB 的请求体, 撞上 Quarkus 默认
+//! quarkus.http.limits.max-body-size (10MiB) 直接 413; 7MiB -> Base64 约 9.3MiB, 留出余量.
+const MAX_AUDIO_BYTES = 7 * 1024 * 1024
 //* 单次录音上限 3 分钟: WAV 16kHz 单声道 PCM16 为 32KB/s, 3 分钟 ≈ 5.8MB, 距 10MB 上限留有余量.
 const MAX_RECORD_SECONDS = 180
 
@@ -152,7 +154,7 @@ export default function DiaryEditor({ onClose, onCreated }: Props) {
       const wav = await blobToWav16kMono(blob)
       if (seq !== transcribeSeqRef.current) return //* 已被新音频替换, 丢弃本次结果
       if (wav.size > MAX_AUDIO_BYTES) {
-        setTranscriptFailed('音频时长过长, 无法转写 (上限约 5 分钟); 仍可提交为语音日记')
+        setTranscriptFailed('音频时长过长, 无法转写 (上限约 3.5 分钟); 仍可提交为语音日记')
         return
       }
       setWavBase64(await blobToBase64(wav))
@@ -238,7 +240,7 @@ export default function DiaryEditor({ onClose, onCreated }: Props) {
     if (!file) return
     setError('')
     if (file.size > MAX_AUDIO_BYTES) {
-      setError('音频文件不能超过 10MB')
+      setError('音频文件不能超过 7MB')
       return
     }
     try {
@@ -383,7 +385,7 @@ export default function DiaryEditor({ onClose, onCreated }: Props) {
                 </label>
               </div>
             )}
-            <p className="editor-hint">语音将转码为 WAV 上传并本地转写 (文本可修改); 单次录音最长 3 分钟, 文件不超过 10MB。</p>
+            <p className="editor-hint">语音将转码为 WAV 上传并本地转写 (文本可修改); 单次录音最长 3 分钟, 文件不超过 7MB。</p>
           </div>
         )}
 
