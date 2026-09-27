@@ -14,6 +14,12 @@ jobs:
   native-test:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    #* monorepo 重组后 Gradle 工程位于 backend/, job 内全部 run 步骤统一切换工作目录.
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,7 +47,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: native-runner
-          path: build/*-runner
+          path: backend/build/*-runner
 
       #* 手动触发 (非 tag) 时仅保留 Actions artifact; tag 触发则归档到对应 Release.
       - name: Upload native binary to Release (tag builds only)

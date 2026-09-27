@@ -4,11 +4,11 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'k8s/**'
+      - 'backend/k8s/**'
       - '.github/workflows/k8s-deploy.yml'
   pull_request:
     paths:
-      - 'k8s/**'
+      - 'backend/k8s/**'
       - '.github/workflows/k8s-deploy.yml'
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ jobs:
 
       #? -strict 拒绝 schema 之外的字段; 仓库清单全部为内置资源类型, 无需 -ignore-missing-schemas.
       - name: Validate manifests
-        run: kubeconform -strict -summary k8s/
+        run: kubeconform -strict -summary backend/k8s/
 
   deploy:
     needs: validate
@@ -76,7 +76,7 @@ jobs:
 
       - name: Apply manifests
         if: steps.kubecheck.outputs.has_kube_config == 'true'
-        run: kubectl apply -f k8s/
+        run: kubectl apply -f backend/k8s/
 
       #* backend-deployment.yaml 中镜像为占位值, 部署时统一指向 GHCR 的最新镜像.
       #? ${GITHUB_REPOSITORY,,} 为 bash 小写展开, 保证镜像名符合 GHCR 小写规范.

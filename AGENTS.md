@@ -110,28 +110,30 @@ is a SYSTEM FAILURE.
 ## Backend Architecture
 
 ```text
-├── src/main/java/kurvcygnus/soulnotes/
-│   ├── config/
-│   ├── utils/
-│   ├── exception/
-│   │
-│   ├── domain/
-│   │   ├── auth/
-│   │   ├── diary/
-│   │   │   ├── entity/
-│   │   │   ├── resource/
-│   │   │   └── service/
-│   │   ├── chat/
-│   │   └── voice/
-│   │
-│   ├── ai/
-│   │   ├── agent/
-│   │   ├── tool/
-│   │   └── retriever/
-│   │
-│   └── websocket/
-└── src/main/resources/
-    └── application.properties
+├── frontend/                              #* React 19 前端应用 (详见 frontend/README.md)
+└── backend/
+    ├── src/main/java/kurvcygnus/soulnotes/
+    │   ├── config/
+    │   ├── utils/
+    │   ├── exception/
+    │   │
+    │   ├── domain/
+    │   │   ├── auth/
+    │   │   ├── diary/
+    │   │   │   ├── entity/
+    │   │   │   ├── resource/
+    │   │   │   └── service/
+    │   │   ├── chat/
+    │   │   └── voice/
+    │   │
+    │   ├── ai/
+    │   │   ├── agent/
+    │   │   ├── tool/
+    │   │   └── retriever/
+    │   │
+    │   └── websocket/
+    └── src/main/resources/
+        └── application.properties
 ```
 
 ---

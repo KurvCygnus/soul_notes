@@ -12,6 +12,12 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
+    #* monorepo 重组后 Gradle 工程位于 backend/, job 内全部 run 步骤统一切换工作目录.
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

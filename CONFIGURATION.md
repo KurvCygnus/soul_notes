@@ -76,7 +76,7 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 
 ## 4. 配置文件自描述
 
-向导条目 (分组名 / 显示名 / 说明 / 输入类型) 的单一来源是 `src/main/resources/application.properties` 本身 — 每个配置项正上方以 `# @tag arg` 注释声明元数据, 由 PropertyMetaParser 运行时解析:
+向导条目 (分组名 / 显示名 / 说明 / 输入类型) 的单一来源是 `backend/src/main/resources/application.properties` 本身 — 每个配置项正上方以 `# @tag arg` 注释声明元数据, 由 PropertyMetaParser 运行时解析:
 
 | 注释标签     | 作用                                                             |
 | ------------ | ---------------------------------------------------------------- |
@@ -92,7 +92,7 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 
 ## 5. 环境变量总表
 
-以下环境变量对应 `src/main/resources/application.properties` 的 `${VAR:default}` 占位, 未配置时使用默认值:
+以下环境变量对应 `backend/src/main/resources/application.properties` 的 `${VAR:default}` 占位, 未配置时使用默认值:
 
 | 环境变量                              | 用途                                                   | 默认值                                    |
 | ------------------------------------- | ------------------------------------------------------ | ----------------------------------------- |
@@ -151,6 +151,8 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 | `SOULNOTES_PROMPT_MOOD_ANALYSIS`      | 情绪分析提示词覆盖, 留空使用内置默认                   | 空                                        |
 
 ## 6. 部署
+
+> monorepo 布局: 后端工程位于仓库 `backend/` 子目录, 本节所有命令默认在 `backend/` 目录下执行.
 
 ### 6.1 打包与运行
 
@@ -344,7 +346,7 @@ IM 渠道报文精简纪律:
 
 ## 11. 演示账号
 
-导入 `sql_scripts/users_mock_data.sql` 后可用 (mock 数据, 统一密码):
+导入 `backend/sql_scripts/users_mock_data.sql` 后可用 (mock 数据, 统一密码):
 
 | 用户名   | 密码            | 角色      |
 |----------|-----------------|-----------|

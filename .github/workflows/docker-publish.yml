@@ -4,19 +4,21 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'src/**'
-      - 'build.gradle'
-      - 'gradle.properties'
-      - 'docker-compose.yml'
+      - 'backend/src/**'
+      - 'backend/build.gradle'
+      - 'backend/gradle.properties'
+      - 'backend/gradle/**'
+      - 'backend/docker-compose.yml'
       - '.github/workflows/docker-publish.yml'
     tags:
       - 'v*'
   pull_request:
     paths:
-      - 'src/**'
-      - 'build.gradle'
-      - 'gradle.properties'
-      - 'docker-compose.yml'
+      - 'backend/src/**'
+      - 'backend/build.gradle'
+      - 'backend/gradle.properties'
+      - 'backend/gradle/**'
+      - 'backend/docker-compose.yml'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
 
@@ -28,6 +30,12 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+
+    #* monorepo 重组后 Gradle 工程位于 backend/, job 内全部 run 步骤统一切换工作目录.
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,8 +79,8 @@ jobs:
       - name: Build and push image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: src/main/docker/Dockerfile.jvm
+          context: backend
+          file: backend/src/main/docker/Dockerfile.jvm
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -66,3 +66,10 @@ spike/
 /vosk-*.zip
 
 DEV.md
+
+#* monorepo 重组: 后端工程迁入 backend/. 未锚定的 .gradle/ build/ bin/ voice_uploads/ 等规则
+#* 天然覆盖 backend/ 下同名产物; 以下三条在根 .gitignore 中锚定仓库根, 需为 backend/ 运行时根补充等价规则
+#* (dev 从 backend/ 启动时, Setup 向导与 ASR 运行时产物落在 backend/ 下).
+/backend/config/
+/backend/asr-model/
+/backend/vosk-*.zip

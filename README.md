@@ -77,16 +77,24 @@ AI 以"心声树洞"倾听者角色回应: 温暖, 不评判, **严格规避医�
 
 ## 快速开始
 
-**开发模式** (需 JDK 25, PostgreSQL 16, Redis 7):
+> monorepo 布局: 后端工程位于 `backend/` 子目录, 前端位于 `frontend/`; 后端命令默认在 `backend/` 目录下执行.
+
+**开发模式** (需 JDK 25, PostgreSQL 16, Redis 7, Node 20+):
 
 ```bash
+cd backend
 docker compose up -d postgres redis   # 基础服务
 ./gradlew quarkusDev                  # dev profile 自带本地默认配置
+```
+
+```bash
+cd frontend && npm install && npm run dev   # 前端 (http://localhost:5173, /api 与 /ws 经 Vite 代理到 :8080)
 ```
 
 **生产部署** (三步, 无需手工整理环境变量):
 
 ```bash
+cd backend
 ./gradlew build
 java -jar build/quarkus-app/quarkus-run.jar --setup   # 向导: 配置 + 建库 + 模型下载
 java -jar build/quarkus-app/quarkus-run.jar

@@ -9,6 +9,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    #* monorepo 重组后 Gradle 工程位于 backend/, job 内全部 run 步骤统一切换工作目录.
+    defaults:
+      run:
+        working-directory: backend
+
     # Mock-LLM 全链路 @QuarkusTest 强依赖 postgres + redis; GitHub Actions 的 service 容器
     # 在 hosted runner 上直接绑定 localhost (同网络命名空间), 与本地开发容器同形, 测试无需改动.
     services:
@@ -65,6 +70,12 @@ jobs:
   build:
     needs: test
     runs-on: ubuntu-latest
+
+    #* 同 test job: Gradle 工程位于 backend/.
+    defaults:
+      run:
+        working-directory: backend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -86,4 +97,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: quarkus-app
-          path: build/quarkus-app/
+          path: backend/build/quarkus-app/
