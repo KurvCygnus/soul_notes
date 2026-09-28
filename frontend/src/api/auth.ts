@@ -7,7 +7,8 @@ export const AUTH_KEY = 'soul.auth'
 
 //region 本地会话存取
 
-function persist(data: AuthData): void
+//* 双键落盘唯一所有权仍在 auth.ts: 导出供 AuthContext 的 confirm 补发路径复用, 禁止在 UI 层重写双键写入.
+export function persistAuth(data: AuthData): void
 {
     localStorage.setItem(TOKEN_KEY, data.token)
     localStorage.setItem(AUTH_KEY, JSON.stringify(data))
@@ -43,7 +44,7 @@ export async function login(username: string, password: string): Promise<AuthDat
         body: { username, password },
         auth: false,
     })
-    persist(data)
+    persistAuth(data)
     return data
 }
 
@@ -55,7 +56,7 @@ export async function register(username: string, password: string): Promise<Auth
         body: { username, password, role: 'STUDENT' },
         auth: false,
     })
-    persist(data)
+    persistAuth(data)
     return data
 }
 
