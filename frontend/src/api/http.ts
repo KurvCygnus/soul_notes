@@ -40,7 +40,9 @@ export function getToken(): string | null { return localStorage.getItem(TOKEN_KE
 
 /**
  * 统一请求入口: 注入 JWT, 解包 `{code,message,data}` 壳.
- * 业务失败 (code != 0) 与 HTTP 层失败均以 [[ApiError]] 拒绝, 401 额外广播全局回调.
+ * 业务失败 (code != 0), HTTP 层失败与传输层故障 (网络中断/不可达) 均以 [[ApiError]] 拒绝, 401 额外广播全局回调.
+ * code 符号约定: 负数 = 客户端/传输层故障 (网络故障恒为 -1), 正数 = 后端业务码或 HTTP 状态码.
+ * 唯一例外: [[IApiOptions.signal]] 主动触发的 AbortError 原样透传, 供流式调用方区分"取消"与"故障".
  */
 export async function api<T = unknown>(path: string, opts: IApiOptions = {}): Promise<T>
 {
@@ -62,7 +64,17 @@ export async function api<T = unknown>(path: string, opts: IApiOptions = {}): Pr
         }
     }
 
-    const res = await fetch(path, init)
+    let res: Response
+    try { res = await fetch(path, init) }
+    catch(e)
+    {
+        //* AbortError 是调用方经 opts.signal 主动取消 (流式场景), 必须原样透传以区分取消与故障.
+        //* 按 name 判定而非 instanceof DOMException: 跨 realm (jsdom/Node/浏览器) 的 instanceof 不可靠.
+        if(e instanceof Error && e.name === 'AbortError')
+            throw e
+        //! 网络中断/不可达时 fetch 抛裸 TypeError: 统一降级为 ApiError, 兑现离线安全网语义 (catch(ApiError) 不漏接).
+        throw new ApiError(-1, '网络连接不可用, 请检查网络后重试')
+    }
     if(res.status === 401)
     {
         //* 会话级失效: 每次请求恰好广播一次, 随后仍以 ApiError 拒绝, 让调用方自行提示.

@@ -31,4 +31,12 @@ describe('api()', () =>
     await expect(api('/chat/sessions')).rejects.toBeInstanceOf(ApiError)
     expect(onUnauthorized).toHaveBeenCalledOnce()
   })
+
+  it('传输层故障 (网络不可用) 统一为 ApiError', async () =>
+  {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    const rejected = api('/chat/sessions')
+    await expect(rejected).rejects.toBeInstanceOf(ApiError)
+    await expect(rejected).rejects.toMatchObject({ code: -1 })
+  })
 })
