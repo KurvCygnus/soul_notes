@@ -1,8 +1,8 @@
 //* RED 预警 WebSocket 通道 (/ws/alert): 强预警弹窗的在线推送路径, 断线自动重连.
 //! 路径为 `/ws` 而非 `/api`: Vite/网关按 `/ws` 前缀单独转发 (ws: true), 与 REST 代理规则不同.
 
-//* 预警负载: 后端实际字段为 type/message/hotline/appointmentUrl;
-//* reason 为前端消费契约中的可选别名, 两者并存以容忍两端独立演进.
+//* 预警负载: type/message/hotline/appointmentUrl 为后端透传字段;
+//* reason 是前端归一化字段 — 派发时由后端 message 别名而得 (reason ?? message), 消费方只读 reason 即可拿到预警文案.
 export interface IRedAlertMessage
 {
     type: string
@@ -52,7 +52,12 @@ export function connectAlertSocket(token: string, onRed: (msg: IRedAlertMessage)
                 return
             }
             if(typeof parsed === 'object' && parsed != null && (parsed as Record<string, unknown>).type === 'RED_ALERT')
-                onRed(parsed as IRedAlertMessage)
+            {
+                const alert = parsed as IRedAlertMessage
+                //* reason 归一化: 后端负载只发 message (AlertWebSocket), 而前端契约 (预警弹窗) 读 reason,
+                //* 不在此别名则下游静默渲染空文案; 其余字段原样透传, reason 已存在时不覆盖.
+                onRed({ ...alert, reason: alert.reason ?? alert.message })
+            }
         }
         //* onerror 后浏览器必触发 onclose, 统一由 onclose 调度重连, 避免双路径重复计时.
         socket.onerror = () => { socket?.close() }
