@@ -154,18 +154,21 @@ public final class ChatService
     }
 
     /**
-     * SSE 流式回复: 先独立事务持久化用户消息, 再逐 token 推送 AI 回复,
+     * SSE 流式回复: 流首恒发一条 meta 事件回传实际使用的 sessionId (新建会话同样回传),
+     * 之后先独立事务持久化用户消息, 再逐 token 推送 AI 回复,
      * 流式完成后以独立事务持久化完整回复并执行预警检测.
      *
      * @param sessionId 会话 ID; {@code null}/空白/非法 UUID 一律回退为新会话 (不报错)
      * @param content   用户消息
      * @param userId    当前认证用户 ID
-     * @return AI 回复的流式块; LLM 中途失败时补发兜底文案后正常收流 (不向下游发失败信号),
-     *         会话不存在时以失败 Uni 发出 SESSION_NOT_FOUND
+     * @return 流首为 meta 事件 ({@code {"type":"meta","sessionId":"<uuid>"}}), 之后为 AI 回复的流式块;
+     *         LLM 中途失败时补发兜底文案后正常收流 (不向下游发失败信号),
+     *         会话不存在时以失败 Uni 发出 SESSION_NOT_FOUND (meta 亦不发出)
      * @implNote Multi 返回类型无法使用 {@code @WithTransaction} (长事务会长时间占用 Hibernate session),
      *           因此每个持久化操作都通过 {@code Panache.withTransaction} 独立事务完成.
      *           emit 给前端的 token 保持原文, 结构化契约块只在落库文本上剥离 —
      *           若缓冲到流结束再拆流须扣留全部 token, 既破坏逐字渲染, 流中断时还会整段丢失已扣留内容.
+     * @since 1.5.0 (流首 meta 会话绑定事件契约)
      */
     @SuppressWarnings("unused")//! transformToMulti 返回的 Multi 即最终流, IDE 的 Mutiny 数据流分析误报为未使用发布者.
     public @NotNull Multi<String> streamMessage(
@@ -178,7 +181,15 @@ public final class ChatService
         final var sid = parseSessionId(sessionId);
         return getOrCreateSession(sid, userId).
             chain(session -> appendUserMessage(session.id, content)).
-            onItem().transformToMulti(session -> streamAiReply(session, content));
+            onItem().transformToMulti(
+                session ->
+                //* 流首恒发 meta 事件 (回传实际使用的 sessionId), 之后才是 token 流 —
+                //* 串联而非先发 token 再补 meta: 前端在首个 token 前就必须能绑定会话.
+                Multi.createBy().concatenating().streams(
+                    Multi.createFrom().item(metaEvent(session.id)),
+                    streamAiReply(session, content)
+                )
+            );
     }
 
     /**
@@ -420,6 +431,19 @@ public final class ChatService
                     ).start();
             }
         ).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+
+    /**
+     * 流首 meta 事件: 会话绑定契约载荷.
+     *
+     * @param sessionId 实际使用的会话 ID (含新建会话)
+     * @return meta 事件 JSON 文本, 形如 {@code {"type":"meta","sessionId":"<uuid>"}}
+     * @since 1.5.0
+     */
+    //* 新前端据此直接绑定会话, 免除"回查会话列表取最新"的启发式竞态; 旧前端不消费该事件, 契约仅存在于本分支.
+    private static @NotNull String metaEvent(@NotNull UUID sessionId)
+    {
+        return JsonUtils.toJson(Map.of("type", "meta", "sessionId", sessionId.toString()));
     }
 
     //* 单轮 AI 回复的完整产物: visible 供前端/历史, clinicalPayload 供拆流挂点评估落库 (null 即直通).

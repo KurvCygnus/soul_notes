@@ -23,7 +23,7 @@ import java.util.UUID;
  * <ul>
  *     <li>接收 JSON 格式的用户消息 (含 {@code content} 和可选的 {@code sessionId})</li>
  *     <li>调用 {@link ChatService#streamMessage} 获取 AI 回复流</li>
- *     <li>通过 WebSocket 逐字推送回复 Token</li>
+ *     <li>通过 WebSocket 逐字推送回复 Token (流首帧为 meta 会话绑定事件, 与 SSE 路径同源同契约)</li>
  * </ul>
  *
  * @implNote 入站处理模式为 SERIAL (回调按序启动, 但不保证链路完成时长);

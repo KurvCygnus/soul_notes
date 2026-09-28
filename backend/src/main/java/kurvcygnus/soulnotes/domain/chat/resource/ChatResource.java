@@ -62,11 +62,15 @@ public final class ChatResource
 
     /**
      * SSE 流式回复, 逐 token 推送以支持前端逐字渲染.
+     * <p>流首事件恒为 meta JSON ({@code {"type":"meta","sessionId":"<uuid>"}}) 回传实际使用的会话 ID,
+     * 之后为纯文本 token 事件 — 新前端据此免回查会话列表直接绑定会话.</p>
      *
      * @param req 发送请求 (含可选会话 ID 与消息内容)
-     * @return SSE 事件流 (text/event-stream); LLM 中途失败时补发固定兜底文案后正常收流
+     * @return SSE 事件流 (text/event-stream); 流首 meta 事件 + token 事件,
+     *         LLM 中途失败时补发固定兜底文案后正常收流
      * @throws IBusinessException 会话 ID 合法但对应会话不存在时 (SESSION_NOT_FOUND), 以流失败形式发出;
      *                            非法 UUID 格式的会话 ID 不报错, 回退为新会话
+     * @since 1.5.0 (流首 meta 会话绑定事件契约)
      */
     @POST @Path("/stream") @Produces(MediaType.SERVER_SENT_EVENTS)
     public @NotNull Multi<String> stream(@NotNull ChatSendRequest req)

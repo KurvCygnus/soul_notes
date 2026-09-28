@@ -25,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -170,21 +171,32 @@ class ChatPipelineTest
         final var account = PipelineUsers.register();
         MockLlmProfile.server().respondWithChunks("夜色", "很温柔", ", 我在这里。");
 
-        final var request = HttpRequest.newBuilder(streamUri).
-            header("Authorization", PipelineUsers.bearer(account.token())).
-            header("Content-Type", "application/json").
-            header("Accept", "text/event-stream").
-            timeout(Duration.ofSeconds(30)).
-            POST(HttpRequest.BodyPublishers.ofString(PrintUtils.quickFormat("{\"content\":\"{}\"}", "给我讲点什么吧"))).
-            build();
+        final var payloads = streamViaSse(account.token(), "给我讲点什么吧");
 
-        final var payloads = new ArrayList<String>();
-        final var response = HTTP.send(request, HttpResponse.BodyHandlers.ofLines());
-        response.body().forEach(line -> { if(line.startsWith("data:")) payloads.add(line.substring("data:".length()).stripLeading()); });
-
-        assertEquals(200, response.statusCode(), "SSE 端点应返回 200");
         assertTrue(payloads.size() >= 2, PrintUtils.quickFormat("应到达多个 SSE chunk, 实际: {}", payloads));
-        assertEquals("夜色很温柔, 我在这里。", String.join("", payloads), "chunk 拼接应等于 mock 文本 (mock 的 [DONE] 由 OpenAI 客户端消费, 不透传前端)");
+        //* @since 1.5.0 流首 meta 事件不计入 token 拼接 (原断言语义不变: 仅 token 拼接等于 mock 文本).
+        final var tokens = payloads.stream().filter(p -> !isMetaEvent(p)).toList();
+        assertEquals("夜色很温柔, 我在这里。", String.join("", tokens), "chunk 拼接应等于 mock 文本 (mock 的 [DONE] 由 OpenAI 客户端消费, 不透传前端)");
+    }
+
+    //* @since 1.5.0 meta 契约: SSE 流首事件必须为 meta JSON, 回传本次实际使用的 sessionId,
+    //* 供 chat-first 前端免除"回查会话列表取最新"的启发式竞态直接绑定会话.
+    @Test
+    void chatStream_FirstEventIsMetaWithSessionId() throws Exception
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithChunks("你好", "呀");
+
+        final var events = streamViaSse(account.token(), "最近有点累");
+
+        assertFalse(events.isEmpty(), "SSE 流必须到达事件");
+        final var meta = readTree(events.getFirst(), "流首 meta 事件");
+        assertEquals("meta", meta.path("type").asText(), PrintUtils.quickFormat("流首事件必须为 meta JSON, 实际: {}", events.getFirst()));
+        final var sessionId = assertDoesNotThrow(() -> UUID.fromString(meta.path("sessionId").asText()), "meta 的 sessionId 必须为合法 UUID");
+        assertTrue(events.size() >= 2, PrintUtils.quickFormat("meta 之外还应到达 token 事件, 实际: {}", events));
+
+        //* meta 回传的必须是本次实际使用的会话 (新建会话同样回传): 流收尾即回复已落库, 与最新会话对账.
+        assertEquals(latestSession(account.userId()).id, sessionId, "meta 的 sessionId 必须为实际落库的会话 ID");
     }
     //endregion
 
@@ -202,12 +214,21 @@ class ChatPipelineTest
 
         final var received = new StringBuilder();
         final var joined = new CompletableFuture<String>();
+        //* @since 1.5.0 流首为 meta 会话绑定帧, 不计入 token 拼接; 按消息边界 (last) 聚合后再判定,
+        //* 防 WebSocket 分段投递时 meta JSON 被切断而误判为 token 帧.
+        final var message = new StringBuilder();
         final var listener = new WebSocket.Listener()
         {
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last)
             {
-                received.append(data);
+                message.append(data);
+                if(last)
+                {
+                    if(!isMetaEvent(message.toString()))
+                        received.append(message);
+                    message.setLength(0);
+                }
                 if(expected.equals(received.toString()))
                     joined.complete(received.toString());
                 return WebSocket.Listener.super.onText(webSocket, data, last);
@@ -246,12 +267,20 @@ class ChatPipelineTest
         final var endpoint = URI.create(PrintUtils.quickFormat("{}://{}:{}/ws/chat?token={}", scheme, wsUri.getHost(), wsUri.getPort(), account.token()));
 
         final var received = new StringBuilder();
+        //* @since 1.5.0 按消息边界 (last) 聚合, meta 会话绑定帧不计入 (两条流各一帧), token 帧照旧累加.
+        final var message = new StringBuilder();
         final var listener = new WebSocket.Listener()
         {
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last)
             {
-                received.append(data);
+                message.append(data);
+                if(last)
+                {
+                    if(!isMetaEvent(message.toString()))
+                        received.append(message);
+                    message.setLength(0);
+                }
                 return WebSocket.Listener.super.onText(webSocket, data, last);
             }
         };
@@ -456,6 +485,32 @@ class ChatPipelineTest
                 extract().asString(),
             "chat/send 响应不得为 null"
         );
+    }
+
+    //* SSE 流式读取辅助: 沿用 ④ 用例的 HttpClient 按行读流写法, 聚合全部 data 行 (含流首 meta 事件),
+    //* 供 meta 契约与 token 拼接用例共享同一读取口径.
+    private List<String> streamViaSse(String token, String content) throws Exception
+    {
+        final var request = HttpRequest.newBuilder(streamUri).
+            header("Authorization", PipelineUsers.bearer(token)).
+            header("Content-Type", "application/json").
+            header("Accept", "text/event-stream").
+            timeout(Duration.ofSeconds(30)).
+            POST(HttpRequest.BodyPublishers.ofString(PrintUtils.quickFormat("{\"content\":\"{}\"}", content))).
+            build();
+
+        final var payloads = new ArrayList<String>();
+        final var response = HTTP.send(request, HttpResponse.BodyHandlers.ofLines());
+        response.body().forEach(line -> { if(line.startsWith("data:")) payloads.add(line.substring("data:".length()).stripLeading()); });
+        assertEquals(200, response.statusCode(), "SSE 端点应返回 200");
+        return payloads;
+    }
+
+    //* meta 事件判定: 流首契约事件 (JSON, type=meta); token 文本恒非 JSON 对象, 解析失败一律视为 token.
+    private static boolean isMetaEvent(String payload)
+    {
+        try { return "meta".equals(MAPPER.readTree(payload).path("type").asText()); }
+        catch(Exception e) { return false; }
     }
 
     //* 独立事务新开 session 查询该用户最新会话: 读已提交数据, 不受任何一级缓存干扰.
