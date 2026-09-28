@@ -24,4 +24,6 @@ public final class ApiEndpointConstants
     public static final @NotNull String CRISIS_BASE = "/api/v1/crisis";
     /** 咨询员工作台基础路径 (临床评估消费端: 队列/学生时间线/聚合统计). */
     public static final @NotNull String CLINICAL_BASE = "/api/v1/clinical";
+    /** 情境域基础路径 ({@code /summary}, 前端"你的情境"卡数据源). */
+    public static final @NotNull String CONTEXT_BASE = "/api/v1/context";
 }
