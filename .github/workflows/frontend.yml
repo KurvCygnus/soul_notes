@@ -1,0 +1,44 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ forward-iterating ]
+    paths: [ 'frontend/**', '.github/workflows/frontend.yml' ]
+  pull_request:
+    paths: [ 'frontend/**' ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    #* 前端工程位于 frontend/, job 内全部 run 步骤统一切换工作目录 (与后端 ci.yml 同形).
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      #* 本地 lockfile 由 pnpm 12.6.0 生成, 且 pnpm-workspace.yaml 的 allowBuilds 键仅 pnpm 10+
+      # 认识; CI 侧固定同一 major, 避免旧版 pnpm 拒绝 workspace 文件或 install 行为漂移.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '12'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (tsc -b + vite build)
+        run: pnpm build
+
+      - name: Test (vitest)
+        run: pnpm test
