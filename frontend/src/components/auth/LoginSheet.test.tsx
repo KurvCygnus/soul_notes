@@ -89,4 +89,15 @@ describe('LoginSheet (登录浮层)', () =>
         expect(onAuthed).not.toHaveBeenCalled()
         expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()
     })
+
+    it('dialog 语义完整: Escape 键触发 onCancel 关闭浮层', async () =>
+    {
+        const onCancel = vi.fn()
+        const user = userEvent.setup()
+        render(<LoginSheet onAuthed={vi.fn()} onCancel={onCancel} />)
+        //* 复审修复: 浮层必须是语义对话框 (读屏器可识别模态), Escape 是键盘用户的关闭通道.
+        expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
+        await user.keyboard('{Escape}')
+        expect(onCancel).toHaveBeenCalledOnce()
+    })
 })

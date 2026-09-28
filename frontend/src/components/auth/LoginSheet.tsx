@@ -1,6 +1,6 @@
 //* 登录/注册浮层: 协议强制勾选门禁 + 角色分流 (非 STUDENT 拒入并即时登出), 供访客门 shell (Task 9) 挂载.
 //* 契约: <LoginSheet onAuthed onCancel /> — 成功进入只经 onAuthed, 本组件不直接触碰 AuthContext (分层裁决).
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties, FormEvent, MouseEvent, ReactElement } from 'react'
 import { login, logout, register } from '../../api/auth'
 import { ApiError } from '../../api/http'
@@ -43,6 +43,19 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
     const [showAgreement, setShowAgreement] = useState(false)
     const [busy, setBusy] = useState(false)
 
+    //* Escape 关闭: 挂 document 而非遮罩元素 — 浮层打开时焦点可能仍留在遮罩后方 (调用方未移交焦点),
+    //* 遮罩内监听会漏按键; 以组件生命周期为界, 卸载即注销监听.
+    useEffect(() =>
+    {
+        const onKey = (e: KeyboardEvent): void =>
+        {
+            if(e.key === 'Escape')
+                onCancel()
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+    }, [onCancel])
+
     const isLogin = mode === 'login'
     const canSubmit = agreed && username.trim().length > 0 && password.length > 0 && !busy
 
@@ -81,9 +94,19 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
     }
 
     return (
+        //! 有意不做遮罩点击关闭: 遮罩误触会静默丢弃已输入的账密 (复审裁决), 关闭只走显式 取消/Escape.
         <div className="modal-overlay">
-            <form className="card" style={PANEL_STYLE} onSubmit={submit} aria-label={isLogin ? '登录' : '注册'}>
-                <h2 style={{ margin: 0, fontSize: '18px' }}>{isLogin ? '登录心灵札记' : '注册新账号'}</h2>
+            <form
+                className="card"
+                style={PANEL_STYLE}
+                onSubmit={submit}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="login-sheet-title"
+            >
+                <h2 id="login-sheet-title" style={{ margin: 0, fontSize: '18px' }}>
+                    {isLogin ? '登录心灵札记' : '注册新账号'}
+                </h2>
                 <label htmlFor="login-username">用户名</label>
                 <input
                     id="login-username"
