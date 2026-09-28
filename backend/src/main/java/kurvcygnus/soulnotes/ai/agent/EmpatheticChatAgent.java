@@ -7,6 +7,7 @@ import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.V;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import kurvcygnus.soulnotes.ai.tool.CrisisInterventionTool;
+import kurvcygnus.soulnotes.ai.tool.DomainDataTool;
 import kurvcygnus.soulnotes.ai.tool.UserContextTool;
 
 /**
@@ -21,11 +22,12 @@ import kurvcygnus.soulnotes.ai.tool.UserContextTool;
  * <p>所有配置 (model, temperature 等) 由 {@code application.properties} 中的
  * {@code quarkus.langchain4j.openai.*} 统一管理.</p>
  *
- * @implNote 挂载 {@link UserContextTool} 与 {@link CrisisInterventionTool} 两个工具:
- *           前者按 {@code @MemoryId} 拉取用户上下文, 后者供 RED 预警场景的危机干预取数.
+ * @implNote 挂载 {@link UserContextTool}, {@link CrisisInterventionTool} 与 {@link DomainDataTool} 三个工具:
+ *           第一个按 {@code @MemoryId} 拉取用户上下文, 第二个供 RED 预警场景的危机干预取数,
+ *           第三个供按需查询课表/考试 (默认关, {@code ai.domain.tool.enabled}).
  * @since 1.0
  */
-@RegisterAiService(tools = {UserContextTool.class, CrisisInterventionTool.class})
+@RegisterAiService(tools = {UserContextTool.class, CrisisInterventionTool.class, DomainDataTool.class})
 public interface EmpatheticChatAgent
 {
     /**
