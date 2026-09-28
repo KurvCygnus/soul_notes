@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -37,7 +38,7 @@ class DomainDataGatewayTest
         assertEquals(List.of(), gw.todaySchedule(UUID.randomUUID()).await().indefinitely());
     }
 
-    //* fail-open: 适配器失败降级空集, 绝不向外抛.
+    //* fail-open: 适配器失败降级空集, 绝不向外抛; 失败缝降级必须 WARN 留痕.
     @Test void gateway_AdapterFailure_DegradesToEmpty()
     {
         final var broken = new DomainDataPort()
@@ -47,13 +48,67 @@ class DomainDataGatewayTest
             public Uni<List<AgendaItem>> recentAgenda(UUID u, int d) { return Uni.createFrom().failure(new IllegalStateException("boom")); }
         };
         final var gw = new DomainDataGateway("none", new SimulatedCampusAdapter());
-        assertTrue(gw.guard(broken.upcomingExams(UUID.randomUUID(), 7)).await().indefinitely().isEmpty());
+        final var capture = WarnLogCapture.attach(DomainDataGateway.class);
+        try
+        {
+            assertTrue(gw.guard(broken.upcomingExams(UUID.randomUUID(), 7)).await().indefinitely().isEmpty());
+            assertTrue(capture.contains("领域数据取数失败"));
+        }
+        finally { capture.detach(); }
     }
 
-    //* 补充用例 (超出简报三例): 永不发射的源在 2s 超时后同样降级空集 — 钉死 ifNoItem 超时缝, 不只是失败缝.
+    //* 补充用例 (超出简报三例): 永不发射的源在 2s 超时后同样降级空集 — 钉死 ifNoItem 超时缝, 不只是失败缝;
+    //* 超时缝同样必须 WARN 留痕 — 静默降级会让挂死的适配器在运维上不可见.
     @Test void gateway_SourceNeverEmits_TimeoutDegradesToEmpty()
     {
         final var gw = new DomainDataGateway("none", new SimulatedCampusAdapter());
-        assertTrue(gw.guard(Uni.createFrom().nothing()).await().indefinitely().isEmpty());
+        final var capture = WarnLogCapture.attach(DomainDataGateway.class);
+        try
+        {
+            assertTrue(gw.guard(Uni.createFrom().nothing()).await().indefinitely().isEmpty());
+            assertTrue(capture.contains("领域数据取数超时"));
+        }
+        finally { capture.detach(); }
     }
+
+    //region WARN 日志捕获辅助
+
+    /**
+     * WARN 日志捕获器: 挂在 jboss-logmanager 的网关渠道 logger 上, 供 fail-open 留痕断言.
+     * <p>仿 {@code websocket.WarningLogCapture} 的挂接法 (该类包私有不可跨包复用, 就地最小复刻);
+     * 本测试断言的降级消息均无 {@code {}} 占位符, 直接取原始 message 即可, 无需占位符还原.</p>
+     */
+    private static final class WarnLogCapture extends java.util.logging.Handler
+    {
+        private final org.jboss.logmanager.Logger target;
+        //* 挂接前的显式等级 (null = 继承): detach 时还原, 不污染其余用例的日志行为.
+        private final java.util.logging.Level previousLevel;
+        private final List<String> messages = new CopyOnWriteArrayList<>();
+
+        private WarnLogCapture(org.jboss.logmanager.Logger target, java.util.logging.Level previousLevel)
+        { this.target = target; this.previousLevel = previousLevel; }
+
+        static WarnLogCapture attach(Class<?> loggerOwner)
+        {
+            final var target = org.jboss.logmanager.LogContext.getLogContext().getLogger(loggerOwner.getName());
+            final var capture = new WarnLogCapture(target, target.getLevel());
+            target.setLevel(org.jboss.logmanager.Level.WARNING);
+            target.addHandler(capture);
+            return capture;
+        }
+
+        boolean contains(String fragment) { return messages.stream().anyMatch(m -> m.contains(fragment)); }
+
+        void detach()
+        {
+            target.removeHandler(this);
+            target.setLevel(previousLevel);
+        }
+
+        @Override public void publish(java.util.logging.LogRecord record) { messages.add(record.getMessage()); }
+        @Override public void flush() { }
+        @Override public void close() { }
+    }
+
+    //endregion
 }

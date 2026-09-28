@@ -49,11 +49,16 @@ public final class DomainDataGateway implements DomainDataPort
     @Override public @NotNull Uni<List<AgendaItem>> recentAgenda(@NotNull UUID userId, int withinDays)
     { return guard("simulated".equals(adapter) ? simulated.recentAgenda(userId, withinDays) : Uni.createFrom().item(List.of())); }
 
-    //* 统一 fail-open 缝: 超时/失败一律空集 (WARN 留痕). //! 简报片段漏写 <T> 声明, 此处补上 (泛型方法签名必要).
+    //* 统一 fail-open 缝: 超时/失败一律空集, 且两路都必须 WARN 留痕 (静默降级会让挂死适配器在运维上不可见).
+    //! 超时恢复必须走 Supplier 内记日志 — 若先 recoverWithItem 成条目, 后置 onFailure 永不再触发, 超时将无痕.
+    //! 另: 简报片段漏写本方法的 <T> 声明, 已补 (泛型方法签名必要).
     @NotNull <T> Uni<List<T>> guard(@NotNull Uni<List<T>> source)//* 测试可见: 包级
     {
         return source.
-            ifNoItem().after(TIMEOUT).recoverWithItem(List.of()).
+            ifNoItem().after(TIMEOUT).recoverWithItem(() -> {
+                LOG.warn("领域数据取数超时, 降级空集");
+                return List.of();
+            }).
             onFailure().invoke(t -> LOG.warn("领域数据取数失败, 降级空集: {}", t.getMessage())).
             onFailure().recoverWithItem(List.of());
     }
