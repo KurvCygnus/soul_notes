@@ -9,6 +9,7 @@ import org.hibernate.annotations.JdbcType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -67,6 +68,18 @@ class AiChatSessionTest
         //* 通过 JsonUtils 解析 JSON 数组, 验证消息数量正确.
         final var messages = JsonUtils.parseJson(session.messages, new TypeReference<List<Map<String, String>>>() {});
         assertEquals(3, messages.size());
+    }
+
+    //* @since 1.5.0 新消息必须携带 ts (ISO-8601); 旧数据无 ts 由读取端容错.
+    @Test
+    void addMessage_ShouldStampIsoInstant()
+    {
+        final var s = new AiChatSession();
+        s.messages = "[]";
+        s.addMessage("user", "你好");
+        assertTrue(s.messages.contains("\"ts\""));
+        final var list = JsonUtils.parseJson(s.messages, new TypeReference<List<Map<String, String>>>() {});
+        assertDoesNotThrow(() -> Instant.parse(list.getFirst().get("ts")));
     }
 
     @Test

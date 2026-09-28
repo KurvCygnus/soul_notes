@@ -219,10 +219,10 @@ public final class ChatService
      *
      * @param sessionId 会话 ID
      * @param userId    当前认证用户 ID (归属校验依据)
-     * @return 消息列表 (role/content 按对话顺序; 空会话为空列表, 恒非 null)
+     * @return 消息列表 (role/content/ts 按对话顺序; 空会话为空列表, 恒非 null; ts 为 ISO-8601 字符串, 存量消息为 null)
      * @throws IBusinessException 会话不存在或不属于当前用户时 (SESSION_NOT_FOUND, 同码同文案防枚举)
-     * @implNote 消息 JSONB 仅存 role/content, 历史回放不带时间戳; 损坏 JSON 按空列表降级 (与预览/计数同款容错).
-     * @since 1.2.1
+     * @implNote 消息 JSONB 存 role/content/ts 三键, 存量两键行的 ts 读取为 null; 损坏 JSON 按空列表降级 (与预览/计数同款容错).
+     * @since 1.5.0 (历史条目透传 ts 时间戳, 前端据此做时间分组; null 不分组)
      */
     @WithTransaction
     public @NotNull Uni<List<ChatHistoryMessage>> listMessages(@NotNull UUID sessionId, @NotNull UUID userId)
@@ -640,7 +640,7 @@ public final class ChatService
      *
      * @param messagesJson 会话消息 JSONB 原文
      * @return 消息条目列表; 空白/损坏 JSON 按空列表降级 (与预览/计数同款容错)
-     * @since 1.2.1
+     * @since 1.5.0 (透传条目 ts 时间戳; 存量两键行无 ts 时为 null, 不做解析与回填)
      */
     private static @NotNull List<ChatHistoryMessage> parseHistory(@Nullable String messagesJson)
     {
@@ -650,7 +650,7 @@ public final class ChatService
         {
             return JsonUtils.parseJson(messagesJson, new TypeReference<List<Map<String, String>>>() {}).
                 stream().
-                map(m -> new ChatHistoryMessage(m.getOrDefault("role", "unknown"), m.getOrDefault("content", ""))).
+                map(m -> new ChatHistoryMessage(m.getOrDefault("role", "unknown"), m.getOrDefault("content", ""), m.get("ts"))).
                 toList();
         }
         catch(Exception e)

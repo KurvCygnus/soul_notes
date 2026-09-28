@@ -17,7 +17,8 @@ import java.util.UUID;
 
 /**
  * AI 对话会话实体, 对应 {@code ai_chat_sessions} 表.
- * <p>{@code messages} 字段以 JSONB 存储对话历史 (role/content 数组), 整段历史随会话读写.</p>
+ * <p>{@code messages} 字段以 JSONB 存储对话历史 (role/content/ts 数组), 整段历史随会话读写;
+ * 存量两键行 (无 ts) 由读取端容错, 不做数据回填.</p>
  *
  * @since 1.0
  */
@@ -55,13 +56,16 @@ public final class AiChatSession extends PanacheEntityBase
      *
      * @param role    角色: "user" / "assistant"
      * @param content 消息内容
+     * @since 1.5.0 (条目追加 {@code ts} ISO-8601 时间戳; 存量两键行读取端容错为无 ts)
      */
     public void addMessage(@NotNull String role, @NotNull String content)
     {
         final var list = getMessageList();
-        list.add(Map.of("role", role, "content", content));
+        //* ts 与 updatedAt 取同一时刻: 单次捕获保证新条目的消息时间戳与本次落库刷新语义一致.
+        final var now = Instant.now();
+        list.add(Map.of("role", role, "content", content, "ts", now.toString()));
         this.messages = JsonUtils.toJson(list);
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 
     /**
