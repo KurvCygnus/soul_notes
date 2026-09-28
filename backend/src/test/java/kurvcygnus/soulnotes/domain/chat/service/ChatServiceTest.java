@@ -11,6 +11,9 @@ import kurvcygnus.soulnotes.ai.dto.WarningDetectionResult;
 import kurvcygnus.soulnotes.config.ClinicalSchemaNormalizer;
 import kurvcygnus.soulnotes.config.PromptProvider;
 import kurvcygnus.soulnotes.domain.chat.entity.AiChatSession;
+import kurvcygnus.soulnotes.domain.context.DomainContextInjector;
+import kurvcygnus.soulnotes.domain.context.DomainDataGateway;
+import kurvcygnus.soulnotes.domain.context.SimulatedCampusAdapter;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.PrintUtils;
 import kurvcygnus.soulnotes.utils.constants.AiPromptConstants;
@@ -91,14 +94,18 @@ class ChatServiceTest
 
     @SuppressWarnings("ConstantConditions")//! 测试缝: Vertx 为类级共享实例, 其余未用依赖置 null 是纯单测构造服务实例的唯一途径.
     private static ChatService newService(boolean taggingOn, PromptProvider promptProvider, ClinicalSchemaNormalizer normalizer)
-    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, normalizer, null, newDispatchStub(), VERTX, 50, taggingOn); }
+    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, noneInjector(), normalizer, null, newDispatchStub(), VERTX, 50, taggingOn); }
 
     //* 主链路替身: buildSystemPrompt 在 executeBlocking 内执行, 必须注入可用的 PromptProvider (空配置 = 内置默认).
     @SuppressWarnings("ConstantConditions")//! 测试缝: clinicalAssessmentService 置 null — 本组用例不驱动评估落库挂点.
     private static ChatService newService(boolean taggingOn, EmpatheticChatAgent chatAgent)
     {
-        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer(), null, newDispatchStub(), VERTX, 50, taggingOn);
+        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), noneInjector(), unusedNormalizer(), null, newDispatchStub(), VERTX, 50, taggingOn);
     }
+
+    //* 情境注入器替身: adapter=none → render 恒空串, 本组用例的字节级 prompt 断言与 1.4 基线保持一致.
+    private static DomainContextInjector noneInjector()
+    { return new DomainContextInjector(new DomainDataGateway("none", new SimulatedCampusAdapter())); }
 
     //* dispatch 替身: 空渠道 + 冷却逃生门 (minutes<=0 旁路冷却判定, 不触 Redis → redisDS 置 null 安全);
     //* 本组用例的预警 Agent 恒返回 NONE, 分发器只作为构造占位, 永不被触达.
@@ -138,9 +145,10 @@ class ChatServiceTest
 
     private static String invokeBuildSystemPrompt(ChatService service) throws Exception
     {
-        final var method = ChatService.class.getDeclaredMethod("buildSystemPrompt");
+        //* @since 1.5.0 情境注入穿参: buildSystemPrompt 的 userId 参数经反射随签名一并传入.
+        final var method = ChatService.class.getDeclaredMethod("buildSystemPrompt", UUID.class);
         method.setAccessible(true);
-        return (String) method.invoke(service);
+        return (String) method.invoke(service, UUID.randomUUID());
     }
 
     @SuppressWarnings("unchecked")//! Method.invoke 返回 Object, 泛型擦除下强转回 Uni<String> 不可避免.

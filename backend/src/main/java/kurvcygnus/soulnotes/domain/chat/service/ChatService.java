@@ -21,6 +21,7 @@ import kurvcygnus.soulnotes.domain.chat.dto.ChatSendRequest;
 import kurvcygnus.soulnotes.domain.chat.dto.ChatSessionVo;
 import kurvcygnus.soulnotes.domain.chat.entity.AiChatSession;
 import kurvcygnus.soulnotes.domain.clinical.service.ClinicalAssessmentService;
+import kurvcygnus.soulnotes.domain.context.DomainContextInjector;
 import kurvcygnus.soulnotes.exception.ErrorCode;
 import kurvcygnus.soulnotes.exception.IBusinessException;
 import kurvcygnus.soulnotes.utils.JsonUtils;
@@ -66,6 +67,8 @@ public final class ChatService
     private final @NotNull EmpatheticChatAgent empatheticChatAgent;
     private final @NotNull WarningDetectionAgent warningDetectionAgent;
     private final @NotNull PromptProvider promptProvider;
+    //* 领域情境注入器: 课表/考试/日程渲染为紧凑块并入 system prompt — fail-open, 无数据时 prompt 零变化.
+    private final @NotNull DomainContextInjector domainContextInjector;
     //* 临床结构归一化缓存: 自定义结构只有归一化产物才允许进入对话契约.
     private final @NotNull ClinicalSchemaNormalizer schemaNormalizer;
     //* 临床评估落库: 拆流挂点的 best-effort 消费方 — 失败仅 WARN, 对话可用性 > 评估完整性 (Spec §7).
@@ -85,6 +88,7 @@ public final class ChatService
         @NotNull EmpatheticChatAgent empatheticChatAgent,
         @NotNull WarningDetectionAgent warningDetectionAgent,
         @NotNull PromptProvider promptProvider,
+        @NotNull DomainContextInjector domainContextInjector,
         @NotNull ClinicalSchemaNormalizer schemaNormalizer,
         @NotNull ClinicalAssessmentService clinicalAssessmentService,
         @NotNull AlertDispatchService alertDispatchService,
@@ -96,6 +100,7 @@ public final class ChatService
         this.empatheticChatAgent = empatheticChatAgent;
         this.warningDetectionAgent = warningDetectionAgent;
         this.promptProvider = promptProvider;
+        this.domainContextInjector = domainContextInjector;
         this.schemaNormalizer = schemaNormalizer;
         this.clinicalAssessmentService = clinicalAssessmentService;
         this.alertDispatchService = alertDispatchService;
@@ -369,7 +374,7 @@ public final class ChatService
             emitter ->
             {
                 final var fullReply = new StringBuilder();
-                empatheticChatAgent.chat(buildSystemPrompt(), session.userId.toString(), history, content).
+                empatheticChatAgent.chat(buildSystemPrompt(session.userId), session.userId.toString(), history, content).
                     onPartialResponse(
                         token ->
                         {
@@ -455,7 +460,7 @@ public final class ChatService
     private @NotNull Uni<AiReplyOutcome> callAiAndRespond(@NotNull AiChatSession session, @NotNull String content)
     {
         final var history = buildConversationHistory(session);
-        return vertx.executeBlocking(() -> empatheticChatAgent.chatSync(buildSystemPrompt(), session.userId.toString(), history, content), false).
+        return vertx.executeBlocking(() -> empatheticChatAgent.chatSync(buildSystemPrompt(session.userId), session.userId.toString(), history, content), false).
             onItem().transformToUni(
                 reply ->
                 {
@@ -479,22 +484,28 @@ public final class ChatService
     }
 
     /**
-     * 组装共情对话 systemPrompt: 机构/内置提示词在前, 功能契约壳在后.
+     * 组装共情对话 systemPrompt: 机构/内置提示词在前, 学生情境块居中, 功能契约壳在后.
      *
-     * @return 合并后的 systemPrompt; {@code clinical.tagging=off} 时不追加契约段,
-     *         提示词与 token 成本同 1.0 行为逐字节一致
-     * @since 1.1.0
+     * @param userId 当前用户 ID (情境取数键)
+     * @return 合并后的 systemPrompt; 无情境数据 (adapter=none/取数降级) 时情境块为空串,
+     *         提示词与 1.4 行为逐字节一致; {@code clinical.tagging=off} 时不追加契约段
+     * @since 1.5.0 (情境注入穿参 userId; 合并规则不变, 仅在基础段与契约段之间插入情境块)
      */
     //* 合并规则: 契约壳首行声明最高优先级, 兜底机构提示词中"不要输出 JSON"之类指令对输出格式的破坏.
-    private @NotNull String buildSystemPrompt()
+    private @NotNull String buildSystemPrompt(@NotNull UUID userId)
     {
         final var base = promptProvider.empatheticChat();
+        //* 注入器 fail-open 恒成功 (网关降级空集 + 本层兜底空串), 空数据即空串 — 拼接零残留.
+        //! await 仅在 worker 上下文安全: 两调用点分别在 executeBlocking lambda 与 Mutiny worker 池的 emitter 体内,
+        //! 事件循环调用本方法会抛 BlockingNotAllowedException — 新增调用点必须先核线程上下文.
+        final var context = domainContextInjector.render(userId).await().atMost(Duration.ofSeconds(3));
+        final var withContext = base + context;
         if(!clinicalTagging)
-            return base;
+            return withContext;
         final var schema = resolveSchemaForContract();
         if(schema == null)
-            return base;//* 自定义结构无归一化缓存: 结构化增强暂禁, 仅发基础提示词.
-        return PrintUtils.quickFormat("{}\n\n{}", base, PrintUtils.quickFormat(AiPromptConstants.CLINICAL_OUTPUT_CONTRACT, schema));
+            return withContext;//* 自定义结构无归一化缓存: 结构化增强暂禁, 仅发基础提示词与情境块.
+        return PrintUtils.quickFormat("{}\n\n{}", withContext, PrintUtils.quickFormat(AiPromptConstants.CLINICAL_OUTPUT_CONTRACT, schema));
     }
 
     /**

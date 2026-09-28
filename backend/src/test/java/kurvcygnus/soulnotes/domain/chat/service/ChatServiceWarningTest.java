@@ -44,7 +44,7 @@ class ChatServiceWarningTest
         }
     }
 
-    //! applyWarning 仅触碰 alertDispatchService 与 session, 其余依赖 (Agent/PromptProvider/归一化器/Vertx)
+    //! applyWarning 仅触碰 alertDispatchService 与 session, 其余依赖 (Agent/PromptProvider/情境注入器/归一化器/Vertx)
     //! 在该测试路径不可达, 置 null 安全 (构造器无 requireNonNull 校验); clinicalTagging 不参与该路径, 恒 false.
     //! dispatch 替身 = 真实 AlertDispatchService + 冷却逃生门 (minutes<=0 旁路冷却判定, 不触 Redis → redisDS
     //! 置 null 安全), 可观测行为与 "cooldownActive 恒放行" 等价; Task 1 测试的 "子类覆写 cooldownActive" 形态
@@ -52,7 +52,7 @@ class ChatServiceWarningTest
     @SuppressWarnings("ConstantConditions")//! 测试缝: 未用依赖置 null 是纯单测构造服务实例的唯一途径.
     private static ChatService newService(List<IAlertNotifier> notifiers)
     {
-        return new ChatService(null, null, null, null, null, new AlertDispatchService(notifiers, null, 0), null, 50, false);
+        return new ChatService(null, null, null, null, null, null, new AlertDispatchService(notifiers, null, 0), null, 50, false);
     }
 
     private static void invokeApplyWarning(ChatService service, AiChatSession session, WarningDetectionResult detection) throws InvocationTargetException, NoSuchMethodException, IllegalAccessException
