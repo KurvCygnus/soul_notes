@@ -1,4 +1,4 @@
-//* RED 预警上下文测试: WS 通道生命周期随登录态 (访客零连接/登录建连/登出断开/换号重连) + showRed/dismissRed 状态机.
+//* RED 预警上下文测试: WS 通道生命周期随登录态 (访客零连接/登录建连/登出断开/换号重连) + showRed/dismissRed 状态机 + 登出清空 red (跨账号隐私红线).
 //* connectAlertSocket 整体 mock (不真开 WebSocket): 断言建连参数与关闭函数的调用时机, 不测 WS 内部时序 (ws.test.ts 已覆盖).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen } from '@testing-library/react'
@@ -100,5 +100,17 @@ describe('AlertProvider (RED 预警通道生命周期)', () =>
         expect(screen.getByTestId('state')).toHaveTextContent('authed/人工注入')
         await u.click(screen.getByRole('button', { name: 'dismiss' }))
         expect(screen.getByTestId('state')).toHaveTextContent('authed/none')
+    })
+
+    it('登出清空 RED 态: 弹窗激活时登出, red 归零且弹窗卸载 (上一账号的预警原因不得跨账号可见)', async () =>
+    {
+        vi.mocked(connectAlertSocket).mockReturnValue(vi.fn())//* 登出会触发 cleanup 调 close, 需给定关闭函数
+        const u = userEvent.setup()
+        renderHarness()
+        await u.click(screen.getByRole('button', { name: 'login-a' }))
+        await u.click(screen.getByRole('button', { name: 'show' }))//* 模拟日记兜底/WS 推送已开弹窗 (reason 可携带上一账号日记摘要)
+        expect(screen.getByTestId('state')).toHaveTextContent('authed/人工注入')
+        await u.click(screen.getByRole('button', { name: 'logout' }))
+        expect(screen.getByTestId('state')).toHaveTextContent('guest/none')//* user 归 null 即清空 red, 拒绝跨账号残留
     })
 })

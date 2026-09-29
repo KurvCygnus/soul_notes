@@ -24,11 +24,16 @@ export function AlertProvider({ children }: { children: ReactNode })
     const { user } = useAuth()
     const [red, setRed] = useState<IRedAlertMessage | null>(null)
 
-    //* WS 通道随登录态: 访客 (user == null) 不建连 — 零 WS 连接; setRed 直接作 onRed, WS 帧即开弹窗.
+    //* WS 通道随登录态: 访客 (user == null) 不建连 — 零 WS 连接, 并清空残留 red (red.reason 可能携带上一账号日记摘要,
+    //* 登出/换号瞬间若不归零, 弹窗会把前一账号的预警内容泄露给当前使用者 — 跨账号隐私红线); setRed 直接作 onRed, WS 帧即开弹窗.
     useEffect(() =>
     {
         if(user == null)
+        {
+            // oxlint-disable-next-line react/set-state-in-effect //! 登出清空 RED 态是对认证状态迁移的响应式复位, 与同文件 WS 断开同源同刻; 渲染期复位或 key 重挂会扩大改动面, 登出是低频单次迁移, 规则的级联担忧在此不成立.
+            setRed(null)//* 登出即清空 RED 弹窗态: 与 WS 断开同源同刻, 访客态下不允许任何账号的预警残留.
             return
+        }
         const close = connectAlertSocket(user.token, setRed)
         return () => { close() }
     }, [user])
