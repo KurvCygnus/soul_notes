@@ -5,6 +5,8 @@
 //* ChatView 的打开请求通道, nonce 单调递增), 经 <Outlet context> 下发 (见 [[IChatViewContext]]);
 //* 历史加载与流式发送归 ChatView. 侧栏删除经壳调 deleteSession, 删除打开中的会话由 ChatView 依
 //* sessions 列表比对自行复位 hero (壳不追踪"当前打开"状态).
+//* Task 12: 通道再延展 — sendRequest (情境卡 onAsk → ChatView 聊天模式发送, 同 nonce 机制);
+//* 主区顶部加极简 topbar 挂天气胶囊 (仅登录后渲染, 胶囊自身 fail-silent).
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { Outlet } from 'react-router-dom'
@@ -12,10 +14,11 @@ import { deleteSession, listSessions } from '../../api/chat'
 import { useAuth } from '../../hooks/useAuth'
 import { useChatGate } from '../../hooks/useChatGate'
 import { toast } from '../../utils/toast'
+import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
 import Sidebar from './Sidebar'
 import { SIDEBAR_PREF_KEY } from './Sidebar'
-import type { IChatViewContext, ISessionOpenRequest } from '../../views/chatContext'
+import type { IChatViewContext, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
 import type { ChatSessionVo } from '../../types'
 
 export default function AppShell(): ReactElement
@@ -28,6 +31,7 @@ export default function AppShell(): ReactElement
     //* 防止 A 登出后 B 登录的取数间隙闪现 A 的会话预览 — 跨账号泄漏); 派生而非 effect 内同步清零.
     const [sessionState, setSessionState] = useState<{ owner: string | null; list: ChatSessionVo[] | null }>({ owner: null, list: null })
     const [openRequest, setOpenRequest] = useState<ISessionOpenRequest | null>(null)
+    const [sendRequest, setSendRequest] = useState<ISendRequest | null>(null)
     const sessions = user != null && sessionState.owner === user.userId ? sessionState.list : null
 
     //* 会话列表随登录态拉取: 拉取失败降级空列表 (侧栏显示"暂无会话", 不阻塞聊天); setState 全在异步回调,
@@ -59,6 +63,12 @@ export default function AppShell(): ReactElement
         setOpenRequest(prev => ({ sessionId: id, nonce: (prev?.nonce ?? 0) + 1 }))
     }, [])
 
+    //* Task 12: 情境卡唤起 → 同一 nonce 机制下发 (ChatView 判重后路由进聊天发送管线).
+    const handleAsk = useCallback((q: string) =>
+    {
+        setSendRequest(prev => ({ content: q, nonce: (prev?.nonce ?? 0) + 1 }))
+    }, [])
+
     const handleDeleteSession = useCallback((id: string) =>
     {
         deleteSession(id).
@@ -66,7 +76,7 @@ export default function AppShell(): ReactElement
             catch(() => toast('会话删除失败, 请稍后再试.', 'error'))  //! 失败保留原会话可重试, 不静默吞错.
     }, [])
 
-    const ctx: IChatViewContext = { sessions, reloadSessions, openRequest }
+    const ctx: IChatViewContext = { sessions, reloadSessions, openRequest, sendRequest }
 
     return (
         <div className="shell">
@@ -77,8 +87,15 @@ export default function AppShell(): ReactElement
                 sessions={sessions ?? undefined}
                 onDeleteSession={handleDeleteSession}
                 onOpenSession={handleOpenSession}
+                onAsk={handleAsk}
             />
             <main className="main">
+                {/* 顶栏天气胶囊: 仅登录后挂载 (访客不占位); 胶囊对 401/空数据自行隐藏 (fail-silent). */}
+                {user != null && (
+                    <div className="topbar">
+                        <WeatherCapsule />
+                    </div>
+                )}
                 <Outlet context={ctx} />
             </main>
             {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用. */}

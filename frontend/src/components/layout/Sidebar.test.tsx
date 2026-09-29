@@ -1,5 +1,6 @@
 //* 左栏测试: 折叠切换 (宽度/aria/偏好持久化), 访客态 (登录钮 + 无会话区), 删除破坏性操作的 confirm 门控.
 //* 纯 props 驱动设计: 约定 shell 仅对访客传 onOpenLogin, 故用例以该 prop 表达登录态, 不需要 AuthProvider.
+//* Task 12: "你的情境"占位由 ContextRail 取代 (自加载), 故 mock 情境 api 并异步等待情境区出现.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -7,7 +8,18 @@ import { MemoryRouter } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import Sidebar, { SIDEBAR_PREF_KEY } from './Sidebar'
 import type { ISidebarProps } from './Sidebar'
-import type { ChatSessionVo } from '../../types'
+import { getContextSummary } from '../../api/context'
+import type { ChatSessionVo, ContextSummary } from '../../types'
+
+vi.mock('../../api/context', () => ({ getContextSummary: vi.fn() }))
+
+const mockGetContext = vi.mocked(getContextSummary)
+
+const CONTEXT_DATA: ContextSummary = {
+    schedule: [{ course: '高等数学', timeRange: '08:00-09:40', location: '教三 302' }],
+    exams: [],
+    agenda: [],
+}
 
 const SESSIONS: ChatSessionVo[] = [
     { sessionId: 's1', messageCount: 2, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力' },
@@ -21,7 +33,12 @@ function renderSidebar(props: ISidebarProps): ReactElement
 
 describe('Sidebar (应用左栏)', () =>
 {
-    beforeEach(() => localStorage.clear())
+    beforeEach(() =>
+    {
+        localStorage.clear()
+        mockGetContext.mockReset()
+        mockGetContext.mockResolvedValue(CONTEXT_DATA)  //* 登录态用例默认有数据 (访客态不挂载 ContextRail, 不触发).
+    })
     afterEach(() => vi.restoreAllMocks())
 
     it('折叠切换: 宽度 260<->48, aria-expanded 翻转, 偏好写入 localStorage', async () =>
@@ -68,11 +85,13 @@ describe('Sidebar (应用左栏)', () =>
         expect(onDeleteSession).toHaveBeenCalledWith('s1')
     })
 
-    it('登录态: 渲染会话区与情境区且无登录钮 (与访客态互斥)', () =>
+    it('登录态: 渲染会话区与情境区且无登录钮 (与访客态互斥)', async () =>
     {
+        mockGetContext.mockResolvedValue(CONTEXT_DATA)
         render(renderSidebar({ collapsed: false, onToggle: vi.fn(), sessions: SESSIONS }))
         expect(screen.getByText('会话')).toBeInTheDocument()
-        expect(screen.getByText('你的情境')).toBeInTheDocument()
+        expect(await screen.findByText('你的情境')).toBeInTheDocument()  //* ContextRail 异步加载后出现 (含数据).
+        expect(screen.getByText('高等数学')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: '登录 / 注册' })).not.toBeInTheDocument()
     })
 })

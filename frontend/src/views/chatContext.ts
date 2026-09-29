@@ -9,6 +9,14 @@ export interface ISessionOpenRequest
     nonce: number
 }
 
+//* 情境唤起发送请求 (Task 12): Sidebar 情境卡点击 (壳持有) → ChatView 以聊天模式 handleSend(content, 'chat').
+//* 与 ISessionOpenRequest 同一通道机制 (nonce 单调递增, 壳经 <Outlet context> 下发), ChatView 以 ref 记账防重放.
+export interface ISendRequest
+{
+    content: string
+    nonce: number
+}
+
 export interface IChatViewContext
 {
     //* null = 访客/加载中; 空数组 = 已加载但无会话.
@@ -16,4 +24,6 @@ export interface IChatViewContext
     //* 发送完成后由 ChatView 回调, 刷新侧栏会话列表 (新会话/预览变化).
     reloadSessions(): void
     openRequest: ISessionOpenRequest | null
+    //* Task 12: 情境卡唤起请求 (null = 无); nonce 判重, 同一请求只发送一次.
+    sendRequest: ISendRequest | null
 }

@@ -2,8 +2,11 @@
 //* 纯 props 驱动 (不读 Context, 便于无头测试): 壳仅对访客传 onOpenLogin, 故该 prop 在位即视为访客态 —
 //* 会话区与"你的情境"区只对登录用户渲染 (产品裁决). 会话数据 Task 10 经壳接入, 本组件只渲染与回调.
 //* Task 10 契约扩展: 新增可选 onOpenSession (点击会话项打开), 既有 prop 语义与缺省行为不变.
+//* Task 12 契约扩展: 新增可选 onAsk (情境卡唤起聊天), "你的情境"占位由 <ContextRail/> 实体取代 —
+//* 数据自加载, 空数组/失败整区自动静默 (adapter=none 自动静默); onAsk 缺省时卡片退化为纯展示.
 import { Link } from 'react-router-dom'
 import type { ReactElement } from 'react'
+import ContextRail from '../sidebar/ContextRail'
 import type { ChatSessionVo } from '../../types'
 
 //* 偏好键与取值归本组件所有, 壳只经它读初始形态 (AppShell 惰性还原).
@@ -20,6 +23,8 @@ export interface ISidebarProps
     onDeleteSession?(id: string): void
     //* Task 10 扩展: 提供时会话项变为可点按钮 (打开会话), 缺省保持纯展示 (向后兼容).
     onOpenSession?(id: string): void
+    //* Task 12 扩展: 提供时情境卡可点唤起聊天发送, 缺省纯展示 (向后兼容).
+    onAsk?(q: string): void
     onOpenLogin?(): void
 }
 
@@ -32,7 +37,7 @@ function requestDelete(session: ChatSessionVo, onDeleteSession?: (id: string) =>
         onDeleteSession(session.sessionId)
 }
 
-export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onOpenLogin }: ISidebarProps): ReactElement
+export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onAsk, onOpenLogin }: ISidebarProps): ReactElement
 {
     const guest = onOpenLogin != null
 
@@ -101,11 +106,9 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                                 </ul>
                             )}
                         </section>
-                        {/* 你的情境区: Task 12 接入课程/考试/日程聚合, 当前仅留标题与占位文案. */}
-                        <section aria-label="你的情境区">
-                            <h2 className="sidebar-title">你的情境</h2>
-                            <p className="sidebar-empty">课程与考试提醒即将上线</p>
-                        </section>
+                        {/* 你的情境区 (Task 12): 占位文案由 ContextRail 实体取代 — 自加载课表/考试/日程,
+                            空数组或请求失败时整区自隐藏 (含标题), 点击卡片经壳的 sendRequest 通道唤起聊天. */}
+                        <ContextRail onAsk={onAsk} />
                     </>
                 )}
             </div>

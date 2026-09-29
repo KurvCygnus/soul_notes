@@ -1,6 +1,8 @@
 //* 聊天主视图: hero 空态 (问候 + 居中输入盒) ↔ 消息流双态切换.
 //* 状态与发送管线全部收敛在 [[useChatSend]] (会话绑定/竞态守卫/降级/中止/记一笔), 本组件只做视图编排;
 //* Task 11: 双态输入区 <Composer/> 就位, 聊天与日记两条发送路径的访客门拦截语义都在 useChatSend 内统一收口.
+//* Task 12: 消费壳下发的 sendRequest (情境卡唤起), 以聊天模式路由进 handleSend — nonce 判重防重放.
+import { useEffect, useRef } from 'react'
 import type { ReactElement } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import ChatStream from '../components/chat/ChatStream'
@@ -10,8 +12,19 @@ import type { IChatViewContext } from './chatContext'
 
 export default function ChatView(): ReactElement
 {
-    const { sessions, reloadSessions, openRequest } = useOutletContext<IChatViewContext>()
+    const { sessions, reloadSessions, openRequest, sendRequest } = useOutletContext<IChatViewContext>()
     const { messages, streaming, streamError, startNewChat, handleSend } = useChatSend({ sessions, openRequest, reloadSessions })
+
+    //* 情境卡唤起通道: nonce 判重 (handleSend 身份若因上游重建而变化, effect 重跑也不会重放同一请求),
+    //* 经 handleSend('chat') 走与 Composer 完全相同的门 + 流式管线.
+    const sentNonceRef = useRef(0)
+    useEffect(() =>
+    {
+        if(sendRequest == null || sendRequest.nonce === sentNonceRef.current)
+            return
+        sentNonceRef.current = sendRequest.nonce
+        handleSend(sendRequest.content, 'chat')
+    }, [sendRequest, handleSend])
 
     const showHero = messages.length === 0
     //* 流式期间禁并发 (Composer 侧停用, doSend 的 abort 仅兜底); 两态共用同一实例, 同屏只渲染一处.
