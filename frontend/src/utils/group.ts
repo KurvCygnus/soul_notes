@@ -33,6 +33,30 @@ function labelFor(d: Date, now: Date): string
 }
 
 /**
+ * 相对时间展示 (Task 14): 刚刚 (±60s, 含轻微时钟偏移) → N 分钟前 (<60m) → H:mm (同日) → 昨天 → M-D (更早).
+ * 纯函数, [[now]] 注入便于测试 (与 [[groupMessages]] 同款模式); 分日判定复用日期分量法, 规避毫秒差在
+ * 夏令时/跨月下的"昨天"差一陷阱. 小时 H 不补零, 分钟 mm 补零 (如 9:05), 与分桶标签的 M-D 风格一致.
+ */
+export function formatRelative(iso: string, now: Date = new Date()): string
+{
+    const d = new Date(iso)
+    if(Number.isNaN(d.getTime()))
+        return ''  //! 非法时间串返回空串而非抛错: 渲染层可直接条件跳过, 与 [[groupMessages]] 的容错口径一致.
+    const diffMs = now.getTime() - d.getTime()
+    if(diffMs > -60_000 && diffMs < 60_000)
+        return '刚刚'  //* 服务端时钟轻微超前的瞬间也应是"刚刚": 下界放宽到 -60s, 不出现"刚刚之前".
+    if(diffMs >= 60_000 && diffMs < 3_600_000)
+        return `${Math.floor(diffMs / 60_000)} 分钟前`
+    if(dayKey(d) === dayKey(now))
+        return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)  //* setDate 自动处理月/年边界与夏令时 (同 [[labelFor]]).
+    if(dayKey(d) === dayKey(yesterday))
+        return '昨天'
+    return `${d.getMonth() + 1}-${d.getDate()}`
+}
+
+/**
  * 消息分桶: 时间取 `timestamp ?? ts` (流式 [[ChatMessage]] 与历史 [[ChatHistoryMessage]] 双形态归一).
  * 无时间或时间非法的条目并入"当前"(最后一个)桶且不另起新桶; 若尚无任何桶 (如新对话首条乐观消息),
  * 开一个无标签桶 (label '') 承接 — 渲染层以空标签跳过日期分隔条, 保证消息不丢.

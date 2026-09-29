@@ -2,6 +2,8 @@
 //* 数据经 [[getContextSummary]] 自加载: adapter=none 时三数组全空 → 整区隐藏 (自动静默); 请求失败 (含 401)
 //* 同样隐藏且不重试 (fail-silent, 无死循环). 卡片点击经 onAsk 唤起聊天 — 壳把回调焊到 ChatView 的发送通道上,
 //* 本组件不感知路由与门 (与 Sidebar 的纯 props 分层一致). 考试临近强调只用琥珀令牌, 不做医疗化/恐慌化表述.
+//* Task 14 裁决 (空态文案): 整区隐藏契约不变 (全空仍隐藏), 但整区可见时, 单卡数据为空不再整卡消失,
+//* 改显友好空文案 (如"今天没有课, 好好休息.") — 半满状态下的消失看起来像坏了, 文案才是明确的"没有".
 import { useEffect, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
 import { getContextSummary } from '../../api/context'
@@ -73,10 +75,14 @@ export default function ContextRail({ onAsk }: IContextRailProps): ReactElement
         <section aria-label="你的情境区">
             <h2 className="sidebar-title">你的情境</h2>
             <div className="context-rail">
-                {schedule.length > 0 && renderCard(onAsk != null, () => onAsk?.(ASK_SCHEDULE), (
+                {/* 整区可见时两卡恒渲染 (Task 14 空态裁决): 空卡显示友好文案且不可点 (可点性与数据在位绑定,
+                    话术锚定真实内容 — 空课表/空考试没有可"问"的东西, 维持纯展示). */}
+                {renderCard(schedule.length > 0 && onAsk != null, () => onAsk?.(ASK_SCHEDULE), (
                     <>
                         <span className="context-card-title">今日课表</span>
-                        {schedule.map(s => (
+                        {schedule.length === 0 ? (
+                            <span className="context-empty">今天没有课, 好好休息.</span>
+                        ) : schedule.map(s => (
                             <span key={`${s.course}@${s.timeRange}`} className="context-row">
                                 <span className="context-row-main">{s.course}</span>
                                 <span className="context-row-sub">{s.timeRange} · {s.location}</span>
@@ -84,23 +90,29 @@ export default function ContextRail({ onAsk }: IContextRailProps): ReactElement
                         ))}
                     </>
                 ))}
-                {(exams.length > 0 || agenda.length > 0) && renderCard(exams.length > 0 && onAsk != null, () => onAsk?.(ASK_EXAMS), (  //* 仅日程无考试时卡片不点 (话术以考试为锚), 纯展示 — 有意的不对称.
+                {renderCard(exams.length > 0 && onAsk != null, () => onAsk?.(ASK_EXAMS), (
                     <>
                         <span className="context-card-title">近期安排</span>
-                        {exams.map(ex => (
-                            <span key={`${ex.name}@${ex.date}`} className={isExamSoon(ex) ? 'context-row context-soon' : 'context-row'}>
-                                <span className="context-row-main">{ex.name}</span>
-                                <span className="context-row-sub">
-                                    <span className="context-exam-days">{examCountdown(ex.daysUntil)}</span> · {ex.location}
-                                </span>
-                            </span>
-                        ))}
-                        {agenda.map(a => (
-                            <span key={`${a.title}@${a.date}`} className="context-row">
-                                <span className="context-row-main">{a.title}</span>
-                                <span className="context-row-sub">{a.date}{a.note === '' ? '' : ` · ${a.note}`}</span>
-                            </span>
-                        ))}
+                        {exams.length === 0 && agenda.length === 0 ? (
+                            <span className="context-empty">近期没有考试或日程, 按自己的节奏来就好.</span>
+                        ) : (
+                            <>
+                                {exams.map(ex => (
+                                    <span key={`${ex.name}@${ex.date}`} className={isExamSoon(ex) ? 'context-row context-soon' : 'context-row'}>
+                                        <span className="context-row-main">{ex.name}</span>
+                                        <span className="context-row-sub">
+                                            <span className="context-exam-days">{examCountdown(ex.daysUntil)}</span> · {ex.location}
+                                        </span>
+                                    </span>
+                                ))}
+                                {agenda.map(a => (
+                                    <span key={`${a.title}@${a.date}`} className="context-row">
+                                        <span className="context-row-main">{a.title}</span>
+                                        <span className="context-row-sub">{a.date}{a.note === '' ? '' : ` · ${a.note}`}</span>
+                                    </span>
+                                ))}
+                            </>
+                        )}
                     </>
                 ))}
             </div>

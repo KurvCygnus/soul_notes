@@ -16,9 +16,9 @@ button { font: inherit; cursor: pointer; }
 /* 应用壳: 左栏 + 主区 (宽度数值在 Sidebar 内联, 这里只管形态与令牌配色) */
 .shell { display: flex; height: 100dvh; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
-/* 主区顶栏 (Task 12): 极简一行, 天气胶囊靠右; 胶囊 fail-silent 隐藏时壳内空无一节点, :empty 连内边距都不留 */
-.topbar { flex-shrink: 0; display: flex; justify-content: flex-end; padding: 8px 12px 0; }
-.topbar:empty { display: none; }
+/* 主区顶栏 (Task 12, Task 14 改常驻): 汉堡钮 (移动端抽屉入口, 桌面端 display:none) + 天气胶囊靠右;
+   汉堡 margin-right:auto 在桌面端因 display:none 失效, 胶囊单独在场时仍由 flex-end 靠右, 布局语义不漂移 */
+.topbar { flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 12px 0; }
 .sidebar { flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow: hidden; transition: width .18s ease; }
 .sidebar-toggle { align-self: flex-start; width: 30px; border: none; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 4px; border-radius: var(--radius); }
 .sidebar-toggle:hover { background: var(--card); color: var(--ink); }
@@ -28,7 +28,10 @@ button { font: inherit; cursor: pointer; }
 .sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .sidebar-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: var(--radius); color: var(--ink); text-decoration: none; font-size: 14px; }
 .sidebar-item:hover { background: var(--card); }
-.sidebar-preview { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 会话预览两行截断 (Task 14): 用 -webkit-line-clamp 前缀语法 — 虽带前缀, 但 Chrome/Edge/Safari/Firefox 68+
+   十余年全线支持, 而无前缀的新标准 line-clamp 独立语法 2024 年才落地且旧浏览器不认, 双写反而在支持差异下行为不一;
+   以覆盖面最稳的前缀版为准, 万一前缀失效则整段显示不破版. overflow:hidden 同时把 flex 子项的 min-width 归零, 预览可收缩换行. */
+.sidebar-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .sidebar-del { flex-shrink: 0; margin-left: auto; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; }
 .sidebar-del:hover { color: var(--danger); }
 .sidebar-mini { border: none; background: none; color: var(--muted); font-size: 13px; padding: 2px 0; }
@@ -41,6 +44,7 @@ button.context-card { cursor: pointer; }
 button.context-card:hover { border-color: var(--brand); }
 .context-card-title { font-size: 12px; color: var(--muted); }
 .context-row { display: flex; flex-direction: column; gap: 1px; padding: 2px 0; }
+.context-empty { font-size: 12px; color: var(--faint); }
 .context-row-main { font-size: 13px; font-weight: 600; }
 .context-row-sub { font-size: 12px; color: var(--muted); }
 .context-exam-days { font-weight: 600; }
@@ -49,7 +53,9 @@ button.context-card:hover { border-color: var(--brand); }
 /* 天气胶囊 (Task 12): 顶栏右侧芯片 + 下拉三分值 mini 条 (popover 局部定位在胶囊容器内) */
 .weather-capsule { position: relative; }
 .weather-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 3px 12px; font-size: 13px; box-shadow: var(--shadow); }
-.weather-chip:hover { border-color: var(--brand); }
+/* hover 提示只属于可点按钮 (Task 14): 空态 div 套同款外观但不给 hover 变色, 避免假可点暗示. */
+button.weather-chip:hover { border-color: var(--brand); }
+.weather-chip-empty { cursor: default; }
 .weather-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 220px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
 .weather-pop-title { margin: 0; font-size: 13px; font-weight: 600; }
 .weather-bar { display: flex; flex-direction: column; gap: 3px; }
@@ -133,3 +139,29 @@ button.context-card:hover { border-color: var(--brand); }
 .red-alert-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .red-alert-more { color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* 移动端抽屉 (Task 14, <768px): 左栏变固定定位 overlay 抽屉, 汉堡钮是唯一入口.
+   开合判定纯 CSS 媒体查询驱动 (React 态只切 .drawer-open 类): jsdom 不求值媒体查询也不加载 CSS,
+   既有测试零改动即保持桌面形态, 免去 matchMedia mock. 汉堡钮常驻 DOM, >=768px 时 display:none
+   同时把它移出 Tab 序与读屏树, 桌面端无任何残留. */
+.drawer-hamburger { display: none; margin-right: auto; border: none; background: none; color: var(--ink); font-size: 18px; line-height: 1; padding: 2px 8px; border-radius: var(--radius); }
+.drawer-hamburger:hover { background: var(--card); }
+.drawer-overlay { display: none; }
+@media (max-width: 767px)
+{
+  .drawer-hamburger { display: inline-flex; }
+  .sidebar
+  {
+    /*? React 内联 width (48/260px) 的优先级高于任何选择器, 只有 !important 能在抽屉形态下压过它. */
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 80; width: min(78vw, 300px) !important;
+    transform: translateX(-105%);
+    /*? visibility 隐藏把收起的抽屉移出 Tab 序与读屏树 (纯 CSS 判定, 桌面端不受影响); 延迟 0.2s 等滑出动画播完再隐藏. */
+    visibility: hidden;
+    transition: transform .2s ease, visibility 0s linear .2s;
+  }
+  .sidebar.drawer-open { transform: translateX(0); visibility: visible; transition: transform .2s ease; }
+  /* 遮罩 scrim 复用 .red-alert-overlay 的前例特许裸值 rgba(47, 59, 58, .5) (即亮色 --ink 带透明度):
+     遮罩层需要半透明暗色而令牌无 alpha 形态, 沿用既有常量不新造颜色. z-index 70 低于抽屉 80, 高于登录浮层 60 —
+     抽屉内点登录会先收抽屉再开门, 两浮层不同时在场; 100 的 RED 预警弹窗仍在一切之上. */
+  .drawer-open > .drawer-overlay { display: block; position: fixed; inset: 0; z-index: 70; background: rgba(47, 59, 58, .5); }
+}

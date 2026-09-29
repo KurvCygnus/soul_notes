@@ -7,6 +7,9 @@
 //* sessions 列表比对自行复位 hero (壳不追踪"当前打开"状态).
 //* Task 12: 通道再延展 — sendRequest (情境卡 onAsk → ChatView 聊天模式发送, 同 nonce 机制);
 //* 主区顶部加极简 topbar 挂天气胶囊 (仅登录后渲染, 胶囊自身 fail-silent).
+//* Task 14: topbar 常驻并挂汉堡钮 — <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉, 汉堡是唯一入口.
+//* 抽屉开合态是组件局部 React 态 (不落盘); 访客同样可见 (危机支持是公开路由红线, 移动端不能没有侧栏入口).
+//* 开合判定纯 CSS 媒体查询驱动: jsdom 不求值媒体查询, 既有测试零改动保持桌面形态 (免 matchMedia mock).
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { Outlet } from 'react-router-dom'
@@ -35,9 +38,11 @@ export default function AppShell(): ReactElement
     const [sessionState, setSessionState] = useState<{ owner: string | null; list: ChatSessionVo[] | null }>({ owner: null, list: null })
     const [openRequest, setOpenRequest] = useState<ISessionOpenRequest | null>(null)
     const [sendRequest, setSendRequest] = useState<ISendRequest | null>(null)
+    //* 移动端抽屉开合态: 组件局部, 刻意不持久化 (桌面/移动共享同一状态, 落盘反而会在换端时误开抽屉).
+    const [drawerOpen, setDrawerOpen] = useState(false)
     const sessions = user != null && sessionState.owner === user.userId ? sessionState.list : null
 
-    //* 会话列表随登录态拉取: 拉取失败降级空列表 (侧栏显示"暂无会话", 不阻塞聊天); setState 全在异步回调,
+    //* 会话列表随登录态拉取: 拉取失败降级空列表 (侧栏显示空态文案, 不阻塞聊天); setState 全在异步回调,
     //* 不在 effect 体内同步触发级联渲染. 访客不拉取, 派生层直接失明.
     useEffect(() =>
     {
@@ -62,7 +67,9 @@ export default function AppShell(): ReactElement
 
     const handleOpenSession = useCallback((id: string) =>
     {
-        //* nonce 单调递增: 同一会话重复点击也重新下发, 由 ChatView 的 openSession 幂等短路.
+        //* 抽屉内点会话: 先收抽屉 (否则移动端抽屉继续盖住聊天区), 再 nonce 单调递增下发 —
+        //* 同一会话重复点击也重新下发, 由 ChatView 的 openSession 幂等短路. 桌面端 drawerOpen 恒 false, 无副作用.
+        setDrawerOpen(false)
         setOpenRequest(prev => ({ sessionId: id, nonce: (prev?.nonce ?? 0) + 1 }))
     }, [])
 
@@ -70,8 +77,24 @@ export default function AppShell(): ReactElement
     //* 判重台账在 ChatView 模块级 (跨挂载存活): 壳不必在登出/换号时清理 sendRequest, 台账挡住重放即可.
     const handleAsk = useCallback((q: string) =>
     {
+        setDrawerOpen(false)  //* 同 handleOpenSession: 抽屉内点情境卡, 发送后让用户看到聊天流.
         setSendRequest(prev => ({ content: q, nonce: (prev?.nonce ?? 0) + 1 }))
     }, [])
+
+    //* 抽屉 Escape 关闭: 仅打开期间挂 document 级监听, 收起/卸载即注销 (与 LoginSheet 同形);
+    //! 有意不与登录浮层抢 Escape: 抽屉内点登录会先收抽屉再开门, 两浮层不会同时在场.
+    useEffect(() =>
+    {
+        if(!drawerOpen)
+            return
+        const onKey = (e: KeyboardEvent): void =>
+        {
+            if(e.key === 'Escape')
+                setDrawerOpen(false)
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+    }, [drawerOpen])
 
     const handleDeleteSession = useCallback((id: string) =>
     {
@@ -87,19 +110,30 @@ export default function AppShell(): ReactElement
             <Sidebar
                 collapsed={collapsed}
                 onToggle={() => setCollapsed((c) => !c)}
-                onOpenLogin={user == null ? () => gate.requireAuth(() => {}) : undefined}
+                onOpenLogin={user == null ? () => { setDrawerOpen(false); gate.requireAuth(() => {}) } : undefined}
                 sessions={sessions ?? undefined}
                 onDeleteSession={handleDeleteSession}
                 onOpenSession={handleOpenSession}
                 onAsk={handleAsk}
+                drawerOpen={drawerOpen}
+                onCloseDrawer={() => setDrawerOpen(false)}
             />
             <main className="main">
-                {/* 顶栏天气胶囊: 仅登录后挂载 (访客不占位); 胶囊对 401/空数据自行隐藏 (fail-silent). */}
-                {user != null && (
-                    <div className="topbar">
-                        <WeatherCapsule />
-                    </div>
-                )}
+                {/* 顶栏: 汉堡钮 (移动端抽屉唯一入口, 常驻 DOM, 桌面端 CSS display:none) + 天气胶囊 (仅登录后挂载,
+                    访客不占位; 胶囊失败/数据缺席时 fail-silent 隐藏, 成功但今日无记录则显示空态文案). */}
+                <div className="topbar">
+                    <button
+                        type="button"
+                        className="drawer-hamburger"
+                        aria-label={drawerOpen ? '关闭导航菜单' : '打开导航菜单'}  //* 开合两态换向标签: aria-expanded 之外再给读屏一个动词级语义.
+                        aria-expanded={drawerOpen}
+                        aria-controls="sidebar-body"
+                        onClick={() => setDrawerOpen(true)}
+                    >
+                        ☰
+                    </button>
+                    {user != null && <WeatherCapsule />}
+                </div>
                 <Outlet context={ctx} />
             </main>
             {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用. */}

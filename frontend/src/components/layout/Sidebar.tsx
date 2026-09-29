@@ -4,6 +4,8 @@
 //* Task 10 契约扩展: 新增可选 onOpenSession (点击会话项打开), 既有 prop 语义与缺省行为不变.
 //* Task 12 契约扩展: 新增可选 onAsk (情境卡唤起聊天), "你的情境"占位由 <ContextRail/> 实体取代 —
 //* 数据自加载, 空数组/失败整区自动静默 (adapter=none 自动静默); onAsk 缺省时卡片退化为纯展示.
+//* Task 14 契约扩展: 新增可选 drawerOpen/onCloseDrawer — <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉,
+//* 开合态由壳持有 (组件局部的 React 态, 不落盘); 两 prop 缺省即桌面形态, 既有调用方零改动.
 import { Link } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import ContextRail from '../sidebar/ContextRail'
@@ -26,6 +28,9 @@ export interface ISidebarProps
     //* Task 12 扩展: 提供时情境卡可点唤起聊天发送, 缺省纯展示 (向后兼容).
     onAsk?(q: string): void
     onOpenLogin?(): void
+    //* Task 14 扩展: 移动端抽屉开合态 (仅驱动 className/遮罩渲染), 缺省 false 即桌面形态.
+    drawerOpen?: boolean
+    onCloseDrawer?(): void
 }
 
 //* 删除是破坏性操作: 以原生 confirm 二次确认 (测试 mock 该方法断言门控), 拒绝即不动数据.
@@ -37,9 +42,10 @@ function requestDelete(session: ChatSessionVo, onDeleteSession?: (id: string) =>
         onDeleteSession(session.sessionId)
 }
 
-export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onAsk, onOpenLogin }: ISidebarProps): ReactElement
+export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onAsk, onOpenLogin, drawerOpen, onCloseDrawer }: ISidebarProps): ReactElement
 {
     const guest = onOpenLogin != null
+    const drawer = drawerOpen === true
 
     //* 折叠切换持久化: 先按当前形态计算去向再落盘, 壳据此翻转 React 态 (存储所有权在组件, 壳只管渲染).
     const handleToggle = (): void =>
@@ -49,7 +55,11 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
     }
 
     return (
-        <aside className="sidebar" style={{ width: collapsed ? WIDTH_COLLAPSED : WIDTH_EXPANDED }}>
+        <aside className={drawer ? 'sidebar drawer-open' : 'sidebar'} style={{ width: collapsed ? WIDTH_COLLAPSED : WIDTH_EXPANDED }}>
+            {/* 抽屉遮罩: 仅抽屉态渲染, 点击即关 (Escape 关闭归壳); 桌面端该节点根本不出现, 无回归面. */}
+            {drawer && onCloseDrawer != null && (
+                <div className="drawer-overlay" aria-hidden="true" onClick={onCloseDrawer} />
+            )}
             <button
                 type="button"
                 className="sidebar-toggle"
@@ -77,7 +87,7 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                         <section aria-label="会话区">
                             <h2 className="sidebar-title">会话</h2>
                             {sessions == null || sessions.length === 0 ? (
-                                <p className="sidebar-empty">暂无会话</p>
+                                <p className="sidebar-empty">还没有会话, 想聊的时候随时开始.</p>
                             ) : (
                                 <ul className="sidebar-list">
                                     {sessions.map((s) => (

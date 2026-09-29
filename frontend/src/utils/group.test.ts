@@ -1,6 +1,6 @@
 //* 时间分组纯函数测试: 注入 now 保证时区无关 (所有期望日期都用本地构造再转 ISO 往返).
 import { describe, expect, it } from 'vitest'
-import { groupMessages } from './group'
+import { formatRelative, groupMessages } from './group'
 
 //* 注入时钟: 本地 2026-09-28 正午. 所有消息时间同样本地构造, 经 toISOString 往返不受运行机时区影响.
 const NOW = new Date(2026, 8, 28, 12, 0, 0)
@@ -70,5 +70,24 @@ describe('groupMessages (消息时间分组)', () =>
         expect(groupMessages([], NOW)).toEqual([])
         const groups = groupMessages([{ role: 'user', content: '坏时间戳', ts: 'not-a-date' }], NOW)
         expect(groups).toEqual([{ label: '', items: [expect.objectContaining({ content: '坏时间戳', ts: null })] }])
+    })
+})
+
+describe('formatRelative (相对时间)', () =>
+{
+    it('±60s 为刚刚, 60s 起为 N 分钟前, 60m 整落到同日 H:mm (边界逐秒验证)', () =>
+    {
+        expect(formatRelative(new Date(2026, 8, 28, 11, 59, 1).toISOString(), NOW)).toBe('刚刚')
+        expect(formatRelative(new Date(2026, 8, 28, 12, 0, 30).toISOString(), NOW)).toBe('刚刚')  //* 未来 30s 的时钟偏移也归刚刚.
+        expect(formatRelative(new Date(2026, 8, 28, 11, 59, 0).toISOString(), NOW)).toBe('1 分钟前')
+        expect(formatRelative(new Date(2026, 8, 28, 11, 0, 1).toISOString(), NOW)).toBe('59 分钟前')
+        expect(formatRelative(new Date(2026, 8, 28, 11, 0, 0).toISOString(), NOW)).toBe('11:00')  //* 满 60 分钟改走同日时刻.
+    })
+
+    it('昨天以"昨天"呈现, 更早回退 M-D, 非法时间串返回空串', () =>
+    {
+        expect(formatRelative(new Date(2026, 8, 27, 23, 30, 0).toISOString(), NOW)).toBe('昨天')
+        expect(formatRelative(new Date(2026, 8, 15, 8, 5, 0).toISOString(), NOW)).toBe('9-15')
+        expect(formatRelative('not-a-date', NOW)).toBe('')
     })
 })
