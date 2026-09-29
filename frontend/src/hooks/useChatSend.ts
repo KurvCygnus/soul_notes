@@ -147,10 +147,14 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
             startNewChat()
     }, [sessions, startNewChat])
 
-    //* 登出复位 (隐私): user 从有到无即清屏, 避免他人接管浏览器时读到上一账号的对话内容.
+    //* 登出复位 (隐私): user -> null 即无条件清屏 ([[startNewChat]] = abort 在途流 + ++gen 使一切迟到回调
+    //* 失效 + 清 messages/streaming/streamError/sessionIdRef). 不能以 sessionIdRef 是否已绑定作前置:
+    //* meta 未达 (未绑定窗口) 与新会话降级全程 sessionIdRef 均为 null, 条件化会让乐观气泡与迟到的
+    //* 降级回复留在已登出的屏幕上. 幂等: 空屏重复执行无副作用; 再登录分支不在此处理.
     useEffect(() =>
     {
-        if(user == null && sessionIdRef.current != null)
+        if(user == null)
+            // oxlint-disable-next-line react/set-state-in-effect //! 登出清屏是对认证状态迁移的响应式复位, 属 effect 的合法外部系统同步; 渲染期调整或 key 重挂会扩大改动面, 规则的级联担忧在此不成立 (登出是低频单次迁移).
             startNewChat()
     }, [user, startNewChat])
 
