@@ -88,7 +88,8 @@ kurvcygnus.soulnotes/
 │   ├── HttpModelCatalog.java          # /models 拉取实现 (endpoint 规范化 + 扩展字段)
 │   ├── tool/
 │   │   ├── CrisisInterventionTool.java# RED 时返回热线信息
-│   │   └── UserContextTool.java       # 近期情绪摘要 (数据库上下文工具)
+│   │   ├── UserContextTool.java       # 近期情绪摘要 (数据库上下文工具)
+│   │   └── DomainDataTool.java        # 领域数据按需查询 (课表/考试, ai.domain.tool.enabled 默认关)
 │   └── retriever/
 │       ├── PsychologyTipsRetriever.java # 心理小知识检索 (知识包消费方)
 │       └── KnowledgePackLoader.java   # knowledge/{pack}/tips.md 块格式加载 + default 回退
@@ -109,6 +110,14 @@ kurvcygnus.soulnotes/
 │   │   ├── dto/                       # ChatSendRequest / ChatMessageVo / ChatSessionVo
 │   │   ├── resource/ChatResource.java # /chat/send, /stream (SSE), /sessions, /sessions/{id}/messages, DELETE /sessions/{id}
 │   │   └── service/ChatService.java   # 对话编排 + 预警推送
+│   ├── context/                       # 领域情境集成 (课表/考试/日程, 五件套与条目模型)
+│   │   ├── DomainDataPort.java        # 取数 SPI (实现方自持 fail-open 契约: 失败/超时一律空集)
+│   │   ├── DomainDataGateway.java     # 配置化网关 (ai.domain.adapter 分派, 2s 超时 + 失败降级空集)
+│   │   ├── SimulatedCampusAdapter.java# 模拟校园数据源 (演示/联调, 预留真实教务适配器位)
+│   │   ├── DomainContextInjector.java # 情境块注入 ([学生情境] 紧凑块 ≤400 字, 并入 system prompt)
+│   │   ├── ContextResource.java       # GET /api/v1/context/summary (前端情境卡聚合端点)
+│   │   ├── DomainItems.java           # 三类条目 record (ScheduleItem/ExamItem/AgendaItem)
+│   │   └── dto/ContextSummaryVo.java  # 聚合 VO (三数组恒非 null)
 │   ├── voice/
 │   │   ├── dto/                       # VoiceUploadResponse
 │   │   ├── resource/VoiceResource.java# /upload (同步本地转录), /files/{id}
@@ -198,10 +207,22 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 - 系统提示词集中在 `AiPromptConstants` (情感分析 / 预警检测 / 共情对话), 经 `PromptProvider` 支持 `ai.prompt.*` 机构整体覆盖 (留空回退内置)
 - 结构化输出管线 ("副医生"预埋): `SOULNOTES_CLINICAL_TAGGING=on` 时共情提示词末尾合并功能契约段 (契约段首行声明优先级最高), 回复末尾的 `<!--soulnotes {...}-->` 块由 `ClinicalOutputSplitter` 拆流 — 落库/返回均为剔除后的正文, 前端仅见文本; 解析失败整条透传 (默认关闭, 控每条消息 token 成本)
-- 工具: `CrisisInterventionTool` (RED 热线), `UserContextTool` (近期情绪摘要)
+- 工具: `CrisisInterventionTool` (RED 热线), `UserContextTool` (近期情绪摘要), `DomainDataTool` (课表/考试按需查询, `ai.domain.tool.enabled` 默认关)
 - 心理小知识: `PsychologyTipsRetriever` 消费 `KnowledgePackLoader` 加载的知识包 (`knowledge/{pack}/tips.md`, 缺失回退 `default`, 内置 13 条)
 - 模型目录: `HttpModelCatalog` 拉取服务端 `/models` 列表 (向导模型选择步), endpoint 规范化, 扩展字段 (上下文长度/思考能力) 有则显示
 - 配置经 `quarkus.langchain4j.openai.*`; AI 不可用时走兜底 (聊天返回"走神"兜底文案, 日记跳过 analysisResult)
+
+### 6.1 领域集成 (学生情境: 课表/考试/日程)
+
+校园领域数据经五件套接入共情链路与前端情境卡, 设计红线是 **fail-open 边界: 任何失败/超时一律降级空集 (空串), 绝不拖垮对话与预警主链路** — 情境是增强项而非必需项, 其缺失不得影响核心体验:
+
+- **端口** `DomainDataPort`: 取数 SPI (`todaySchedule` / `upcomingExams` / `recentAgenda`), 契约即"实现方自持空集收场, 绝不向主链路外抛"; 命名未循 `I` 前缀为跨任务计划契约 (前后端均按此名对齐)
+- **网关** `DomainDataGateway`: 端口的配置化出口 (自身即端口实现), 按 `ai.domain.adapter` 分派 — `none` (默认) 直接空集全链路静默, `simulated` 委派模拟源; 统一 2s 超时 + 失败降级, 降级两路均 WARN 留痕 (静默降级会让挂死适配器在运维上不可见)
+- **模拟源** `SimulatedCampusAdapter`: 演示与联调用的模拟校园数据 (课表按星期生成, 考试锚定调用日 +6/+13/+20 天, 倒计时恒定不穿帮), 对外叙事为"标准接入层", 预留真实教务适配器位
+- **注入** `DomainContextInjector`: 三路并联取数渲染为紧凑中文情境块 (`[学生情境]` 起头, 上限 400 字防 prompt 膨胀), 由 `ChatService.buildSystemPrompt` 拼入共情 system prompt (基础段与契约段之间); 无数据 = 空串 = 提示词零变化, 本层再兜底降级空串, 恒不向对话主链路外抛
+- **工具** `DomainDataTool`: AI 按需查询今日课表与近期考试 (`ai.domain.tool.enabled` 默认关, 关闭时返回固定未开启提示), 文本形状与注入块对齐; 仿 `UserContextTool` 的 fail-safe 契约, 任何失败形态降级固定提示文本绝不抛出
+
+消费端两路: 共情对话 prompt 注入 (见上) 与 REST `GET /api/v1/context/summary` (`ContextResource`, 学生角色, 三数组恒非 null — `adapter=none` 或降级时空集, 前端据此隐藏情境区). 默认配置 (`adapter=none` + 工具关) 下全链路零行为变化; 领域数据仅作关怀性增强, 预警判定与分发链路零参与.
 
 ---
 
@@ -271,6 +292,7 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 | `crisis.hotline.*`                                               | 热线默认值                                                                                                                                                                                                                                                                                                                         |
 | `voice.storage.directory` / `SOULNOTES_VOICE_DIR`                | 语音文件存储目录                                                                                                                                                                                                                                                                                                                   |
 | `weather.threshold.*`                                            | 天气映射阈值                                                                                                                                                                                                                                                                                                                       |
+| `ai.domain.adapter` / `ai.domain.tool.enabled` / `SOULNOTES_AI_DOMAIN_TOOL` | 领域情境适配器 (`none` 默认全链路空集静默 / `simulated` 模拟校园源, 无专用环境变量) / 领域数据工具开关 (默认 false, 关闭时工具返回固定未开启提示)                                                                                                                                                                                    |
 | `rate.limit.chat.max-per-minute` / `SOULNOTES_RATE_LIMIT_CHAT`   | 聊天限流上限 (默认 20 次/分钟)                                                                                                                                                                                                                                                                                                     |
 | `rate.limit.login.max-per-minute` / `SOULNOTES_RATE_LIMIT_LOGIN` | 登录限流上限 (默认 10 次/分钟)                                                                                                                                                                                                                                                                                                     |
 | `rate.limit.voice.max-per-minute` / `SOULNOTES_RATE_LIMIT_VOICE` | 语音上传限流上限 (默认 10 次/分钟, 不进向导清单)                                                                                                                                                                                                                                                                                   |
@@ -283,7 +305,7 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 ## 12. 测试覆盖
 
-- 单元/集成测试 550 个 (`backend/` 下 `./gradlew :test`), 覆盖: 异常体系 / 工具类 / DTO 边界 / Service 反射逻辑 / Resource 结构 / Agent 签名 / 知识包加载与回退 / 五预警渠道行为 (Webhook 负载与禁用态 / 短信逐号群发与回环验真 / 钉钉企微 markdown 报文与加签 / 阿里云签名纯函数 / 五渠道装配证明) / RED 冷却闸门 (命中抑制全渠道 / 放行 fan-out / 判定失败 fail-open / 0 禁用短路 / per-user 冷却键) / issuer 一致性 / ASR 运行时下载与引擎 (无动态库真机用例 assumeTrue 跳过) / FFM 接口层 / URL 解析 / DB 五态映射 (fake gateway) / 模型列表解析 / zip 下载解压 (本地 fixture) / 配置管线 (Pre-Launch 校验与向导)
+- 单元/集成测试 571 个 (`backend/` 下 `./gradlew :test`), 覆盖: 异常体系 / 工具类 / DTO 边界 / Service 反射逻辑 / Resource 结构 / Agent 签名 / 知识包加载与回退 / 五预警渠道行为 (Webhook 负载与禁用态 / 短信逐号群发与回环验真 / 钉钉企微 markdown 报文与加签 / 阿里云签名纯函数 / 五渠道装配证明) / RED 冷却闸门 (命中抑制全渠道 / 放行 fan-out / 判定失败 fail-open / 0 禁用短路 / per-user 冷却键) / issuer 一致性 / ASR 运行时下载与引擎 (无动态库真机用例 assumeTrue 跳过) / FFM 接口层 / URL 解析 / DB 五态映射 (fake gateway) / 模型列表解析 / zip 下载解压 (本地 fixture) / 配置管线 (Pre-Launch 校验与向导) / 领域情境集成 (网关 fail-open 空集与超时 / 注入器渲染与 400 字截断 / 领域工具开关与失败兜底 / 模拟源周历数据 / 情境端点三数组契约)
 - Mock-LLM 全链路 (OpenAI 兼容零依赖 mock, `src/test/.../support/`): `/chat/send` 与 `/chat/stream` (SSE 分块) / 预警链路 (mock 判 RED → `warning_triggered` 落库) / 工具调用 (`@MemoryId` UUID 透传与工具结果回流) / `/ws/chat` WebSocket 流式 / JSONB 原生查询断言 (`jsonb_typeof`) / 结构化输出契约拆流 (on/off/坏格式三态) / 副医生评估落库全链路 (RED 实名解锁 / YELLOW 掩码脱敏 / NONE 不落库)
 - 咨询员工作台单元层: `RevealPolicy` 解锁矩阵 (RED/YELLOW/NEVER, 非法值回落 RED, 短码跨调用稳定) / `ClinicalAssessmentService` 落库与脱敏视图 / `ClinicalResource` 角色与参数校验 (`@BeanParam` 缺席分页收敛默认 第1页/每页20) / `ClinicalFeedWebSocket` 生命周期与网关角色断言 / `ClinicalRetentionCleaner` (<=0 禁用短路, 正数清理)
 - 语音链路以 `FixedAsrEngine` 固定转录文本注入, 不依赖真实模型与动态库
@@ -304,4 +326,4 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 ## 14. 部署与配置
 
-部署形态 (打包运行 / JVM 镜像 / docker-compose / Kubernetes / Native 镜像), 环境变量总表 (53 项 `SOULNOTES_*`), 配置向导与启动前校验, 以及机构集成 (本地 ASR / 预警渠道矩阵 / 知识包 / 结构化输出) 的**单一权威参考是 [CONFIGURATION.md](./CONFIGURATION.md)** — 本文档不再重复维护, 防双源漂移.
+部署形态 (打包运行 / JVM 镜像 / docker-compose / Kubernetes / Native 镜像), 环境变量总表 (54 项 `SOULNOTES_*`), 配置向导与启动前校验, 以及机构集成 (本地 ASR / 预警渠道矩阵 / 知识包 / 结构化输出) 的**单一权威参考是 [CONFIGURATION.md](./CONFIGURATION.md)** — 本文档不再重复维护, 防双源漂移.

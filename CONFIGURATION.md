@@ -22,7 +22,7 @@
 
 ## 1. 配置总览
 
-全部配置遵循 12-factor: 每个业务键都是 `application.properties` 中的 `${SOULNOTES_*:default}` 占位 — 环境变量优先, 未配置时回落内置默认, 无需触碰任何文件即可完成覆盖. 53 个 `SOULNOTES_*` 键中 51 项可经 `--setup` 向导交互式配置, 其余 2 项 (品牌名 / 语音限流) 属部署微调, 保持内置默认即可.
+全部配置遵循 12-factor: 每个业务键都是 `application.properties` 中的 `${SOULNOTES_*:default}` 占位 — 环境变量优先, 未配置时回落内置默认, 无需触碰任何文件即可完成覆盖. 54 个 `SOULNOTES_*` 键中 51 项可经 `--setup` 向导交互式配置, 其余 3 项 (品牌名 / 语音限流 / 领域数据工具) 属部署微调, 保持内置默认即可.
 
 AI 三项 (`ai.openai.*`) 经 LangChain4j 桥接键 (`quarkus.langchain4j.openai.*`) 引用展开值, 单独配置桥接键不生效. `mp.jwt.verify.issuer` 与 TokenService 签发的 iss claim 共用 `SOULNOTES_JWT_ISSUER` 一个键 (双端天然一致), 中途更换将使全部已发 Token 立即失效.
 
@@ -146,9 +146,12 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 | `SOULNOTES_WEATHER_SUNNY`             | 晴天阈值 (正向均值 >= 阈值)                            | `0.6`                                     |
 | `SOULNOTES_CHAT_HISTORY_MAX`          | 对话历史滚动上限 (条)                                  | `50`                                      |
 | `SOULNOTES_MOOD_RECENT_DAYS`          | 用户上下文工具回溯近期日记/情绪记录的天数              | `7`                                       |
+| `SOULNOTES_AI_DOMAIN_TOOL`            | 领域数据工具开关 (开启后 AI 可按需查询课表/考试; 取数源见下文 `ai.domain.adapter`) | `false`        |
 | `SOULNOTES_PROMPT_EMPATHETIC_CHAT`    | 共情倾听系统提示词覆盖, 留空使用内置默认               | 空                                        |
 | `SOULNOTES_PROMPT_WARNING_DETECTION`  | 预警分级提示词覆盖, 留空使用内置默认 (覆盖时机构自担分级标准漂移风险) | 空                         |
 | `SOULNOTES_PROMPT_MOOD_ANALYSIS`      | 情绪分析提示词覆盖, 留空使用内置默认                   | 空                                        |
+
+领域集成取数源无专用 `SOULNOTES_*` 键, 以配置键 `ai.domain.adapter` 直接覆盖 (系统属性 / 自定义配置文件均可): `none` (默认, 情境注入 / 情境端点 / 领域工具全链路空集静默) 或 `simulated` (内置模拟校园数据源, 演示与联调用, 已预留真实教务适配器位). 组合语义: `adapter=none` 时无论工具开关, AI 按需查询仅得未开启提示, 学生情境接口 `GET /api/v1/context/summary` 恒为三空数组; 取数失败/超时统一 fail-open 降级空集, 绝不影响对话与预警主链路.
 
 ## 6. 部署
 
