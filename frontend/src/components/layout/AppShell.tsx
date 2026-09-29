@@ -12,10 +12,12 @@ import type { ReactElement } from 'react'
 import { Outlet } from 'react-router-dom'
 import { deleteSession, listSessions } from '../../api/chat'
 import { useAuth } from '../../hooks/useAuth'
+import { useAlert } from '../../hooks/useAlert'
 import { useChatGate } from '../../hooks/useChatGate'
 import { toast } from '../../utils/toast'
 import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
+import RedAlertModal from '../alert/RedAlertModal'
 import Sidebar from './Sidebar'
 import { SIDEBAR_PREF_KEY } from './Sidebar'
 import type { IChatViewContext, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
@@ -25,6 +27,7 @@ export default function AppShell(): ReactElement
 {
     const { user } = useAuth()
     const gate = useChatGate()
+    const { red, dismissRed } = useAlert()
     //* 惰性还原: 首渲染读偏好, 缺省展开 (存储取值归 Sidebar 所有, 这里只消费 'collapsed' 语义).
     const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_PREF_KEY) === 'collapsed')
     //* 会话状态带账号标签: 列表只对"拉取它的那个账号"可见 (派生判定, 账号切换瞬间旧列表立即失明,
@@ -101,6 +104,9 @@ export default function AppShell(): ReactElement
             </main>
             {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用. */}
             {gate.open && <LoginSheet onAuthed={(d) => gate.confirm(d)} onCancel={gate.cancel} />}
+            {/* RED 预警弹窗挂在路由内容之外 (Task 13 brief): / ↔ /crisis 切换不卸载, z-index 置顶盖过登录浮层;
+                关闭只经显式"我知道了"/跳转危机页, 弹窗自身不响应 Escape. */}
+            {red != null && <RedAlertModal alert={red} onClose={dismissRed} />}
         </div>
     )
 }

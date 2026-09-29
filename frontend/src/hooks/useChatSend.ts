@@ -12,6 +12,7 @@ import { createDiary } from '../api/diary'
 import { ApiError } from '../api/http'
 import { toast } from '../utils/toast'
 import { useAuth } from './useAuth'
+import { useAlert } from './useAlert'
 import { useChatGate } from './useChatGate'
 import type { ComposerMode } from '../components/chat/Composer'
 import type { ISessionOpenRequest } from '../views/chatContext'
@@ -75,6 +76,7 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
     //* 登出瞬间未读会话内容必须立即离开屏幕, 不能等下一次交互.
     const { user } = useAuth()
     const gate = useChatGate()
+    const { showRed } = useAlert()  //* 日记 RED 兜底出口 (产品红线): 与 WS 在线推送共用同一弹窗入口.
 
     const [messages, setMessages] = useState<IDisplayMessage[]>([])
     const [streaming, setStreaming] = useState(false)
@@ -240,14 +242,26 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
     }, [finalizeSend])
 
     //* 记一笔提交 (Task 11): 不入消息流, 走日记域 API; 成败均以轻提示收尾, 不打断当前视图.
-    //* TODO(Task 13): RED 预警接线点 — 创建成功后此处检查响应 DiaryItem.analysisResult?.warningLevel,
-    //* 命中高危时改走危机域 (弹热线浮层), 普通成功才落 success toast.
+    //* Task 13 RED 兜底 (产品红线: 记一笔走日记接口必须保住日记预警链): createDiary 成功且
+    //* warningLevel === 'RED' 时改走危机域 showRed 弹热线浮层 (不落 success toast), 与 WS 同款弹窗;
+    //* 号码不在负载里传 — 弹窗自取三级缓存, 离线场景由内置默认兜底. summary 为空时落暖文案 (非医疗化).
     const submitDiary = useCallback((content: string) =>
     {
         createDiary({ content }).
-            then(() => toast('记好了, 我会好好收藏.', 'success')).
+            then(diary =>
+            {
+                if(diary.analysisResult?.warningLevel === 'RED')
+                {
+                    showRed({
+                        type: 'RED_ALERT',
+                        reason: diary.analysisResult.summary ?? '我们注意到你此刻可能过得很难. 别一个人扛, 热线那头有人愿意听你慢慢说.',
+                    })
+                    return
+                }
+                toast('记好了, 我会好好收藏.', 'success')
+            }).
             catch(() => toast('没能记下这一笔, 请稍后再试.', 'error'))
-    }, [])
+    }, [showRed])
 
     //* 发送入口 (Task 11 Composer 接线): 访客点发送 → 门拦截开浮层, confirm 落登录态后补发; 已登录直接放行.
     const handleSend = useCallback((content: string, mode: ComposerMode) =>

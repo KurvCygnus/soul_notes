@@ -112,4 +112,24 @@ button.context-card:hover { border-color: var(--brand); }
 .crisis-card p { margin: 0; }
 .crisis-loading { color: var(--faint); }
 .crisis-emergency { margin: 0; color: var(--danger); font-weight: 600; }
+/* 危机页真实数据态 (Task 13): 主号码放大可点拨, 寄语弱化不喧宾 */
+.crisis-phone { display: inline-block; margin: 2px 0 8px; font-size: 24px; font-weight: 700; color: var(--ink); text-decoration: none; }
+.crisis-phone:hover { color: var(--brand); }
+.crisis-message { color: var(--muted); }
+
+/* RED 预警弹窗 (Task 13): 全屏置顶安全模态, 暖底非医疗化文案 + danger 令牌点缀;
+   z-index 100 高于 .modal-overlay (60) — 危机弹窗必须盖过登录浮层等一切常规浮层 */
+.red-alert-overlay { position: fixed; inset: 0; z-index: 100; background: rgba(47, 59, 58, .5); display: grid; place-items: center; padding: 16px; }
+.red-alert-panel { width: min(480px, 100%); max-height: 90dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--danger); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.red-alert-panel h2 { margin: 0; font-size: 18px; color: var(--danger); }
+.red-alert-reason { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 600; }
+.red-alert-warm { margin: 0; color: var(--muted); font-size: 14px; }
+.red-alert-call { display: block; text-align: center; padding: 14px 16px; border-radius: var(--radius); background: var(--danger); color: #fff; font-size: 20px; font-weight: 700; text-decoration: none; }
+.red-alert-call:hover { filter: brightness(1.08); }
+.red-alert-call:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.red-alert-backup { margin: 0; font-size: 14px; }
+.red-alert-backup a { color: var(--ink); font-weight: 600; }
+.red-alert-book { text-align: center; text-decoration: none; }
+.red-alert-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.red-alert-more { color: var(--muted); font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

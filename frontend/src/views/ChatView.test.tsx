@@ -13,6 +13,7 @@ import { TOKEN_KEY } from '../api/http'
 import { createDiary, uploadVoice } from '../api/diary'
 import { streamMessage } from '../api/chat'
 import { AuthProvider } from '../context/AuthContext'
+import { AlertContext } from '../context/AlertContext'
 import { useChatGate } from '../hooks/useChatGate'
 import { ToastHost } from '../utils/toast'
 import ChatView from './ChatView'
@@ -49,15 +50,19 @@ function chatTree(ctx: IChatViewContext): ReactElement
 {
     return (
         <AuthProvider>
-            <MemoryRouter initialEntries={['/']}>
-                <Routes>
-                    <Route path="/" element={<Outlet context={ctx} />}>
-                        <Route index element={<ChatView />} />
-                    </Route>
-                </Routes>
-            </MemoryRouter>
-            <GateProbe />
-            <ToastHost />
+            {/* AlertContext 直注空壳 (Task 13 起 useChatSend 读 useAlert): 本文件不涉预警链路,
+                不挂真 AlertProvider 以免误开 WS 生命周期; 其行为另有 [[AlertContext.test]] 覆盖. */}
+            <AlertContext.Provider value={{ red: null, showRed: () => {}, dismissRed: () => {} }}>
+                <MemoryRouter initialEntries={['/']}>
+                    <Routes>
+                        <Route path="/" element={<Outlet context={ctx} />}>
+                            <Route index element={<ChatView />} />
+                        </Route>
+                    </Routes>
+                </MemoryRouter>
+                <GateProbe />
+                <ToastHost />
+            </AlertContext.Provider>
         </AuthProvider>
     )
 }
