@@ -4,17 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import { AuthProvider } from './context/AuthContext'
 import CrisisView from './views/CrisisView'
-
-//* 聊天占位: 居中问候语, Task 10 替换为真实 ChatView (消息流/Composer). 文案守非医疗化风格.
-function ChatPlaceholder(): ReactElement
-{
-    return (
-        <div className="chat-placeholder">
-            <h1>你好, 今天想聊点什么?</h1>
-            <p>我是你的倾听伙伴, 任何想法都可以在这里慢慢说.</p>
-        </div>
-    )
-}
+import ChatView from './views/ChatView'
 
 export default function App(): ReactElement
 {
@@ -23,7 +13,8 @@ export default function App(): ReactElement
             <AuthProvider>
                 <Routes>
                     <Route element={<AppShell />}>
-                        <Route index element={<ChatPlaceholder />} />
+                        {/* Task 10: 占位问候已由 ChatView 取代 (hero 空态文案保持原样, 会话状态经壳的 Outlet context 下发). */}
+                        <Route index element={<ChatView />} />
                         <Route path="crisis" element={<CrisisView />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>

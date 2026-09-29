@@ -1,6 +1,7 @@
 //* 左栏: 折叠 (48px 图标条) <-> 展开 (260px 内容区), 宽度数值来自产品规格, 颜色走设计令牌 (.sidebar 类).
 //* 纯 props 驱动 (不读 Context, 便于无头测试): 壳仅对访客传 onOpenLogin, 故该 prop 在位即视为访客态 —
 //* 会话区与"你的情境"区只对登录用户渲染 (产品裁决). 会话数据 Task 10 经壳接入, 本组件只渲染与回调.
+//* Task 10 契约扩展: 新增可选 onOpenSession (点击会话项打开), 既有 prop 语义与缺省行为不变.
 import { Link } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import type { ChatSessionVo } from '../../types'
@@ -17,6 +18,8 @@ export interface ISidebarProps
     onToggle(): void
     sessions?: ChatSessionVo[]
     onDeleteSession?(id: string): void
+    //* Task 10 扩展: 提供时会话项变为可点按钮 (打开会话), 缺省保持纯展示 (向后兼容).
+    onOpenSession?(id: string): void
     onOpenLogin?(): void
 }
 
@@ -29,7 +32,7 @@ function requestDelete(session: ChatSessionVo, onDeleteSession?: (id: string) =>
         onDeleteSession(session.sessionId)
 }
 
-export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenLogin }: ISidebarProps): ReactElement
+export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onOpenLogin }: ISidebarProps): ReactElement
 {
     const guest = onOpenLogin != null
 
@@ -74,7 +77,17 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                                 <ul className="sidebar-list">
                                     {sessions.map((s) => (
                                         <li key={s.sessionId} className="sidebar-item">
-                                            <span className="sidebar-preview">{s.preview}</span>
+                                            {onOpenSession == null ? (
+                                                <span className="sidebar-preview">{s.preview}</span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    className="sidebar-preview sidebar-open"
+                                                    onClick={() => onOpenSession(s.sessionId)}
+                                                >
+                                                    {s.preview}
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
                                                 className="sidebar-del"

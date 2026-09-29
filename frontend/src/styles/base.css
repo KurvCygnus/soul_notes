@@ -34,6 +34,29 @@ button { font: inherit; cursor: pointer; }
 .chat-placeholder { height: 100%; display: grid; place-items: center; text-align: center; padding: 24px; }
 .chat-placeholder h1 { margin: 0 0 8px; font-size: 24px; }
 .chat-placeholder p { margin: 0; color: var(--muted); }
+
+/* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens) */
+.chat-view { height: 100%; display: flex; flex-direction: column; }
+.chat-toolbar { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
+.chat-stream { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 10px; }
+.chat-date { align-self: center; font-size: 12px; color: var(--faint); }
+.bubble-row { display: flex; }
+.bubble-row-user { justify-content: flex-end; }
+.bubble { max-width: 72%; padding: 9px 13px; border-radius: var(--radius-lg); overflow-wrap: anywhere; }
+.bubble-user { background: var(--user-bubble); color: var(--brand-ink); border-bottom-right-radius: var(--radius); }
+.bubble-ai { background: var(--ai-bubble); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: var(--radius); }
+.bubble p { margin: 0; }
+.bubble p + p, .bubble ul, .bubble ol, .bubble pre, .bubble table, .bubble blockquote { margin: 6px 0 0; }
+.bubble pre { padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.bubble a { color: inherit; }
+.bubble-text { white-space: pre-wrap; }
+.bubble-md > :first-child { margin-top: 0; }
+.chat-cursor { display: inline-block; margin-left: 2px; animation: chat-blink 1s steps(2, start) infinite; }
+@keyframes chat-blink { 50% { opacity: 0; } }
+.chat-error { margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--card); color: var(--danger); font-size: 13px; }
+.composer-slot { margin: 10px 16px 14px; padding: 12px 14px; color: var(--faint); font-size: 14px; }
+.hero-box .composer-slot { margin: 28px auto 0; max-width: 480px; }
+.sidebar-open { flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
 .crisis-view { max-width: 640px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
 .crisis-view h1 { margin: 0; font-size: 22px; }
 .crisis-lead { margin: 0; color: var(--muted); }
