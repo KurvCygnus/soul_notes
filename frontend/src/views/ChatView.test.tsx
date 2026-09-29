@@ -120,4 +120,24 @@ describe('ChatView (输入区接线)', () =>
         await screen.findByText('快要考试了, 帮我梳理一下复习节奏')
         expect(vi.mocked(streamMessage)).toHaveBeenCalledTimes(2)
     })
+
+    it('重挂载不重发 (评审修复回归): unmount→remount 同 nonce 不重发, 新 nonce 放行', async () =>
+    {
+        //* 消费台账为模块级且跨用例存活 (同文件内模块只加载一次): 本文件所有用例的 nonce 必须单调递增 (上例已消费 1/2).
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        const utils = renderChat({ ...CTX, sendRequest: { content: '重挂载前的提问', nonce: 3 } })
+        await screen.findByText('重挂载前的提问')
+        expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
+        utils.unmount()
+        //* 同 nonce 重挂载 (情境卡点击后去 /crisis 再返回): 台账已记账 → 不重发.
+        //* 修前台账是 mount-scoped ref, 重挂后归零把已消费 nonce 当新请求重放 (重复消息 + 二次 LLM 调用).
+        const remounted = renderChat({ ...CTX, sendRequest: { content: '重挂载前的提问', nonce: 3 } })
+        await screen.findByText('你好, 今天想聊点什么?')  //* remount 落定 (空消息回到 hero).
+        expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
+        //* 新 nonce (卡片再次点击) → 照常放行.
+        remounted.rerender(chatTree({ ...CTX, sendRequest: { content: '重挂载后的新提问', nonce: 4 } }))
+        await screen.findByText('重挂载后的新提问')
+        expect(vi.mocked(streamMessage)).toHaveBeenCalledTimes(2)
+    })
 })

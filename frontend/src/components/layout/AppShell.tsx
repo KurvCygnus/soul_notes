@@ -64,6 +64,7 @@ export default function AppShell(): ReactElement
     }, [])
 
     //* Task 12: 情境卡唤起 → 同一 nonce 机制下发 (ChatView 判重后路由进聊天发送管线).
+    //* 判重台账在 ChatView 模块级 (跨挂载存活): 壳不必在登出/换号时清理 sendRequest, 台账挡住重放即可.
     const handleAsk = useCallback((q: string) =>
     {
         setSendRequest(prev => ({ content: q, nonce: (prev?.nonce ?? 0) + 1 }))

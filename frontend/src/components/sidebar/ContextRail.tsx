@@ -84,7 +84,7 @@ export default function ContextRail({ onAsk }: IContextRailProps): ReactElement
                         ))}
                     </>
                 ))}
-                {(exams.length > 0 || agenda.length > 0) && renderCard(exams.length > 0 && onAsk != null, () => onAsk?.(ASK_EXAMS), (
+                {(exams.length > 0 || agenda.length > 0) && renderCard(exams.length > 0 && onAsk != null, () => onAsk?.(ASK_EXAMS), (  //* 仅日程无考试时卡片不点 (话术以考试为锚), 纯展示 — 有意的不对称.
                     <>
                         <span className="context-card-title">近期安排</span>
                         {exams.map(ex => (
