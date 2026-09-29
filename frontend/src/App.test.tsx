@@ -43,5 +43,13 @@ describe('App', () =>
         await user.keyboard('{Escape}')
         expect(document.querySelector('.drawer-overlay')).toBeNull()
         expect(screen.getByRole('button', { name: '打开导航菜单' })).toHaveAttribute('aria-expanded', 'false')
+
+        //* 汉堡可访问名随态换向 (打开/关闭), 激活必须是真切换: 开着时再点一次"关闭导航菜单"要能关 — 名实一致.
+        await user.click(screen.getByRole('button', { name: '打开导航菜单' }))
+        expect(document.querySelector('.drawer-overlay')).not.toBeNull()
+        await user.click(screen.getByRole('button', { name: '关闭导航菜单' }))
+        expect(document.querySelector('.drawer-overlay')).toBeNull()
+        expect(document.querySelector('.sidebar.drawer-open')).toBeNull()
+        expect(screen.getByRole('button', { name: '打开导航菜单' })).toHaveAttribute('aria-expanded', 'false')
     })
 })

@@ -128,7 +128,7 @@ export default function AppShell(): ReactElement
                         aria-label={drawerOpen ? '关闭导航菜单' : '打开导航菜单'}  //* 开合两态换向标签: aria-expanded 之外再给读屏一个动词级语义.
                         aria-expanded={drawerOpen}
                         aria-controls="sidebar-body"
-                        onClick={() => setDrawerOpen(true)}
+                        onClick={() => setDrawerOpen((o) => !o)}  //* 切换而非只开: 标签随态换向 (关闭导航菜单) 时, 激活必须真的能关 — 名实一致.
                     >
                         ☰
                     </button>
