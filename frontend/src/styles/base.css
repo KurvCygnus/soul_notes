@@ -54,8 +54,26 @@ button { font: inherit; cursor: pointer; }
 .chat-cursor { display: inline-block; margin-left: 2px; animation: chat-blink 1s steps(2, start) infinite; }
 @keyframes chat-blink { 50% { opacity: 0; } }
 .chat-error { margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--card); color: var(--danger); font-size: 13px; }
-.composer-slot { margin: 10px 16px 14px; padding: 12px 14px; color: var(--faint); font-size: 14px; }
-.hero-box .composer-slot { margin: 28px auto 0; max-width: 480px; }
+/* 输入区 (Task 11): 双态 (聊天/记一笔) + chips + 语音; 圆角盒与琥珀态配色全部取自设计令牌 */
+.composer { margin: 10px 16px 14px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.composer-diary { border-color: var(--amber-line); }
+.composer-textarea { width: 100%; border: none; background: transparent; color: var(--ink); font: inherit; resize: none; padding: 0; }
+.composer-textarea:focus { outline: none; }
+.composer-textarea::placeholder { color: var(--faint); }
+.composer-textarea:disabled { opacity: .5; }
+.composer-bar { display: flex; align-items: center; gap: 8px; }
+.composer-chip { border: 1px solid var(--line-strong); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+.composer-chip:hover { border-color: var(--brand); color: var(--ink); }
+.composer-chip[aria-pressed="true"] { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-ink); }
+.composer-chip:disabled, .composer-mic:disabled { opacity: .5; cursor: not-allowed; }
+.composer-mic { border: none; background: none; font-size: 16px; padding: 2px 4px; border-radius: var(--radius); }
+.composer-mic:hover { background: var(--bg); }
+.composer-rec { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-size: 13px; }
+.composer-rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: composer-blink 1s steps(2, start) infinite; }
+@keyframes composer-blink { 50% { opacity: 0; } }
+.composer-stop { border: 1px solid var(--danger); background: none; color: var(--danger); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
+.composer-spacer { flex: 1; }
+.hero-box .composer { margin: 28px auto 0; max-width: 480px; }
 .sidebar-open { flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
 .crisis-view { max-width: 640px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
 .crisis-view h1 { margin: 0; font-size: 22px; }

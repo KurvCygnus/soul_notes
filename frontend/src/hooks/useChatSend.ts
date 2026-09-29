@@ -1,4 +1,4 @@
-//* 聊天发送管线 (ChatView 的状态收敛点): SSE 流式主路径 + 非流式降级 + 会话绑定 + 竞态守卫.
+//* 聊天发送管线 (ChatView 的状态收敛点): SSE 流式主路径 + 非流式降级 + 会话绑定 + 竞态守卫 + 记一笔 (Task 11).
 //* 核心机制 (收敛在 genRef 单一单调通道上):
 //*   1. 会话绑定: sessionIdRef 是唯一事实, meta 事件与历史打开都写它; 渲染不读 ref (React 契约).
 //*   2. 竞态守卫: openSession/startNewChat/doSend 各自 ++genRef 并捕获快照, 一切异步回调 (onChunk/
@@ -8,9 +8,12 @@
 //*   4. 卸载中止: cleanup abort 在途 fetch 释放连接, aliveRef 拦截迟到回调 (StrictMode 重挂安全).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listMessages, sendMessage, streamMessage } from '../api/chat'
+import { createDiary } from '../api/diary'
 import { ApiError } from '../api/http'
+import { toast } from '../utils/toast'
 import { useAuth } from './useAuth'
 import { useChatGate } from './useChatGate'
+import type { ComposerMode } from '../components/chat/Composer'
 import type { ISessionOpenRequest } from '../views/chatContext'
 import type { IDisplayMessage } from '../utils/group'
 import type { ChatMessage, ChatSessionVo } from '../types'
@@ -28,8 +31,9 @@ export interface IChatSendState
     streaming: boolean
     streamError: string | null
     startNewChat(): void
-    //* Task 11 Composer 的接线点: 访客经门拦截 (requireAuth 已登录时同步放行), 登录后补发.
-    handleSend(content: string): void
+    //* Task 11 Composer 的接线点: 访客经门拦截 (requireAuth 已登录时同步放行), 登录后补发;
+    //* mode='chat' 走流式消息, mode='diary' 走日记域落库 (不入消息流).
+    handleSend(content: string, mode: ComposerMode): void
 }
 
 //* 流式增量: 追加到末尾消息. 单发送不变量: 流式期间末尾必为本条的 assistant 气泡 (历史加载由 gen 守卫互斥).
@@ -235,11 +239,26 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
             })
     }, [finalizeSend])
 
-    //* 发送入口 (Task 11 Composer 接线): 访客点发送 → 门拦截开浮层, confirm 落登录态后补发; 已登录直接放行.
-    const handleSend = useCallback((content: string) =>
+    //* 记一笔提交 (Task 11): 不入消息流, 走日记域 API; 成败均以轻提示收尾, 不打断当前视图.
+    //* TODO(Task 13): RED 预警接线点 — 创建成功后此处检查响应 DiaryItem.analysisResult?.warningLevel,
+    //* 命中高危时改走危机域 (弹热线浮层), 普通成功才落 success toast.
+    const submitDiary = useCallback((content: string) =>
     {
+        createDiary({ content }).
+            then(() => toast('记好了, 我会好好收藏.', 'success')).
+            catch(() => toast('没能记下这一笔, 请稍后再试.', 'error'))
+    }, [])
+
+    //* 发送入口 (Task 11 Composer 接线): 访客点发送 → 门拦截开浮层, confirm 落登录态后补发; 已登录直接放行.
+    const handleSend = useCallback((content: string, mode: ComposerMode) =>
+    {
+        if(mode === 'diary')
+        {
+            gate.requireAuth(() => submitDiary(content))  //* 日记同门: 访客落库需登录, confirm 后自动补记.
+            return
+        }
         gate.requireAuth(() => doSend(content))
-    }, [doSend, gate])
+    }, [doSend, gate, submitDiary])
 
     return { messages, streaming, streamError, startNewChat, handleSend }
 }

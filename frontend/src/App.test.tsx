@@ -9,7 +9,7 @@ describe('App', () =>
     {
         render(<App />)
         expect(screen.getByRole('heading', { name: '你好, 今天想聊点什么?' })).toBeInTheDocument()
-        expect(screen.getByTestId('composer-slot')).toBeInTheDocument()  //* Task 10: 输入盒占位锚点 (Task 11 替换).
+        expect(screen.getByRole('textbox', { name: '消息输入框' })).toBeInTheDocument()  //* Task 11: 输入区就位 (原 composer-slot 占位已替换).
         expect(screen.getByRole('link', { name: '危机支持' })).toHaveAttribute('href', '/crisis')
     })
 })

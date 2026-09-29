@@ -29,7 +29,7 @@ function Harness(): ReactElement
             <span data-testid="state">{user == null ? 'guest' : 'authed'}/{messages.length}/{String(streaming)}</span>
             <button type="button" onClick={() => login(USER)}>login</button>
             <button type="button" onClick={logout}>logout</button>
-            <button type="button" onClick={() => handleSend('最近的考试压力')}>send</button>
+            <button type="button" onClick={() => handleSend('最近的考试压力', 'chat')}>send</button>
             {messages.map((m, i) => <p key={i}>{m.content}</p>)}
         </div>
     )
