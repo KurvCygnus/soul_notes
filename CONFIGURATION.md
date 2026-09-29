@@ -146,12 +146,12 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 | `SOULNOTES_WEATHER_SUNNY`             | 晴天阈值 (正向均值 >= 阈值)                            | `0.6`                                     |
 | `SOULNOTES_CHAT_HISTORY_MAX`          | 对话历史滚动上限 (条)                                  | `50`                                      |
 | `SOULNOTES_MOOD_RECENT_DAYS`          | 用户上下文工具回溯近期日记/情绪记录的天数              | `7`                                       |
-| `SOULNOTES_AI_DOMAIN_TOOL`            | 领域数据工具开关 (开启后 AI 可按需查询课表/考试; 取数源见下文 `ai.domain.adapter`) | `false`        |
+| `SOULNOTES_AI_DOMAIN_TOOL`            | 领域数据工具开关 (开启后 AI 可按需查询课表/考试; 取数源见下文 `ai.domain.adapter`) | `false`                                   |
 | `SOULNOTES_PROMPT_EMPATHETIC_CHAT`    | 共情倾听系统提示词覆盖, 留空使用内置默认               | 空                                        |
 | `SOULNOTES_PROMPT_WARNING_DETECTION`  | 预警分级提示词覆盖, 留空使用内置默认 (覆盖时机构自担分级标准漂移风险) | 空                         |
 | `SOULNOTES_PROMPT_MOOD_ANALYSIS`      | 情绪分析提示词覆盖, 留空使用内置默认                   | 空                                        |
 
-领域集成取数源无专用 `SOULNOTES_*` 键, 以配置键 `ai.domain.adapter` 直接覆盖 (系统属性 / 自定义配置文件均可): `none` (默认, 情境注入 / 情境端点 / 领域工具全链路空集静默) 或 `simulated` (内置模拟校园数据源, 演示与联调用, 已预留真实教务适配器位). 组合语义: `adapter=none` 时无论工具开关, AI 按需查询仅得未开启提示, 学生情境接口 `GET /api/v1/context/summary` 恒为三空数组; 取数失败/超时统一 fail-open 降级空集, 绝不影响对话与预警主链路.
+领域集成取数源无专用 `SOULNOTES_*` 键, 以配置键 `ai.domain.adapter` 直接覆盖 (系统属性 / 自定义配置文件均可): `none` (默认, 情境注入 / 情境端点 / 领域工具取数链路全空集静默) 或 `simulated` (内置模拟校园数据源, 演示与联调用, 已预留真实教务适配器位). 组合语义: 工具关闭 (`ai.domain.tool.enabled=false`, 默认) 时无论 adapter 取值, AI 按需查询仅得 "该功能未开启"; 工具开启 + `adapter=none` 时取数为空, AI 得 "暂无近期安排信息" (无数据提示, 并非未开启); 工具开启 + `adapter=simulated` 时返回课表/考试数据; 学生情境接口 `GET /api/v1/context/summary` 在 `adapter=none` 时恒为三空数组; 取数失败/超时统一 fail-open 降级空集, 绝不影响对话与预警主链路.
 
 ## 6. 部署
 
