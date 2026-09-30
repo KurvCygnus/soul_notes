@@ -100,7 +100,7 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
         //! 有意不做遮罩点击关闭: 遮罩误触会静默丢弃已输入的账密 (复审裁决), 关闭只走显式 取消/Escape.
         <div className="modal-overlay">
             <form
-                className="card"
+                className="card anim-pop"  //* anim-pop (Task 13): 浮层家族同款入场淡入 + 0.97 缩放 (spec §9.1).
                 style={PANEL_STYLE}
                 onSubmit={submit}
                 role="dialog"

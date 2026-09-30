@@ -24,7 +24,8 @@ function fetchOnce(): Promise<IBrandSnapshot>
     pending ??= getBrand().
         then(b =>
         {
-            //* 兜底判据 = trim 后为空即默认 (含字段缺席/非字符串形态): 契约值是纯展示名, 出厂前修剪空白.
+            //* 兜底判据 = 字段缺席 (nullish) 或 trim 后为空即默认: ?. 只挡 null/undefined,
+            //* 非字符串形态不在容忍面内 (会原样抛错, 契约值是纯展示名, 出厂前修剪空白).
             cached = {
                 brand: b.brandName?.trim() || BRAND_FALLBACK,
                 extensionsLabel: b.extensionsLabel?.trim() || EXTENSIONS_LABEL_FALLBACK,

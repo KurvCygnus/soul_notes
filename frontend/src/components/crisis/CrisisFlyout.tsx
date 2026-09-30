@@ -73,7 +73,7 @@ export default function CrisisFlyout({ open, onClose }: ICrisisFlyoutProps): Rea
     return (
         //* 遮罩即 dialog 实体: 点遮罩任意非面板处关闭, 面板内 stopPropagation 截停冒泡.
         <div className="crisis-flyout" role="dialog" aria-modal="true" aria-labelledby="crisis-flyout-title" onClick={onClose}>
-            <section className="card crisis-flyout-panel" onClick={e => e.stopPropagation()}>
+            <section className="card crisis-flyout-panel anim-pop" onClick={e => e.stopPropagation()}>
                 <h2 id="crisis-flyout-title">危机支持</h2>
                 <p className="crisis-lead">如果你此刻感到不安全, 请立即求助. 你不是一个人, 这些渠道随时愿意接住你.</p>
                 {/* 内容三块自 CrisisView 原样迁入: 热线卡 (名称/主号/备号/寄语) + 预约入口卡 (判空整卡隐藏) + 110/120 提示. */}

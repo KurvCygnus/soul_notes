@@ -1,7 +1,8 @@
 //* RED 预警上下文: 弹窗唯一入口 showRed + 登录态驱动的 WS 预警通道生命周期 (在线推送路径).
 //* 生命周期: user 非 null 即建连, 归 null 即断开; 令牌变更 (登出→换号登录/直接换登) 因 user 引用变化
 //* 触发 effect cleanup 断旧连 + 重建新连. 断线重连与指数退避归 ws.ts 所有, 本层只管建立与撤销.
-//* showRed 双来源: WS 在线推送 (onRed 直通) 与日记域 RED 兜底 (useChatSend#submitDiary, 产品红线).
+//* showRed 单一来源: WS 在线推送 (onRed 直通) — 日记域 RED 兜底已随记一笔移除退场 (homepage-v2 D16),
+//* 离线安全网归热线三级缓存与危机域承接, 前端不再有第二条开弹窗路径.
 import { createContext, useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { connectAlertSocket } from '../api/ws'

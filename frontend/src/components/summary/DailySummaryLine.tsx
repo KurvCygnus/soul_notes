@@ -1,7 +1,7 @@
 //* 每日总结「」行 (homepage-v2 Task 10): 输入区下的一行质性今日总结, 三态降级 —
 //* 无总结/接口失败 → 整件不渲染 (fail-silent 连占位都不留, 不重试); 有总结 → 「content」暗行, 点击展开最近列表 popover.
 //* popover 惯例: 质性文本 only (无数值化), document mousedown click-outside + cleanup,
-//* 进场动效留给 Task 13 动效令牌统一接线, 此处零裸毫秒. 挂载点居 ChatView 的 composer 正下方 (Task 9 随迁, 登录态限定),
+//* 进场动效走令牌 (.summary-pop 纯透明度淡入, Task 13 接线), 此处零裸毫秒. 挂载点居 ChatView 的 composer 正下方 (Task 9 随迁, 登录态限定),
 //* 组件保持自包含, 不感知路由与认证.
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'

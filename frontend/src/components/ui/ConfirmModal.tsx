@@ -65,7 +65,7 @@ export default function ConfirmModal({
             aria-describedby="confirm-modal-body"
             onClick={onClose}
         >
-            <section className="card confirm-modal-panel" onClick={e => e.stopPropagation()}>
+            <section className="card confirm-modal-panel anim-pop" onClick={e => e.stopPropagation()}>
                 <h2 id="confirm-modal-title">{title}</h2>
                 <p id="confirm-modal-body">{body}</p>
                 <div className="confirm-modal-foot">

@@ -27,7 +27,7 @@ export interface ISidebarProps
     collapsed: boolean
     onSectionChange(section: SidebarSection): void  //* 点节标题 -> 壳导航到 sectionRoute(section)
     onToggleCollapse(): void
-    extensionsLabel: string  //* 板块显示名 (部署配置, Task 12 下发前壳传默认值 "扩展")
+    extensionsLabel: string  //* 板块显示名 (部署配置, 壳经 useBrandName 下发, 后端缺省兜底 "扩展")
     sessions?: ChatSessionVo[]
     onDeleteSession?(id: string): void
     onOpenSession?(id: string): void

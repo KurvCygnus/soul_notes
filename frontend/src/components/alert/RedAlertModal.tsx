@@ -54,7 +54,8 @@ export default function RedAlertModal({ alert, onClose, onOpenResources }: IRedA
             aria-labelledby="red-alert-title"
             aria-describedby="red-alert-reason"
         >
-            <div className="red-alert-panel">
+            {/* anim-pop (Task 13): 浮层家族同款入场淡入, 纯视觉不延迟可读性 (内容已在 DOM). */}
+            <div className="red-alert-panel anim-pop">
                 <h2 id="red-alert-title">我们很关心你现在的安全</h2>
                 <p id="red-alert-reason" className="red-alert-reason">
                     {alert.reason ?? '你此刻的感受很重要, 请让自己身边有人陪伴.'}

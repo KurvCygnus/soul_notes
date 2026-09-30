@@ -10,7 +10,7 @@
 //* jsdom 不求值媒体查询, 测试只断状态与节点在位性 (免 matchMedia mock).
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { deleteSession, listSessions } from '../../api/chat'
 import { useAuth } from '../../hooks/useAuth'
 import { useAlert } from '../../hooks/useAlert'
@@ -39,6 +39,8 @@ export default function AppShell(): ReactElement
     const gate = useChatGate()
     const { red, dismissRed } = useAlert()
     const navigate = useNavigate()
+    //* 主区路由切换淡入的 key 闸 (Task 13, spec §9.1): pathname 变化即重挂容器重放入场动画 (见 .main-route 注).
+    const { pathname } = useLocation()
     //* 惰性还原: 首渲染读偏好, 缺省展开 (存储取值归 Sidebar 所有, 这里只消费 'collapsed' 语义).
     const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_PREF_KEY) === 'collapsed')
     //* 手风琴展开节 (默认会话节, spec §5.1): 节即路由 — onSectionChange 翻转状态并导航 sectionRoute.
@@ -218,7 +220,10 @@ export default function AppShell(): ReactElement
                         <Icon name="menu" size={18} />
                     </button>
                 </div>
-                <Outlet context={ctx} />
+                {/* 主区路由容器 (Task 13, spec §9.1): key=pathname 驱动路由切换淡入 (.main-route), 布局契约不变. */}
+                <div className="main-route" key={pathname}>
+                    <Outlet context={ctx} />
+                </div>
             </main>
             {/* 危机 Flyout (Task 8): 常驻挂载, open=false 时组件自渲染 null; 菜单与 RED 双入口均落到此层 —
                 号码默认兜底 + 三级缓存刷新 (零网络首绘可用), 遮罩点击/Escape/我知道了 三路关闭, 对访客无门 (红线). */}

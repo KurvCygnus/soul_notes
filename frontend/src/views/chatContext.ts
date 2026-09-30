@@ -9,8 +9,9 @@ export interface ISessionOpenRequest
     nonce: number
 }
 
-//* 情境唤起发送请求 (Task 12): Sidebar 情境卡点击 (壳持有) → ChatView 以聊天模式 handleSend(content, 'chat').
+//* 情境唤起发送请求: 壳持有 → ChatView 单参 handleSend(content) 消费 (聊天单模式, 无第二形态参数).
 //* 与 ISessionOpenRequest 同一通道机制 (nonce 单调递增, 壳经 <Outlet context> 下发), ChatView 以 ref 记账防重放.
+//* 生产者现状: 情境卡已随 homepage-v2 退场, 通道恒 null 无害, 留作未来唤起类入口原地复用 (壳侧契约钉住).
 export interface ISendRequest
 {
     content: string
