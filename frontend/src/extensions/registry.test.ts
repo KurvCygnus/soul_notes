@@ -7,9 +7,13 @@ describe('extension registry (扩展注册表)', () =>
 {
     it('测试环境含 Mock 装配 (dev = builtin + mocks 全量摊入; prod 剔除由构建断言覆盖, 见收尾任务)', () =>
     {
-        //* 本任务 mocks 为空数组 (Task 4 填充), brief 原断言 some(e => e.mock) 当前必假, 故改锁装配机制本身:
-        //* 非 prod 环境 registry 长度必须等于 builtin 与 mocks 之和 — Task 4 填充 mocks 后本断言自动升级为 Mock 在场校验.
+        //* 装配断言与 Mock 在场断言现已双双生效 (Task 4 已填充 mocks): 前者锁装配机制, 后者锁 mock 标注的归置契约.
         expect(extensions).toHaveLength(builtinExtensions.length + mockExtensions.length)
+        expect(extensions.some(e => e.mock)).toBe(true)
+    })
+    it('Mock 条目全部带 mock 标注 (归置契约: 该标志即仅开发构建的识别依据, T3 评审裁决并入 T4)', () =>
+    {
+        expect(mockExtensions.every(e => e.mock)).toBe(true)
     })
     it('每个扩展点必有 id/name/icon/page', () =>
     {
@@ -24,7 +28,7 @@ describe('extension registry (扩展注册表)', () =>
     it('总览提供者 = 第一个注册 overview 的扩展', () =>
     {
         //* 空注册表时 overviewProvider 必为 undefined (无提供者 = 总览条目消失, D9), brief 原断言 toBeTruthy 会误炸;
-        //* 改锁 "首个 overview 注册者" 语义 — 空态双方同为 undefined, Task 4 填充后自动验证首注册优先.
+        //* 改锁 "首个 overview 注册者" 语义 — Task 4 已填充 mocks, 现在真实验证课表 Mock 首注册优先.
         const firstOverview = extensions.find(e => e.overview != null)
         expect(overviewProvider).toBe(firstOverview)
         if(firstOverview != null)
