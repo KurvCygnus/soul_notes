@@ -50,7 +50,7 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
    十余年全线支持, 而无前缀的新标准 line-clamp 独立语法 2024 年才落地且旧浏览器不认, 双写反而在支持差异下行为不一;
    以覆盖面最稳的前缀版为准, 万一前缀失效则整段显示不破版. overflow:hidden 同时把 flex 子项的 min-width 归零, 预览可收缩换行. */
 .sidebar-row-main { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
-/* 删除 ×: hover/focus 才显 (CSS 职责, 键盘可达性经 focus-within 同步), 点击直接上抛壳 (确认模态 Task 11). */
+/* 删除 ×: hover/focus 才显 (CSS 职责, 键盘可达性经 focus-within 同步), 点击上抛壳 = 请求删除 (壳级确认模态后才真删). */
 .sidebar-del { flex-shrink: 0; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; visibility: hidden; }
 .sidebar-del:hover { color: var(--danger); }
 .sidebar-row:hover .sidebar-del, .sidebar-row:focus-within .sidebar-del { visibility: visible; }
@@ -145,7 +145,8 @@ button.weather-chip:hover { border-color: var(--brand); }
 
 /* 危机 Flyout (Task 8, D22): 菜单/RED 双入口的居中安全浮层, 访客无门 (红线). 层级阶梯裁决 (数值沿用
    本文件既有裸值注释惯例, 不设 --z 令牌): 登录 60 < 抽屉 scrim 70 < 抽屉 80 < 危机 Flyout 85 = 菜单遮罩 85
-   (开 Flyout 前菜单必先收起, 二者互斥不同屏, 同值无争) < 菜单 86 < RED 预警 100 — 85 压过移动端抽屉,
+   (开 Flyout 前菜单必先收起, 二者互斥不同屏, 同值无争) < 菜单 86 < 确认模态 90 (Task 11, 删除会话确认,
+   侧栏 × 触发时汉堡菜单必不在场) < RED 预警 100 — 85 压过移动端抽屉,
    抽屉在场时 Flyout 仍完整可见, RED 弹窗唤起 Flyout 前先自行关闭, 永远置顶的安全模态不被遮挡.
    遮罩裸值沿用 .modal-overlay 前例 rgba(47, 59, 58, .35): 令牌无 alpha 形态, 不新造颜色. */
 .crisis-flyout { position: fixed; inset: 0; z-index: 85; background: rgba(47, 59, 58, .35); display: grid; place-items: center; padding: 16px; }
@@ -153,6 +154,21 @@ button.weather-chip:hover { border-color: var(--brand); }
 .crisis-flyout-panel h2 { margin: 0; font-size: 18px; }
 /* 入场动效 (D23 令牌): 淡入 + 0.97 缩放; 出场即时卸载 — 危机信息离场无过渡价值, 退场动画反需延迟卸载簿记. */
 @keyframes crisis-flyout-in { from { opacity: 0; transform: scale(.97); } }
+
+/* 删除确认模态 (Task 11, D17 无预览契约): 取代原生 window.confirm (暴露 URL 且预览不可控), 内容全由壳传入,
+   组件无 children/预览插槽. 层级 90: 沿上方危机 Flyout 段的阶梯注释 (菜单 86 之上, RED 预警 100 之下) —
+   侧栏 × 触发时汉堡菜单必不在场, 90 是给未来同层浮层留的隔离带, 不与 86 挤同值. */
+.confirm-modal { position: fixed; inset: 0; z-index: 90; background: rgba(47, 59, 58, .35); display: grid; place-items: center; padding: 16px; }
+.confirm-modal-panel { width: min(360px, 92vw); display: flex; flex-direction: column; gap: 10px; padding: 20px; animation: confirm-modal-in var(--dur-base) var(--ease-enter); }
+.confirm-modal-panel h2 { margin: 0; font-size: 17px; }
+.confirm-modal-panel p { margin: 0; color: var(--muted); font-size: 14px; }
+.confirm-modal-foot { display: flex; justify-content: flex-end; gap: 8px; }
+/* 危险确认钮: danger 令牌描边着色, hover 反白实底 — 与 .red-alert-call 的 #fff 前例一致 (danger 底上白字已验证). */
+.confirm-modal-danger { border-color: var(--danger); color: var(--danger); }
+.confirm-modal-danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.confirm-modal-danger:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+/* 入场动效 (D23 令牌): 与危机 Flyout 同款淡入 + 0.97 缩放; 出场即时卸载 (确认/取消后无退场价值). */
+@keyframes confirm-modal-in { from { opacity: 0; transform: scale(.97); } }
 
 
 /* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens; Task 12 起随顶栏在 .main 内纵向伸缩) */

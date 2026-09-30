@@ -3,7 +3,8 @@
 //* 手风琴语义: section 由壳持有 (单一状态, 两节互斥且必有一个展开), 点节标题上抛 onSectionChange 由壳导航
 //* sectionRoute; 扩展/总览条目点击由本组件直接导航 — 契约无 onOpenExtension(id), 条目级去向归侧栏, 节级归壳.
 //* 访客判定沿旧约: 壳仅对访客传 onOpenLogin, 该 prop 在场即访客态; 侧栏结构照常渲染, 交互上抛壳过登录门.
-//* 登录用户的用户名经 useAuth 读取 (契约无 user prop); 删除 × 不再做 confirm 门控, 直接上抛 (确认模态 Task 11).
+//* 登录用户的用户名经 useAuth 读取 (契约无 user prop); 删除 × 点击直接上抛 onDeleteSession
+//* (语义 = 用户请求删除, 非直接删除 — 二次确认模态归壳 [[ConfirmModal]], Task 11).
 //* onOpenCrisis 仍由壳承接: 菜单实体在壳 ([[UserMenu]]), 侧栏汉堡钮 (访客/登录用户两态都在场) 只作开合与 aria 镜像.
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { ReactElement } from 'react'

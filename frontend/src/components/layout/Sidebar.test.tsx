@@ -176,7 +176,7 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         expect(screen.queryByRole('button', { name: '登录 / 注册' })).not.toBeInTheDocument()
     })
 
-    it('删除 ×: hover 显隐归 CSS, 点击直接上抛 onDeleteSession (无 confirm 门控, 模态 Task 11 接管)', async () =>
+    it('删除 ×: hover 显隐归 CSS, 点击上抛 onDeleteSession (语义 = 请求删除, 壳级模态确认后才真删, 无 window.confirm)', async () =>
     {
         const user = userEvent.setup()
         const onDeleteSession = vi.fn()
