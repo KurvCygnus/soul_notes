@@ -5,8 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { uploadVoice } from '../../api/diary'
 import { toast } from '../../utils/toast'
+import { growTextarea } from '../../utils/autogrow'
 import { MAX_RECORD_BYTES, MAX_RECORD_SECONDS, recordAudio, recordableSecondsLeft } from '../../utils/audio'
 import type { IAudioRecording } from '../../utils/audio'
+import Icon from '../ui/Icon'
 
 export type ComposerMode = 'chat' | 'diary'
 
@@ -20,8 +22,6 @@ export interface IComposerProps
 //* 占位语导出供测试锚定 (模式切换的可观察证据).
 export const PLACEHOLDER_CHAT = '说说今天的心情, 或者随便聊点什么...'
 export const PLACEHOLDER_DIARY = '记一笔今天的心情...'
-
-const MAX_ROWS = 4
 
 //* chips 快捷文案: 恒以聊天模式上抛 (即使当前处于记一笔态), 输入框内容不参与.
 const CHIP_WEEK = '帮我看看这周的课和考试安排'
@@ -134,14 +134,21 @@ export default function Composer({ onSend, disabled = false }: IComposerProps): 
         void recordRef.current?.stop().catch(() => {})
     }, [])
 
-    const rows = Math.min(MAX_ROWS, Math.max(1, text.split('\n').length))
+    //* 自增高 (评审整改): 文本变化即随内容拉伸, 上限由 CSS max-height 约束; 发送清空后同样收缩回弹.
+    const textRef = useRef<HTMLTextAreaElement | null>(null)
+    useEffect(() =>
+    {
+        if(textRef.current != null)
+            growTextarea(textRef.current)
+    }, [text])
 
     return (
         <div className={diary ? 'composer composer-diary' : 'composer'}>
             <textarea
+                ref={textRef}
                 className="composer-textarea"
                 aria-label="消息输入框"
-                rows={rows}
+                rows={1}
                 value={text}
                 placeholder={diary ? PLACEHOLDER_DIARY : PLACEHOLDER_CHAT}
                 disabled={disabled}
@@ -156,18 +163,21 @@ export default function Composer({ onSend, disabled = false }: IComposerProps): 
                     disabled={disabled}
                     onClick={() => { setMode(m => m === 'diary' ? 'chat' : 'diary') }}
                 >
-                    ✍️ 记一笔
+                    <Icon name="pen" size={14} />
+                    <span>记一笔</span>
                 </button>
                 <button type="button" className="composer-chip" disabled={disabled} onClick={() => { submit(CHIP_WEEK, 'chat') }}>
-                    📅 本周安排
+                    <Icon name="calendar" size={14} />
+                    <span>本周安排</span>
                 </button>
                 <button type="button" className="composer-chip" disabled={disabled} onClick={() => { submit(CHIP_WEATHER, 'chat') }}>
-                    ☀️ 心情天气
+                    <Icon name="cloud-sun" size={14} />
+                    <span>心情天气</span>
                 </button>
                 <span className="composer-spacer" />
                 {voice === 'idle' && (
                     <button type="button" className="composer-mic" aria-label="语音输入" disabled={disabled} onClick={startVoice}>
-                        🎙️
+                        <Icon name="mic" size={16} />
                     </button>
                 )}
                 {voice === 'recording' && (

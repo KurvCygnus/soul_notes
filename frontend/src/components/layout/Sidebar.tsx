@@ -9,6 +9,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import ContextRail from '../sidebar/ContextRail'
+import Icon from '../ui/Icon'
 import type { ChatSessionVo } from '../../types'
 
 //* 偏好键与取值归本组件所有, 壳只经它读初始形态 (AppShell 惰性还原).
@@ -68,7 +69,8 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                 aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
                 onClick={handleToggle}
             >
-                {collapsed ? '☰' : '«'}
+                {collapsed && <Icon name="panel" size={17} className="icon-rot" />}
+                {!collapsed && <Icon name="panel" size={17} />}
             </button>
             <div id="sidebar-body" className="sidebar-body">
                 {collapsed ? (
@@ -123,9 +125,10 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                 )}
             </div>
             <nav className="sidebar-nav" aria-label="页面导航">
-                {/* 危机支持入口对访客同样可见: 公开路由是产品红线, 不设登录门. */}
-                <Link className="sidebar-item" to="/crisis">
-                    {collapsed ? 'SOS' : '危机支持'}
+                {/* 危机支持入口对访客同样可见: 公开路由是产品红线, 不设登录门. 折叠态以 SVG 救生圈图标承载 (评审整改: 弃用裸 "SOS" 文本). */}
+                <Link className="sidebar-item sidebar-crisis" to="/crisis" aria-label="危机支持">
+                    <Icon name="buoy" size={16} />
+                    {!collapsed && <span>危机支持</span>}
                 </Link>
             </nav>
         </aside>

@@ -21,6 +21,8 @@ import { toast } from '../../utils/toast'
 import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
 import RedAlertModal from '../alert/RedAlertModal'
+import Icon from '../ui/Icon'
+import { useBrandName } from '../../hooks/useBrandName'
 import Sidebar from './Sidebar'
 import { SIDEBAR_PREF_KEY } from './Sidebar'
 import type { IChatViewContext, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
@@ -29,6 +31,9 @@ import type { ChatSessionVo } from '../../types'
 export default function AppShell(): ReactElement
 {
     const { user } = useAuth()
+    //* 品牌接线 (评审整改): 品牌名来自后端 app.brand-name 配置, 浏览器标题随其更新 (兜底中文产品名).
+    const brand = useBrandName()
+    useEffect(() => { document.title = brand }, [brand])
     const gate = useChatGate()
     const { red, dismissRed } = useAlert()
     //* 惰性还原: 首渲染读偏好, 缺省展开 (存储取值归 Sidebar 所有, 这里只消费 'collapsed' 语义).
@@ -130,7 +135,7 @@ export default function AppShell(): ReactElement
                         aria-controls="sidebar-body"
                         onClick={() => setDrawerOpen((o) => !o)}  //* 切换而非只开: 标签随态换向 (关闭导航菜单) 时, 激活必须真的能关 — 名实一致.
                     >
-                        ☰
+                        <Icon name="menu" size={18} />
                     </button>
                     {user != null && <WeatherCapsule />}
                 </div>

@@ -5,6 +5,7 @@ import type { CSSProperties, FormEvent, MouseEvent, ReactElement } from 'react'
 import { login, logout, register } from '../../api/auth'
 import { ApiError } from '../../api/http'
 import { toast } from '../../utils/toast'
+import { useBrandName } from '../../hooks/useBrandName'
 import { AGREEMENT } from './agreement'
 import type { AuthData } from '../../types'
 
@@ -57,6 +58,8 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
     }, [onCancel])
 
     const isLogin = mode === 'login'
+    //* 品牌接线 (评审整改): 浮层标题消费后端品牌配置, 不再硬编码产品名.
+    const brand = useBrandName()
     const canSubmit = agreed && username.trim().length > 0 && password.length > 0 && !busy
 
     const submit = (e: FormEvent): void =>
@@ -105,7 +108,7 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
                 aria-labelledby="login-sheet-title"
             >
                 <h2 id="login-sheet-title" style={{ margin: 0, fontSize: '18px' }}>
-                    {isLogin ? '登录心灵札记' : '注册新账号'}
+                    {isLogin ? `登录${brand}` : '注册新账号'}
                 </h2>
                 <label htmlFor="login-username">用户名</label>
                 <input

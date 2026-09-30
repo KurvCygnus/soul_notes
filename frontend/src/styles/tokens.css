@@ -20,13 +20,16 @@
   --shadow: 0 2px 10px rgba(0, 0, 0, .05);
 }
 @media (prefers-color-scheme: dark) {
+  /* 评审整改后的暗色主题: 中性石墨基底 (去绿褐脏调), 三层分离拉开 (bg/sidebar/card), 文案提亮到近白保证对比;
+     品牌青绿提亮为暗底高可读档, 用户气泡改用暗底中饱和青 (白字对比达标); 琥珀保持警示语义但降低土黄感. */
   :root {
-    --bg: #1f2321; --sidebar: #262b28; --card: #2e3431;
-    --ink: #e8e6df; --muted: #b8b5aa; --faint: #7d857f;
-    --line: #333a36; --line-strong: #3d453f;
-    --brand: #5ea89e; --brand-ink: #10201d;
-    --amber-bg: #3a3220; --amber-line: #6b5a2a; --amber-ink: #d9b96a;
-    --ai-bubble: #2e3431;
-    --shadow: 0 2px 10px rgba(0, 0, 0, .25);
+    --bg: #151719; --sidebar: #1b1e20; --card: #212528;
+    --ink: #eceeee; --muted: #a6aeae; --faint: #697373;
+    --line: #2a2f31; --line-strong: #3a4141;
+    --brand: #58b3a6; --brand-ink: #0b1f1c;
+    --amber-bg: #332c1c; --amber-line: #5c5130; --amber-ink: #e0c47c;
+    --user-bubble: #2e7d72;
+    --ai-bubble: #24292b;
+    --shadow: 0 2px 12px rgba(0, 0, 0, .35);
   }
 }

@@ -5,6 +5,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Composer, { PLACEHOLDER_CHAT, PLACEHOLDER_DIARY } from './Composer'
+import { growTextarea } from '../../utils/autogrow'
+
+//* 自动增高接线观测: 包一层 spy 保留原实现 (jsdom 无布局, 像素行为由 [[autogrow.test]] 桩测钉死).
+vi.mock('../../utils/autogrow', async (importOriginal) =>
+{
+    const actual = await importOriginal<typeof import('../../utils/autogrow')>()
+    return { ...actual, growTextarea: vi.fn(actual.growTextarea) }
+})
 
 function renderComposer(onSend = vi.fn(), disabled = false): void
 {
@@ -71,17 +79,21 @@ describe('Composer (输入区)', () =>
         expect(screen.getByPlaceholderText(PLACEHOLDER_CHAT)).toBeInTheDocument()
     })
 
-    it('自动增高: 行数随内容增长并封顶, 空输入收敛回单行', () =>
+    it('自动增高 (评审整改): 高度改由 growTextarea 像素级驱动, rows 恒 1; 清空后同样触发收敛', () =>
     {
+        //* jsdom 无布局 (scrollHeight 恒 0), 像素行为由 [[autogrow.test]] 的桩测钉死; 此处钉接线契约:
+        //* 每次 text 变化 (含清空) 都必须调用 growTextarea, rows 属性不再是增高机制.
+        const growSpy = vi.mocked(growTextarea)
+        growSpy.mockClear()
         renderComposer()
         const box = screen.getByRole('textbox') as HTMLTextAreaElement
         expect(box).toHaveAttribute('rows', '1')
+        expect(growSpy).toHaveBeenCalledOnce()  //* mount 即触发一次: 初始高度对齐 CSS 基线.
         fireEvent.change(box, { target: { value: '第一行\n第二行' } })
-        expect(box).toHaveAttribute('rows', '2')
-        fireEvent.change(box, { target: { value: '1\n2\n3\n4\n5\n6' } })
-        expect(box).toHaveAttribute('rows', '4')  //* 上限 4 行, 更长内容交给滚动.
-        fireEvent.change(box, { target: { value: '' } })
         expect(box).toHaveAttribute('rows', '1')
+        expect(growSpy).toHaveBeenCalledWith(box)
+        fireEvent.change(box, { target: { value: '' } })
+        expect(growSpy).toHaveBeenCalledTimes(3)  //* mount + 输入 + 清空: 清空同样触发收缩回弹.
     })
 
     it('语音按钮在位 (录音链路依赖浏览器 API, jsdom 仅验存在)', () =>

@@ -1,13 +1,13 @@
-//* 天气胶囊 (Task 12): 主区顶栏的情绪天气芯片 — 符号 + 状态词, 点开 popover 展示三分值 mini 条.
-//* 自加载今日天气 (getWeather 今日区间): 401/网络故障/数据缺席 (null) 一律整件隐藏 (fail-silent, 绝不阻塞聊天主路径,
-//* 也不与登录浮层抢戏 — 401 的全局广播由 [[api]] 统一处理). 分值语义: 积极/消极/焦虑, 后端区间 0.0~1.0,
-//* 前端换算为整百分比展示; 焦虑条用琥珀令牌 (警示但不医疗化), 配色全部取自设计令牌.
-//* Task 14 空态裁决: 请求"成功但今日无记录" (空数组) 不再整件隐藏, 改显非交互空态文案 — 失败与空数据语义不同,
-//* 前者是"暂时看不到", 后者是"今天还没有", 混在同一漏斗会让新用户误以为功能缺失.
+//* 天气胶囊 (Task 12, 评审整改): 主区顶栏的情绪天气芯片 — SVG 符号 + 状态词, 点开 popover 展示质性描述.
+//* 评审裁决: 情绪天气不得以数值量化呈现心理状态 (不做分数/百分比条) — 数值只留在后端分析链作为天气映射引擎,
+//* 前端一律以"天气隐喻 + 质性文案"表达, 与非医疗化人设同源.
+//* 自加载今日天气 (getWeather 今日区间): 401/网络故障/数据缺席 (null) 一律整件隐藏 (fail-silent, 绝不阻塞聊天主路径).
+//* Task 14 空态裁决保留: 请求"成功但今日无记录" (空数组) 显非交互空态文案, 与失败语义分流.
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { getWeather } from '../../api/diary'
-import { weatherGlyph, weatherWord } from '../../utils/weatherGlyph'
+import { weatherCopyKey, weatherIconKey, weatherWord } from '../../utils/weatherIcon'
+import Icon from '../ui/Icon'
 import type { WeatherDay } from '../../types'
 
 //* 本地时区日期串: 手拼 yyyy-MM-dd, 不用 toISOString (UTC 零点截断会把晚间写成"昨天").
@@ -18,10 +18,14 @@ function localToday(): string
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-//* 0.0~1.0 分值 → 0~100 整百分比: 钳制防脏数据把 mini 条撑爆或缩没.
-function clampPct(v: number): number
-{
-    return Math.round(Math.min(1, Math.max(0, v)) * 100)
+//* 质性文案 (按归一化类型): 只描述状态与照护建议, 不出现任何分值/等级/诊断词.
+const WEATHER_COPY: Record<'SUNNY' | 'CLOUDY' | 'OVERCAST' | 'RAINY' | 'THUNDERSTORM' | 'FALLBACK', string> = {
+    SUNNY: '情绪晴朗, 把此刻的状态留在这里.',
+    CLOUDY: '有些云飘过, 平稳也算一种好天气.',
+    OVERCAST: '天空偏阴, 允许自己慢一点.',
+    RAINY: '情绪在下雨, 记得给自己撑把伞.',
+    THUNDERSTORM: '心里有雷雨, 你已经撑了很久, 需要时随时可以求助.',
+    FALLBACK: '天气平稳, 慢慢来就好.',
 }
 
 export default function WeatherCapsule(): ReactElement
@@ -74,7 +78,9 @@ export default function WeatherCapsule(): ReactElement
         )
     }
 
+    const key = weatherIconKey(day.weatherType)
     const word = weatherWord(day.weatherType)
+    const copy = WEATHER_COPY[weatherCopyKey(day.weatherType)]
 
     return (
         <div className="weather-capsule" ref={rootRef}>
@@ -85,23 +91,18 @@ export default function WeatherCapsule(): ReactElement
                 aria-label={`今日情绪天气: ${word}`}
                 onClick={() => setOpen(o => !o)}
             >
-                <span aria-hidden="true">{weatherGlyph(day.weatherType)}</span>
+                <Icon name={key} size={16} />
                 <span>{word}</span>
             </button>
             {open && (
                 <div className="weather-pop">
                     <p className="weather-pop-title">今天的情绪天气</p>
-                    <div className="weather-bar">
-                        <div className="weather-bar-label"><span>积极</span><span>{clampPct(day.positiveAvg)}</span></div>
-                        <div className="weather-bar-track"><div className="weather-bar-fill weather-fill-positive" style={{ width: `${clampPct(day.positiveAvg)}%` }} /></div>
-                    </div>
-                    <div className="weather-bar">
-                        <div className="weather-bar-label"><span>消极</span><span>{clampPct(day.negativeAvg)}</span></div>
-                        <div className="weather-bar-track"><div className="weather-bar-fill weather-fill-negative" style={{ width: `${clampPct(day.negativeAvg)}%` }} /></div>
-                    </div>
-                    <div className="weather-bar">
-                        <div className="weather-bar-label"><span>焦虑</span><span>{clampPct(day.anxietyAvg)}</span></div>
-                        <div className="weather-bar-track"><div className="weather-bar-fill weather-fill-anxiety" style={{ width: `${clampPct(day.anxietyAvg)}%` }} /></div>
+                    <div className="weather-pop-main">
+                        <Icon name={key} size={30} />
+                        <div>
+                            <p className="weather-pop-word">{word}</p>
+                            <p className="weather-pop-copy">{copy}</p>
+                        </div>
                     </div>
                     {day.entryCount > 0 && <p className="weather-pop-foot">由今天的 {day.entryCount} 条记录汇聚</p>}
                 </div>
