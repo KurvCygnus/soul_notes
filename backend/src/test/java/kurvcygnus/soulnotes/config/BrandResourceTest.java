@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -35,12 +38,33 @@ class BrandResourceTest
     @Test void constructor_ShouldReadBrandNameConfig()
     {
         final Constructor<?> ctor;
-        try { ctor = BrandResource.class.getDeclaredConstructor(String.class); }
-        catch(NoSuchMethodException e) { throw new AssertionError("缺少 (String) 注入构造器", e); }
+        try { ctor = BrandResource.class.getDeclaredConstructor(String.class, String.class); }
+        catch(NoSuchMethodException e) { throw new AssertionError("缺少 (String, String) 注入构造器", e); }
         final var param = ctor.getParameters()[0];
         final var cfg = param.getAnnotation(ConfigProperty.class);
         assertNotNull(cfg, "brandName 参数必须经 @ConfigProperty 注入");
         assertEquals("app.brand-name", cfg.name());
         assertEquals("Soul Notes", cfg.defaultValue());
+    }
+
+    //* 契约形状锚 (D7): BrandVo 必须双分量下发 — 前端 BrandInfo 逐字段转写, 缺分量即前端字段失源.
+    @Test void brandVo_ShouldCarryExtensionsLabelComponent()
+    {
+        final RecordComponent[] components = BrandResource.BrandVo.class.getRecordComponents();
+        assertNotNull(components, "BrandVo 必须为 record (前端契约形状)");
+        final var names = Arrays.stream(components).map(RecordComponent::getName).toList();
+        assertEquals(List.of("brandName", "extensionsLabel"), names);
+    }
+
+    //* 配置键即需求锚 (D7): 扩展板块显示名必须来自 app.extensions-label (SOULNOTES_EXTENSIONS_LABEL 注入链), 默认 "扩展".
+    @Test void constructor_ShouldReadExtensionsLabelConfig()
+    {
+        final Constructor<?> ctor;
+        try { ctor = BrandResource.class.getDeclaredConstructor(String.class, String.class); }
+        catch(NoSuchMethodException e) { throw new AssertionError("缺少 (String, String) 注入构造器", e); }
+        final var cfg = ctor.getParameters()[1].getAnnotation(ConfigProperty.class);
+        assertNotNull(cfg, "extensionsLabel 参数必须经 @ConfigProperty 注入");
+        assertEquals("app.extensions-label", cfg.name());
+        assertEquals("扩展", cfg.defaultValue());
     }
 }

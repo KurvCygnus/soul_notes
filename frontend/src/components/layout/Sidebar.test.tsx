@@ -132,6 +132,14 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         expect(screen.getByText('课表')).toBeInTheDocument()
     })
 
+    it('扩展板块命名透传: extensionsLabel 即节标题文本 (D7 部署配置经品牌端点下发, 壳转交)', () =>
+    {
+        render(renderSidebar(baseProps({ extensionsLabel: '成长营' })))
+        const title = screen.getByRole('button', { name: '成长营' })
+        expect(title).toHaveAttribute('aria-expanded', 'false')
+        expect(within(title).getByText('成长营')).toHaveClass('sidebar-section-name')
+    })
+
     it('折叠态: 宽度 48 仅图标列 (扩展/会话/新建会话/登录头像), aria-label 齐全, 点节图标展开并切节', async () =>
     {
         const user = userEvent.setup()

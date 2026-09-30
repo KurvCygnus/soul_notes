@@ -34,8 +34,8 @@ import type { ChatSessionVo } from '../../types'
 export default function AppShell(): ReactElement
 {
     const { user, logout } = useAuth()
-    //* 品牌接线 (评审整改): 品牌名来自后端 app.brand-name 配置, 浏览器标题随其更新 (兜底中文产品名).
-    const brand = useBrandName()
+    //* 品牌域接线 (评审整改 + D7): 品牌名与扩展板块显示名都来自后端部署配置, 浏览器标题随品牌名更新, 扩展名转交侧栏 (均兜底默认值).
+    const { brand, extensionsLabel } = useBrandName()
     useEffect(() => { document.title = brand }, [brand])
     const gate = useChatGate()
     const { red, dismissRed } = useAlert()
@@ -179,7 +179,7 @@ export default function AppShell(): ReactElement
                 onToggleCollapse={() => setCollapsed((c) => !c)}
                 section={section}
                 onSectionChange={handleSectionChange}
-                extensionsLabel="扩展"  //* Task 12 下发部署配置前先用默认值.
+                extensionsLabel={extensionsLabel}  //* D7: 扩展板块显示名经品牌端点下发 (SOULNOTES_EXTENSIONS_LABEL), 不再硬编码.
                 sessions={sessions ?? undefined}
                 onDeleteSession={handleRequestDeleteSession}  //* 契约语义 = 用户请求删除: 壳接确认模态, 确认后才真删 (Task 11).
                 onOpenSession={handleOpenSession}

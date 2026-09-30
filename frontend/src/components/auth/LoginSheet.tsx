@@ -58,8 +58,8 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
     }, [onCancel])
 
     const isLogin = mode === 'login'
-    //* 品牌接线 (评审整改): 浮层标题消费后端品牌配置, 不再硬编码产品名.
-    const brand = useBrandName()
+    //* 品牌域接线 (评审整改): 浮层标题消费后端品牌配置, 不再硬编码产品名 (形状升级: 品牌域快照解构取 brand).
+    const { brand } = useBrandName()
     const canSubmit = agreed && username.trim().length > 0 && password.length > 0 && !busy
 
     const submit = (e: FormEvent): void =>
