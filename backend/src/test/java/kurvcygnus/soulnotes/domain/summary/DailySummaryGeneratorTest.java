@@ -91,6 +91,9 @@ class DailySummaryGeneratorTest
         assertEquals(1, requests.size(), PrintUtils.quickFormat("每日总结应恰好一轮 LLM 请求, 全部请求: {}", MockLlmProfile.server().requests().size()));
         assertTrue(requests.getFirst().contains(SESSION_MARKER), "请求体必须包含最近会话消息摘录");
         assertTrue(requests.getFirst().contains(ANALYSIS_MARKER), "请求体必须包含最近情绪分析结果");
+        //* 机构侧信息不回流: 预警字段 (warningLevel/warningReason) 属机构侧, 摘记侧有意排除,
+        //* 用户可见的 prompt 不得携带 (digestAnalysis 契约, fix round: review Finding 3).
+        assertFalse(requests.getFirst().contains("warningLevel"), "prompt 严禁携带预警字段 (机构侧信息不回流用户可见文案)");
 
         final var stored = storedSummary(user.id);
         assertNotNull(stored, "当日总结应已落库");
@@ -157,6 +160,8 @@ class DailySummaryGeneratorTest
     }
 
     //* 调度 cron 即需求锚 (每日 03:00): 注解漂移会让生成静默错拍, 结构断言钉死.
+    //* timeZone 显式钉定 Asia/Shanghai: cron 触发时刻不得依赖 JVM 默认时区 (部署环境漂移防护),
+    //* 与日期计算的 TimeUtils.ZONE_ASIA_SHANGHAI 同源 (fix round: review Finding 2).
     @Test
     void scheduled_ShouldDeclareThreeAmCron() throws Exception
     {
@@ -164,6 +169,7 @@ class DailySummaryGeneratorTest
         final var scheduled = method.getAnnotation(io.quarkus.scheduler.Scheduled.class);
         assertNotNull(scheduled, "generateDailySummaries 必须挂 @Scheduled");
         assertEquals("0 0 3 * * ?", scheduled.cron());
+        assertEquals("Asia/Shanghai", scheduled.timeZone());
     }
     //endregion
 

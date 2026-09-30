@@ -77,12 +77,12 @@ public final class DailySummaryGenerator
 
     //region 调度入口
     /**
-     * 每日 03:00 (cron 固定, 业务时区经 {@code -Duser.timezone=Asia/Shanghai} 全局锚定) 批量生成.
+     * 每日 03:00 (cron 固定, 显式钉定 Asia/Shanghai 与业务时区同源, 不依赖 JVM 默认时区) 批量生成.
      *
      * @implNote 薄壳: 只拼装活跃名单与今日日期, 全部逻辑与容错收敛在 {@link #generateFor};
      *           订阅级兜底仅防意外实现缺陷 — fire-and-forget, 调度线程零阻塞零抛出.
      */
-    @Scheduled(cron = "0 0 3 * * ?")
+    @Scheduled(cron = "0 0 3 * * ?", timeZone = "Asia/Shanghai")
     void generateDailySummaries()
     {
         final var today = LocalDate.now(TimeUtils.ZONE_ASIA_SHANGHAI);
