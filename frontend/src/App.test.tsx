@@ -22,12 +22,13 @@ const AUTHED: AuthData = { token: 't', userId: 'u1', username: '小明', role: '
 
 function stubSuccessFetch(): void
 {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ code: 0, message: 'ok', data: [] }), { status: 200 }),
-    ))
+    //* 每次调用给全新 Response 实例: Response 体一次性, 共享单例会让首个之后的消费者 .json() 全体拒绝,
+    //* 消费者集合一变 (如 T9 移除天气胶囊) 取数成败就跟着洗牌 — 桩语义必须是"每个请求独立成功".
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () =>
+        new Response(JSON.stringify({ code: 0, message: 'ok', data: [] }), { status: 200 })))
 }
 
-//* 冲刷挂载后的异步回填 (品牌名/会话列表/天气胶囊/扩展取数的 fetch 微任务链): 令 setState 落在 act 内,
+//* 冲刷挂载后的异步回填 (品牌名/会话列表/每日总结/扩展取数的 fetch 微任务链): 令 setState 落在 act 内,
 //* 测试输出零警告. 链路很短, 固定轮数的微任务让步足够 (与 [[useChatGate.test]] 的 flushCascade 同形).
 async function settle(): Promise<void>
 {
@@ -69,12 +70,13 @@ describe('App (壳与路由 v2)', () =>
         delete document.documentElement.dataset.theme  //* 主题测试改写 <html> 态, 用例间复位防串扰.
     })
 
-    it('首页 (聊天位): 渲染占位 hero 与访客登录入口, 无输入框 (ChatView 重接线归 Task 9), 首页公开不触发登录门', async () =>
+    it('首页 (聊天位, Task 9): ChatView 在场 — hero + 输入框 + 内置 chips, 公开不触发登录门', async () =>
     {
         render(<App />)
         await settle()
         expect(screen.getByRole('heading', { name: '你好, 今天想聊点什么?' })).toBeInTheDocument()
-        expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+        expect(screen.getByRole('textbox')).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '和我聊聊今天的心情' })).toBeInTheDocument()  //* D25 内置文案集 (注册表零贡献时全亮).
         expect(screen.getByRole('button', { name: '登录 / 注册' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: '打开菜单' })).toBeInTheDocument()  //* 访客头像行双件套: 登录钮 + 汉堡 (红线: 危机入口对访客可达).
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

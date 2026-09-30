@@ -17,5 +17,5 @@ export function findExtension(id: string): IExtensionPoint | undefined
 export const overviewProvider: IExtensionPoint | undefined = extensions.find(e => e.overview != null)
 
 //* 主页 chips 摊平: 各扩展贡献依注册序追加 (限通用简单问题, D20);
-//* 平台内置文案链 (Task 9 的 components/chat/homeChips.ts) 届时在消费侧前置合并, 注册表只管扩展贡献.
+//* 内置文案与上限收敛在消费侧 (Task 9 已落地: [[homeChips]].selectVisibleChips — 扩展在前/内置补位), 注册表只管扩展贡献.
 export const homeChips: IHomeChip[] = extensions.flatMap(e => e.homeChips ?? [])

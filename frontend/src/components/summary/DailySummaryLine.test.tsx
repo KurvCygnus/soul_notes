@@ -1,6 +1,6 @@
 //* 每日总结「」行测试: 三态降级 (无总结 → 整件不渲染; 有总结 → 「」暗行 + 点击展开最近列表; 接口失败 → 不渲染且不重试),
 //* click-outside 收起, popover 内日期 + 「」content 逐条渲染 (返回几条渲染几条, 上限由后端 limit 兜底).
-//* api/summary 整体 mock, 不触网络; "不渲染"用 findBy 反向等待坐实 (与 WeatherCapsule 测试同形).
+//* api/summary 整体 mock, 不触网络; "不渲染"用 findBy 反向等待坐实.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'

@@ -1,6 +1,8 @@
-//* 输入区: 聊天/记一笔双态 + chips 快捷入口 + 语音转写回填 (多模态入口的文本侧终点).
-//* 分层裁决: 访客门不在此层 — 无条件上抛 onSend(text, mode), 门由 useChatSend/ChatView 在接线处统一拦截,
-//* 补发/补记等门语义只有一份实现 (状态机在 AuthContext), 输入组件保持纯输入.
+//* 输入区 (homepage-v2 Task 9 重构): 单一聊天模式 + chips 插槽 + 语音转写回填 (多模态入口的文本侧终点).
+//* 记一笔双态已移除 (D16): 日记域入口退场后 Composer 回归纯输入, 琥珀态/占位语切换随之消失.
+//* 分层裁决: 访客门不在此层收口文本发送 — onSend 无条件上抛, 门由 useChatSend 在接线处统一拦截 (requireAuth
+//* 包 doSend, 登录后补发). chips 是唯一例外: 访客 (onRequireLogin 在场) 点击只上抛开门且不直发 —
+//* 手输文本可补发是因为它是用户亲手写的, chip 只是候选题面, 登录后不应替用户发出未确认的提问.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
 import { uploadVoice } from '../../api/diary'
@@ -8,47 +10,54 @@ import { toast } from '../../utils/toast'
 import { growTextarea } from '../../utils/autogrow'
 import { MAX_RECORD_BYTES, MAX_RECORD_SECONDS, recordAudio, recordableSecondsLeft } from '../../utils/audio'
 import type { IAudioRecording } from '../../utils/audio'
+import type { IHomeChip } from '../../extensions/types'
 import Icon from '../ui/Icon'
-
-export type ComposerMode = 'chat' | 'diary'
 
 export interface IComposerProps
 {
-    onSend(text: string, mode: ComposerMode): void
+    onSend(text: string): void
     //* 流式发送中由 ChatView 传 true 禁并发 (doSend 内的 abort 仅作兜底).
     disabled?: boolean
+    //* chips 插槽 (D25): ChatView 经 selectVisibleChips 注入, 组件不感知注册表.
+    chips: IHomeChip[]
+    //* 访客门 (壳在访客态提供): chips 点击先过门, 不直发; 缺省 = 登录态, chips 直发.
+    onRequireLogin?(): void
 }
 
-//* 占位语导出供测试锚定 (模式切换的可观察证据).
+//* 占位语导出供测试锚定 (单一聊天模式的可观察证据).
 export const PLACEHOLDER_CHAT = '说说今天的心情, 或者随便聊点什么...'
-export const PLACEHOLDER_DIARY = '记一笔今天的心情...'
-
-//* chips 快捷文案: 恒以聊天模式上抛 (即使当前处于记一笔态), 输入框内容不参与.
-const CHIP_WEEK = '帮我看看这周的课和考试安排'
-const CHIP_WEATHER = '我最近的心情天气怎么样?'
 
 type VoiceState = 'idle' | 'recording' | 'transcribing'
 
-export default function Composer({ onSend, disabled = false }: IComposerProps): ReactElement
+export default function Composer({ onSend, disabled = false, chips, onRequireLogin }: IComposerProps): ReactElement
 {
     const [text, setText] = useState('')
-    const [mode, setMode] = useState<ComposerMode>('chat')
     const [voice, setVoice] = useState<VoiceState>('idle')
     const [elapsed, setElapsed] = useState(0)
     const recordRef = useRef<IAudioRecording | null>(null)
-    const diary = mode === 'diary'
 
-    //* 统一发送口: 纯空白不发出; 记一笔提交后自动复位聊天模式 (一次性动作, 防下一条闲聊误入日记).
-    const submit = useCallback((raw: string, sendMode: ComposerMode): void =>
+    //* 统一发送口: 纯空白不发出 (与 chips 直发同门).
+    const submit = useCallback((raw: string): void =>
     {
         const content = raw.trim()
         if(disabled || content === '')
             return
-        onSend(content, sendMode)
+        onSend(content)
         setText('')
-        if(sendMode === 'diary')
-            setMode('chat')
     }, [disabled, onSend])
+
+    //* chips 点击 (D25): 访客先过门且不直发 (见文件头裁决), 登录态直接以完整问题直发.
+    const handleChip = useCallback((chip: IHomeChip): void =>
+    {
+        if(disabled)
+            return
+        if(onRequireLogin != null)
+        {
+            onRequireLogin()
+            return
+        }
+        submit(chip.question)
+    }, [disabled, onRequireLogin, submit])
 
     const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void =>
     {
@@ -56,7 +65,7 @@ export default function Composer({ onSend, disabled = false }: IComposerProps): 
         if(e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229)
             return
         e.preventDefault()
-        submit(e.currentTarget.value, mode)
+        submit(e.currentTarget.value)
     }
 
     const startVoice = (): void =>
@@ -143,37 +152,30 @@ export default function Composer({ onSend, disabled = false }: IComposerProps): 
     }, [text])
 
     return (
-        <div className={diary ? 'composer composer-diary' : 'composer'}>
+        <div className="composer">
             <textarea
                 ref={textRef}
                 className="composer-textarea"
                 aria-label="消息输入框"
                 rows={1}
                 value={text}
-                placeholder={diary ? PLACEHOLDER_DIARY : PLACEHOLDER_CHAT}
+                placeholder={PLACEHOLDER_CHAT}
                 disabled={disabled}
                 onChange={(e) => { setText(e.target.value) }}
                 onKeyDown={handleKeyDown}
             />
             <div className="composer-bar">
-                <button
-                    type="button"
-                    className="composer-chip"
-                    aria-pressed={diary}
-                    disabled={disabled}
-                    onClick={() => { setMode(m => m === 'diary' ? 'chat' : 'diary') }}
-                >
-                    <Icon name="pen" size={14} />
-                    <span>记一笔</span>
-                </button>
-                <button type="button" className="composer-chip" disabled={disabled} onClick={() => { submit(CHIP_WEEK, 'chat') }}>
-                    <Icon name="calendar" size={14} />
-                    <span>本周安排</span>
-                </button>
-                <button type="button" className="composer-chip" disabled={disabled} onClick={() => { submit(CHIP_WEATHER, 'chat') }}>
-                    <Icon name="cloud-sun" size={14} />
-                    <span>心情天气</span>
-                </button>
+                {chips.map(chip => (
+                    <button
+                        key={chip.label}
+                        type="button"
+                        className="composer-chip"
+                        disabled={disabled}
+                        onClick={() => { handleChip(chip) }}
+                    >
+                        <span>{chip.label}</span>
+                    </button>
+                ))}
                 <span className="composer-spacer" />
                 {voice === 'idle' && (
                     <button type="button" className="composer-mic" aria-label="语音输入" disabled={disabled} onClick={startVoice}>
@@ -188,7 +190,7 @@ export default function Composer({ onSend, disabled = false }: IComposerProps): 
                     </span>
                 )}
                 {voice === 'transcribing' && <span className="composer-rec" role="status">转写中...</span>}
-                <button type="button" className="btn btn-primary composer-send" disabled={disabled} onClick={() => { submit(text, mode) }}>
+                <button type="button" className="btn btn-primary composer-send" disabled={disabled} onClick={() => { submit(text) }}>
                     发送
                 </button>
             </div>

@@ -1,11 +1,13 @@
-//* Composer 测试: 文本发送/换行/IME 防误发 + chips 预置发送 + 记一笔双态与自动复位 + 自动增高.
-//* 层次裁决: 访客门拦截不在此层 — Composer 无条件上抛 onSend, 门活在 ChatView/useChatSend 接线处
-//* (见 [[ChatView.test]] 的访客用例). 语音链路依赖 MediaRecorder/AudioContext, jsdom 不具备, 仅断言按钮在位.
+//* Composer 测试 (homepage-v2 Task 9 重构): 文本发送/换行/IME 防误发 + chips 插槽注入 (D25) + 自动增高 + 语音钮在位.
+//* 分层裁决 (D16 记一笔移除后): 访客门不在此层收口文本发送 — onSend 无条件上抛, 门活在 useChatSend 接线处
+//* (requireAuth 包 doSend, 见 [[ChatView.test]]); chips 是例外: 访客 (onRequireLogin 在场) 点击只上抛开门且不直发.
+//* 语音链路依赖 MediaRecorder/AudioContext, jsdom 不具备, 仅断言按钮在位.
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Composer, { PLACEHOLDER_CHAT, PLACEHOLDER_DIARY } from './Composer'
+import Composer, { PLACEHOLDER_CHAT } from './Composer'
 import { growTextarea } from '../../utils/autogrow'
+import type { IHomeChip } from '../../extensions/types'
 
 //* 自动增高接线观测: 包一层 spy 保留原实现 (jsdom 无布局, 像素行为由 [[autogrow.test]] 桩测钉死).
 vi.mock('../../utils/autogrow', async (importOriginal) =>
@@ -14,9 +16,14 @@ vi.mock('../../utils/autogrow', async (importOriginal) =>
     return { ...actual, growTextarea: vi.fn(actual.growTextarea) }
 })
 
-function renderComposer(onSend = vi.fn(), disabled = false): void
+const CHIPS: IHomeChip[] = [
+    { label: '聊聊心情', question: '和我聊聊今天的心情' },
+    { label: '压力有点大', question: '我最近压力有点大' },
+]
+
+function renderComposer(onSend = vi.fn(), opts: { disabled?: boolean; chips?: IHomeChip[]; onRequireLogin?: () => void } = {}): void
 {
-    render(<Composer onSend={onSend} disabled={disabled} />)
+    render(<Composer onSend={onSend} disabled={opts.disabled} chips={opts.chips ?? CHIPS} onRequireLogin={opts.onRequireLogin} />)
 }
 
 describe('Composer (输入区)', () =>
@@ -29,7 +36,7 @@ describe('Composer (输入区)', () =>
         const box = screen.getByRole('textbox') as HTMLTextAreaElement
         await user.type(box, '最近的考试压力有点大{Enter}')
         expect(onSend).toHaveBeenCalledOnce()
-        expect(onSend).toHaveBeenCalledWith('最近的考试压力有点大', 'chat')
+        expect(onSend).toHaveBeenCalledWith('最近的考试压力有点大')
         expect(box.value).toBe('')
         await user.type(box, '   {Enter}')
         expect(onSend).toHaveBeenCalledOnce()  //! 纯空白消息不发出, 也不清空输入.
@@ -50,33 +57,33 @@ describe('Composer (输入区)', () =>
         expect(onSend).not.toHaveBeenCalled()
     })
 
-    it('chips: 本周安排/心情天气 直接以聊天模式发送预置文案', async () =>
+    it('chips 插槽: 按注入顺序渲染 label, 点击直发 question (登录态无 onRequireLogin)', async () =>
     {
         const user = userEvent.setup()
         const onSend = vi.fn()
         renderComposer(onSend)
-        await user.click(screen.getByRole('button', { name: /本周安排/ }))
-        expect(onSend).toHaveBeenLastCalledWith('帮我看看这周的课和考试安排', 'chat')
-        await user.click(screen.getByRole('button', { name: /心情天气/ }))
-        expect(onSend).toHaveBeenLastCalledWith('我最近的心情天气怎么样?', 'chat')
+        expect(screen.getByRole('button', { name: '聊聊心情' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '压力有点大' })).toBeInTheDocument()
+        await user.click(screen.getByRole('button', { name: '压力有点大' }))
+        expect(onSend).toHaveBeenCalledOnce()
+        expect(onSend).toHaveBeenCalledWith('我最近压力有点大')  //* 直发完整问题, 与输入框内容无关.
     })
 
-    it('记一笔: 切换琥珀态与占位语, 提交后自动复位聊天模式', async () =>
+    it('chips 访客门: onRequireLogin 在场时点击只上抛开门, 不直发', async () =>
     {
         const user = userEvent.setup()
         const onSend = vi.fn()
-        renderComposer(onSend)
-        const chip = screen.getByRole('button', { name: /记一笔/ })
-        expect(chip).toHaveAttribute('aria-pressed', 'false')
-        expect(screen.getByPlaceholderText(PLACEHOLDER_CHAT)).toBeInTheDocument()
-        await user.click(chip)
-        expect(chip).toHaveAttribute('aria-pressed', 'true')  //* 琥珀高亮由 aria-pressed 驱动样式.
-        expect(screen.getByPlaceholderText(PLACEHOLDER_DIARY)).toBeInTheDocument()
-        await user.type(screen.getByPlaceholderText(PLACEHOLDER_DIARY), '今天有点丧{Enter}')
-        expect(onSend).toHaveBeenCalledWith('今天有点丧', 'diary')
-        //* 提交后自动复位: 防止下一条闲聊消息误落日记.
-        expect(screen.getByRole('button', { name: /记一笔/ })).toHaveAttribute('aria-pressed', 'false')
-        expect(screen.getByPlaceholderText(PLACEHOLDER_CHAT)).toBeInTheDocument()
+        const onRequireLogin = vi.fn()
+        renderComposer(onSend, { onRequireLogin })
+        await user.click(screen.getByRole('button', { name: '聊聊心情' }))
+        expect(onRequireLogin).toHaveBeenCalledOnce()
+        expect(onSend).not.toHaveBeenCalled()  //! 访客 chips 不进发送管线 (直发只属于登录态).
+    })
+
+    it('空 chips 插槽: 不渲染任何 chip 按钮', () =>
+    {
+        renderComposer(vi.fn(), { chips: [] })
+        expect(document.querySelector('.composer-chip')).not.toBeInTheDocument()
     })
 
     it('自动增高 (评审整改): 高度改由 growTextarea 像素级驱动, rows 恒 1; 清空后同样触发收敛', () =>
@@ -96,20 +103,22 @@ describe('Composer (输入区)', () =>
         expect(growSpy).toHaveBeenCalledTimes(3)  //* mount + 输入 + 清空: 清空同样触发收缩回弹.
     })
 
-    it('语音按钮在位 (录音链路依赖浏览器 API, jsdom 仅验存在)', () =>
+    it('语音按钮在位, 聊天占位语不变 (录音链路依赖浏览器 API, jsdom 仅验存在)', () =>
     {
         renderComposer()
         expect(screen.getByRole('button', { name: '语音输入' })).toBeInTheDocument()
+        expect(screen.getByPlaceholderText(PLACEHOLDER_CHAT)).toBeInTheDocument()
     })
 
     it('disabled: 发送按钮/chips/语音钮停用, Enter 不触发发送', async () =>
     {
         const user = userEvent.setup()
         const onSend = vi.fn()
-        renderComposer(onSend, true)
+        renderComposer(onSend, { disabled: true })
         const box = screen.getByRole('textbox') as HTMLTextAreaElement
         expect(box).toBeDisabled()
         expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+        expect(screen.getByRole('button', { name: '聊聊心情' })).toBeDisabled()
         await user.type(box, '不该发出去{Enter}')
         expect(onSend).not.toHaveBeenCalled()
     })

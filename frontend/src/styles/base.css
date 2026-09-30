@@ -16,8 +16,7 @@ button { font: inherit; cursor: pointer; }
 /* 应用壳: 左栏 + 主区 (宽度数值在 Sidebar 内联, 这里只管形态与令牌配色) */
 .shell { display: flex; height: 100dvh; }
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
-/* 主区顶栏 (Task 12, Task 14 改常驻): 汉堡钮 (移动端抽屉入口, 桌面端 display:none) + 天气胶囊靠右;
-   汉堡 margin-right:auto 在桌面端因 display:none 失效, 胶囊单独在场时仍由 flex-end 靠右, 布局语义不漂移 */
+/* 主区顶栏 (Task 14 常驻汉堡): 移动端抽屉唯一入口, 桌面端 display:none; 天气胶囊已废除 (D14, Task 9). */
 .topbar { flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 12px 0; }
 /* v2 手风琴侧栏 (v4 视觉定稿): 条目一律无框纯文本行, hover 淡高亮 (仅背景令牌), 选中项淡品牌底
    (color-mix 低 alpha, 不新造颜色令牌); 宽度过渡与箭头旋转走动效令牌 (D23), 折叠钮单图形旋转 (.icon-rot). */
@@ -69,32 +68,8 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 .sidebar.collapsed .sidebar-foot { justify-content: center; padding-left: 2px; padding-right: 2px; }
 .sidebar.collapsed .sidebar-login { padding: 4px 2px; }
 .sidebar.collapsed .sidebar-username, .sidebar.collapsed .sidebar-menu { display: none; }
-/* 情境卡组 (Task 12): 今日课表卡 + 近期安排卡, 可点卡片整块响应; 考试临近强调只用琥珀令牌 */
-.context-rail { display: flex; flex-direction: column; gap: 8px; }
-.context-card { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); font: inherit; box-shadow: var(--shadow); }
-button.context-card { cursor: pointer; }
-button.context-card:hover { border-color: var(--brand); }
-.context-card-title { font-size: 12px; color: var(--muted); }
-.context-row { display: flex; flex-direction: column; gap: 1px; padding: 2px 0; }
-.context-empty { font-size: 12px; color: var(--faint); }
-.context-row-main { font-size: 13px; font-weight: 600; }
-.context-row-sub { font-size: 12px; color: var(--muted); }
-.context-exam-days { font-weight: 600; }
-.context-row.context-soon { background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: var(--radius); padding: 4px 8px; }
-.context-row.context-soon .context-row-main, .context-row.context-soon .context-row-sub { color: var(--amber-ink); }
-/* 天气胶囊 (Task 12, 评审整改): 顶栏右侧芯片 + 质性 popover (SVG 图标, 无数值化展示) */
-.weather-capsule { position: relative; }
-.weather-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 999px; padding: 3px 12px; font-size: 13px; box-shadow: var(--shadow); }
-/* hover 提示只属于可点按钮 (Task 14): 空态 div 套同款外观但不给 hover 变色, 避免假可点暗示. */
-button.weather-chip:hover { border-color: var(--brand); }
-.weather-chip-empty { cursor: default; }
-.weather-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 220px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
-.weather-pop-title { margin: 0; font-size: 13px; font-weight: 600; }
-/* 质性 popover (评审整改): 数值化 mini 条整体移除, 改图标 + 状态词 + 质性文案. */
-.weather-pop-main { display: flex; align-items: center; gap: 10px; color: var(--brand); }
-.weather-pop-word { margin: 0; font-size: 15px; font-weight: 600; color: var(--ink); }
-.weather-pop-copy { margin: 0; font-size: 13px; color: var(--muted); }
-.weather-pop-foot { margin: 0; font-size: 12px; color: var(--faint); }
+/* 情境卡组样式已随 ContextRail 退场 (homepage-v2 Task 9): 扩展 chips 插槽取代情境卡, 无残留类. */
+/* 天气胶囊 (Task 12): 已废除 (D14 顶栏/天气 UI 退场, Task 9 随 api/diary 收敛移除), 样式块一并清除. */
 .chat-placeholder { height: 100%; display: grid; place-items: center; text-align: center; padding: 24px; }
 .chat-placeholder h1 { margin: 0 0 8px; font-size: 24px; }
 .chat-placeholder p { margin: 0; color: var(--muted); }
@@ -190,9 +165,8 @@ button.weather-chip:hover { border-color: var(--brand); }
 .chat-cursor { display: inline-block; margin-left: 2px; animation: chat-blink 1s steps(2, start) infinite; }
 @keyframes chat-blink { 50% { opacity: 0; } }
 .chat-error { margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--card); color: var(--danger); font-size: 13px; }
-/* 输入区 (Task 11): 双态 (聊天/记一笔) + chips + 语音; 圆角盒与琥珀态配色全部取自设计令牌 */
+/* 输入区 (Task 11, T9 单态化): 聊天单模式 + chips 插槽 + 语音; 圆角盒配色全部取自设计令牌 (记一笔琥珀态已废). */
 .composer { margin: 10px 16px 14px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
-.composer-diary { border-color: var(--amber-line); }
 .composer-textarea { width: 100%; border: none; background: transparent; color: var(--ink); font: inherit; resize: none; padding: 0; min-height: 24px; max-height: 38vh; overflow-y: auto; }
 .composer-textarea:focus { outline: none; }
 .composer-textarea::placeholder { color: var(--faint); }
@@ -200,7 +174,6 @@ button.weather-chip:hover { border-color: var(--brand); }
 .composer-bar { display: flex; align-items: center; gap: 8px; }
 .composer-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-strong); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
 .composer-chip:hover { border-color: var(--brand); color: var(--ink); }
-.composer-chip[aria-pressed="true"] { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber-ink); }
 .composer-chip:disabled, .composer-mic:disabled { opacity: .5; cursor: not-allowed; }
 .composer-mic { display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 3px 4px; border-radius: var(--radius); }
 .composer-mic:hover { color: var(--ink); }

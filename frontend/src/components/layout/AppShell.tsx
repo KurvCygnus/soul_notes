@@ -5,7 +5,7 @@
 //* 门桥接 (分层裁决): LoginSheet 不碰 AuthContext, 壳把它焊在门上 — onAuthed -> gate.confirm (补发 pending),
 //* onCancel -> gate.cancel (丢弃). 受保护路由的访客门在 App.tsx (<RequireAuth>), 与此处共享同一扇门.
 //* 会话状态提升 (Task 10 裁决沿用): 壳拥有 sessions (登录后拉取/登出即清) 与 openRequest 通道, 经 Outlet context 下发;
-//* Task 6: `/` 主区为聊天占位 hero, ChatView 重接线归 Task 9, 通道契约保持不变.
+//* Task 9: `/` 主区即 ChatView (仅会话节路由可达, 扩展节展开即整体卸载), 通道契约保持不变.
 //* Task 14: <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉, 顶栏汉堡是唯一入口; 开合判定纯 CSS 媒体查询驱动,
 //* jsdom 不求值媒体查询, 测试只断状态与节点在位性 (免 matchMedia mock).
 import { useCallback, useEffect, useState } from 'react'
@@ -17,7 +17,6 @@ import { useAlert } from '../../hooks/useAlert'
 import { useChatGate } from '../../hooks/useChatGate'
 import { toast } from '../../utils/toast'
 import { sectionRoute } from '../../utils/sidebarSections'
-import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
 import RedAlertModal from '../alert/RedAlertModal'
 import CrisisFlyout from '../crisis/CrisisFlyout'
@@ -50,7 +49,8 @@ export default function AppShell(): ReactElement
     //* 防止 A 登出后 B 登录的取数间隙闪现 A 的会话预览 — 跨账号泄漏); 派生而非 effect 内同步清零.
     const [sessionState, setSessionState] = useState<{ owner: string | null; list: ChatSessionVo[] | null }>({ owner: null, list: null })
     const [openRequest, setOpenRequest] = useState<ISessionOpenRequest | null>(null)
-    //* Task 12 通道 (情境卡唤起聊天) 随 ContextRail 出侧栏暂时失联: 只读占位, Task 9 随 ChatView 重构恢复写入.
+    //* Task 12 通道 (情境卡唤起聊天): ContextRail 已随 homepage-v2 退场 (扩展 chips 插槽取代), 通道本体与
+    //* ChatView 的 nonce 判重消费链保留 — 零生产者时恒 null 无害, 未来唤起类入口可原地复用 (回归测试钉住).
     const [sendRequest] = useState<ISendRequest | null>(null)
     //* 移动端抽屉开合态: 组件局部, 刻意不持久化 (桌面/移动共享同一状态, 落盘反而会在换端时误开抽屉).
     const [drawerOpen, setDrawerOpen] = useState(false)
@@ -217,7 +217,6 @@ export default function AppShell(): ReactElement
                     >
                         <Icon name="menu" size={18} />
                     </button>
-                    {user != null && <WeatherCapsule />}
                 </div>
                 <Outlet context={ctx} />
             </main>

@@ -1,4 +1,6 @@
-//* 聊天发送管线 (ChatView 的状态收敛点): SSE 流式主路径 + 非流式降级 + 会话绑定 + 竞态守卫 + 记一笔 (Task 11).
+//* 聊天发送管线 (ChatView 的状态收敛点): SSE 流式主路径 + 非流式降级 + 会话绑定 + 竞态守卫 (Task 11).
+//* homepage-v2 Task 9 (D16 记一笔移除): 日记域入口退场, handleSend 收敛为单一聊天模式 —
+//* RED 预警不再有日记兜底出口, 在线链走 WS 通道, 离线安全网由后端热线/危机域承接 (前端不触碰红线链).
 //* 核心机制 (收敛在 genRef 单一单调通道上):
 //*   1. 会话绑定: sessionIdRef 是唯一事实, meta 事件与历史打开都写它; 渲染不读 ref (React 契约).
 //*   2. 竞态守卫: openSession/startNewChat/doSend 各自 ++genRef 并捕获快照, 一切异步回调 (onChunk/
@@ -8,13 +10,9 @@
 //*   4. 卸载中止: cleanup abort 在途 fetch 释放连接, aliveRef 拦截迟到回调 (StrictMode 重挂安全).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listMessages, sendMessage, streamMessage } from '../api/chat'
-import { createDiary } from '../api/diary'
 import { ApiError } from '../api/http'
-import { toast } from '../utils/toast'
 import { useAuth } from './useAuth'
-import { useAlert } from './useAlert'
 import { useChatGate } from './useChatGate'
-import type { ComposerMode } from '../components/chat/Composer'
 import type { ISessionOpenRequest } from '../views/chatContext'
 import type { IDisplayMessage } from '../utils/group'
 import type { ChatMessage, ChatSessionVo } from '../types'
@@ -32,9 +30,8 @@ export interface IChatSendState
     streaming: boolean
     streamError: string | null
     startNewChat(): void
-    //* Task 11 Composer 的接线点: 访客经门拦截 (requireAuth 已登录时同步放行), 登录后补发;
-    //* mode='chat' 走流式消息, mode='diary' 走日记域落库 (不入消息流).
-    handleSend(content: string, mode: ComposerMode): void
+    //* Task 11 Composer 的接线点: 访客经门拦截 (requireAuth 已登录时同步放行), 登录后补发.
+    handleSend(content: string): void
 }
 
 //* 流式增量: 追加到末尾消息. 单发送不变量: 流式期间末尾必为本条的 assistant 气泡 (历史加载由 gen 守卫互斥).
@@ -76,7 +73,6 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
     //* 登出瞬间未读会话内容必须立即离开屏幕, 不能等下一次交互.
     const { user } = useAuth()
     const gate = useChatGate()
-    const { showRed } = useAlert()  //* 日记 RED 兜底出口 (产品红线): 与 WS 在线推送共用同一弹窗入口.
 
     const [messages, setMessages] = useState<IDisplayMessage[]>([])
     const [streaming, setStreaming] = useState(false)
@@ -241,38 +237,11 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
             })
     }, [finalizeSend])
 
-    //* 记一笔提交 (Task 11): 不入消息流, 走日记域 API; 成败均以轻提示收尾, 不打断当前视图.
-    //* Task 13 RED 兜底 (产品红线: 记一笔走日记接口必须保住日记预警链): createDiary 成功且
-    //* warningLevel === 'RED' 时改走危机域 showRed 弹热线浮层 (不落 success toast), 与 WS 同款弹窗;
-    //* 号码不在负载里传 — 弹窗自取三级缓存, 离线场景由内置默认兜底. summary 为空时落暖文案 (非医疗化).
-    const submitDiary = useCallback((content: string) =>
-    {
-        createDiary({ content }).
-            then(diary =>
-            {
-                if(diary.analysisResult?.warningLevel === 'RED')
-                {
-                    showRed({
-                        type: 'RED_ALERT',
-                        reason: diary.analysisResult.summary ?? '我们注意到你此刻可能过得很难. 别一个人扛, 热线那头有人愿意听你慢慢说.',
-                    })
-                    return
-                }
-                toast('记好了, 我会好好收藏.', 'success')
-            }).
-            catch(() => toast('没能记下这一笔, 请稍后再试.', 'error'))
-    }, [showRed])
-
     //* 发送入口 (Task 11 Composer 接线): 访客点发送 → 门拦截开浮层, confirm 落登录态后补发; 已登录直接放行.
-    const handleSend = useCallback((content: string, mode: ComposerMode) =>
+    const handleSend = useCallback((content: string) =>
     {
-        if(mode === 'diary')
-        {
-            gate.requireAuth(() => submitDiary(content))  //* 日记同门: 访客落库需登录, confirm 后自动补记.
-            return
-        }
         gate.requireAuth(() => doSend(content))
-    }, [doSend, gate, submitDiary])
+    }, [doSend, gate])
 
     return { messages, streaming, streamError, startNewChat, handleSend }
 }

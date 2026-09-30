@@ -1,14 +1,13 @@
 //* 根组件: 全局 Provider + 路由表装配 (spec §4.2). 壳 (<AppShell/>) 持有侧栏手风琴/汉堡菜单/抽屉/危机占位状态,
 //* 主区经 <Outlet/> 跟随手风琴节 (节即路由, sectionRoute 映射). 路由语义:
-//* `/` 聊天位公开 (访客可达); /extensions 系 / 设置 / 资料 / 关于 登录保护 (<RequireAuth> — 访客渲染空并开门,
-//* confirm 补发原地放行); /crisis 不再是路由 (危机入口收进汉堡菜单, Flyout 归 Task 8), 未知路径一律回首页.
-//* AlertProvider 置于壳外全局层 (Task 13): WS 预警通道与 showRed 全局唯一, 壳 (渲染弹窗) 与壳内 useChatSend
-//* (日记 RED 兜底) 都可达 — 记一笔的预警不依赖弹窗挂载点, 只依赖上下文可达.
+//* `/` 聊天位公开 (访客可达, ChatView 自带访客门接线); /extensions 系 / 设置 / 资料 / 关于 登录保护
+//* (<RequireAuth> — 访客渲染空并开门, confirm 补发原地放行); /crisis 不再是路由 (危机入口收进汉堡菜单,
+//* Flyout 归 Task 8), 未知路径一律回首页. AlertProvider 置于壳外全局层 (Task 13): WS 预警通道与 showRed
+//* 全局唯一, 壳 (渲染弹窗) 可达 — RED 预警只走 WS 在线链 (D16 记一笔移除后日记兜底退场).
 import { useEffect } from 'react'
 import type { ReactElement } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
-import DailySummaryLine from './components/summary/DailySummaryLine'
 import { AuthProvider } from './context/AuthContext'
 import { AlertProvider } from './context/AlertContext'
 import { useAuth } from './hooks/useAuth'
@@ -16,25 +15,9 @@ import { useChatGate } from './hooks/useChatGate'
 import { findExtension, overviewProvider } from './extensions/registry'
 import { ExtEmpty } from './extensions/helpers'
 import { getContextSummary } from './api/context'
+import ChatView from './views/ChatView'
 import PlaceholderView from './views/PlaceholderView'
 import SettingsView from './views/SettingsView'
-
-//* 聊天位占位 hero (Task 9 换 ChatView 重接线): 会话状态与发送通道仍由壳经 Outlet context 持有, 契约不变.
-function ChatHero(): ReactElement
-{
-    const { user } = useAuth()
-    return (
-        <div className="chat-placeholder">
-            <div className="hero-box">
-                <h1>你好, 今天想聊点什么?</h1>
-                <p>我是你的倾听伙伴, 任何想法都可以在这里慢慢说.</p>
-                {/* 每日总结「」行挂 composer 槽 (Task 10): 登录态限定 (访客请求必 401, 无谓打点); 无总结/失败整件隐身.
-                    T9 重接线后此挂载随 Composer 迁回 ChatView (组件自包含, 迁移零改动). */}
-                {user != null && <DailySummaryLine />}
-            </div>
-        </div>
-    )
-}
 
 //* 访客保护路由包装 (门语义复用 [[useChatGate]] 的 confirm 补发): 访客渲染空占位并由 effect 开门,
 //* pending 为 no-op — 真正的放行是 confirm 落登录态后的重渲染; 登录用户原样透传 (requireAuth 内直接短路).
@@ -88,7 +71,7 @@ export default function App(): ReactElement
                 <AlertProvider>
                     <Routes>
                         <Route element={<AppShell />}>
-                            <Route index element={<ChatHero />} />
+                            <Route index element={<ChatView />} />
                             <Route path="extensions" element={<RequireAuth><ExtensionsOverview /></RequireAuth>} />
                             <Route path="extensions/:id" element={<RequireAuth><ExtensionPageRoute /></RequireAuth>} />
                             <Route path="profile" element={<RequireAuth><PlaceholderView title="个人资料" /></RequireAuth>} />
