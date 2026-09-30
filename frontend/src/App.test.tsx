@@ -1,4 +1,5 @@
-//* 应用壳冒烟: 问候占位渲染 + 危机支持入口对未登录访客可见 (公开路由红线).
+//* 应用壳冒烟: 问候占位渲染 + 访客态头像行 (v2 手风琴侧栏).
+//* Task 5: 侧栏危机链接退场 (入口移入 Task 6 汉堡菜单, Flyout 归 Task 8) — 公开路由红线由 /crisis 路由与菜单承接;
 //* Task 14: 移动端抽屉开合状态机 (汉堡开 -> 遮罩/Escape 收) — 纯 React 态可在 jsdom 验证,
 //* <768px 的呈现归 CSS 媒体查询 (jsdom 不求值也不加载样式表), 测试只断言类名与节点在位性.
 import { describe, expect, it } from 'vitest'
@@ -12,8 +13,8 @@ describe('App', () =>
     {
         render(<App />)
         expect(screen.getByRole('heading', { name: '你好, 今天想聊点什么?' })).toBeInTheDocument()
-        expect(screen.getByRole('textbox', { name: '消息输入框' })).toBeInTheDocument()  //* Task 11: 输入区就位 (原 composer-slot 占位已替换).
-        expect(screen.getByRole('link', { name: '危机支持' })).toHaveAttribute('href', '/crisis')
+        expect(screen.getByRole('textbox', { name: '消息输入框' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '登录 / 注册' })).toBeInTheDocument()  //* 访客态头像行: 壳仅对访客下发 onOpenLogin.
     })
 
     it('移动端抽屉: 汉堡打开 (类名/遮罩/aria 翻转), 遮罩点击收起, Escape 亦收起', async () =>

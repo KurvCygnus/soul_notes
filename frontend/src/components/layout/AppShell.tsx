@@ -5,19 +5,22 @@
 //* ChatView 的打开请求通道, nonce 单调递增), 经 <Outlet context> 下发 (见 [[IChatViewContext]]);
 //* 历史加载与流式发送归 ChatView. 侧栏删除经壳调 deleteSession, 删除打开中的会话由 ChatView 依
 //* sessions 列表比对自行复位 hero (壳不追踪"当前打开"状态).
-//* Task 12: 通道再延展 — sendRequest (情境卡 onAsk → ChatView 聊天模式发送, 同 nonce 机制);
+//* Task 12: 通道再延展 — sendRequest (情境卡唤起聊天发送); Task 5 起该通道只读占位 (ContextRail 出侧栏, Task 9 恢复写入);
 //* 主区顶部加极简 topbar 挂天气胶囊 (仅登录后渲染, 胶囊自身 fail-silent).
 //* Task 14: topbar 常驻并挂汉堡钮 — <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉, 汉堡是唯一入口.
 //* 抽屉开合态是组件局部 React 态 (不落盘); 访客同样可见 (危机支持是公开路由红线, 移动端不能没有侧栏入口).
 //* 开合判定纯 CSS 媒体查询驱动: jsdom 不求值媒体查询, 既有测试零改动保持桌面形态 (免 matchMedia mock).
+//* Task 5 过渡适配: 侧栏契约换新 (手风琴), 壳最小改动保持可编译可跑 — section/menuOpen 状态与回调在此临时持有,
+//* 完整壳重构 (主区跟随/汉堡菜单实体/访客保护路由) 归 Task 6, 危机 Flyout 接线归 Task 8, 删除模态归 Task 11.
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { deleteSession, listSessions } from '../../api/chat'
 import { useAuth } from '../../hooks/useAuth'
 import { useAlert } from '../../hooks/useAlert'
 import { useChatGate } from '../../hooks/useChatGate'
 import { toast } from '../../utils/toast'
+import { sectionRoute } from '../../utils/sidebarSections'
 import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
 import RedAlertModal from '../alert/RedAlertModal'
@@ -25,6 +28,7 @@ import Icon from '../ui/Icon'
 import { useBrandName } from '../../hooks/useBrandName'
 import Sidebar from './Sidebar'
 import { SIDEBAR_PREF_KEY } from './Sidebar'
+import type { SidebarSection } from '../../utils/sidebarSections'
 import type { IChatViewContext, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
 import type { ChatSessionVo } from '../../types'
 
@@ -36,13 +40,18 @@ export default function AppShell(): ReactElement
     useEffect(() => { document.title = brand }, [brand])
     const gate = useChatGate()
     const { red, dismissRed } = useAlert()
+    const navigate = useNavigate()
     //* 惰性还原: 首渲染读偏好, 缺省展开 (存储取值归 Sidebar 所有, 这里只消费 'collapsed' 语义).
     const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_PREF_KEY) === 'collapsed')
+    //* 手风琴展开节 (默认会话节, spec §5.1) 与汉堡菜单开合态: Task 5 过渡期由壳持有, Task 6 壳重构沿用.
+    const [section, setSection] = useState<SidebarSection>('sessions')
+    const [menuOpen, setMenuOpen] = useState(false)
     //* 会话状态带账号标签: 列表只对"拉取它的那个账号"可见 (派生判定, 账号切换瞬间旧列表立即失明,
     //* 防止 A 登出后 B 登录的取数间隙闪现 A 的会话预览 — 跨账号泄漏); 派生而非 effect 内同步清零.
     const [sessionState, setSessionState] = useState<{ owner: string | null; list: ChatSessionVo[] | null }>({ owner: null, list: null })
     const [openRequest, setOpenRequest] = useState<ISessionOpenRequest | null>(null)
-    const [sendRequest, setSendRequest] = useState<ISendRequest | null>(null)
+    //* Task 12 通道 (情境卡唤起聊天) 随 ContextRail 出侧栏暂时失联: 只读占位, Task 9 随 ChatView 重构恢复写入.
+    const [sendRequest] = useState<ISendRequest | null>(null)
     //* 移动端抽屉开合态: 组件局部, 刻意不持久化 (桌面/移动共享同一状态, 落盘反而会在换端时误开抽屉).
     const [drawerOpen, setDrawerOpen] = useState(false)
     const sessions = user != null && sessionState.owner === user.userId ? sessionState.list : null
@@ -78,13 +87,21 @@ export default function AppShell(): ReactElement
         setOpenRequest(prev => ({ sessionId: id, nonce: (prev?.nonce ?? 0) + 1 }))
     }, [])
 
-    //* Task 12: 情境卡唤起 → 同一 nonce 机制下发 (ChatView 判重后路由进聊天发送管线).
-    //* 判重台账在 ChatView 模块级 (跨挂载存活): 壳不必在登出/换号时清理 sendRequest, 台账挡住重放即可.
-    const handleAsk = useCallback((q: string) =>
+    //* 手风琴节标题: 状态翻转 + 主区导航到该节路由 (sectionRoute 映射归 utils, Task 6 主区跟随沿用).
+    const handleSectionChange = useCallback((next: SidebarSection) =>
     {
-        setDrawerOpen(false)  //* 同 handleOpenSession: 抽屉内点情境卡, 发送后让用户看到聊天流.
-        setSendRequest(prev => ({ content: q, nonce: (prev?.nonce ?? 0) + 1 }))
-    }, [])
+        setSection(next)
+        navigate(sectionRoute(next))
+    }, [navigate])
+
+    //* 新建会话: 访客先过登录门 (红线: 访客任何交互触发登录浮层); 登录态 Task 9 接线 ChatView 复位,
+    //* 过渡期仅收抽屉 (桌面端无副作用, 抽屉内点按不至于盖着聊天区).
+    const handleNewChat = useCallback(() =>
+    {
+        setDrawerOpen(false)
+        if(user == null)
+            gate.requireAuth(() => {})
+    }, [gate, user])
 
     //* 抽屉 Escape 关闭: 仅打开期间挂 document 级监听, 收起/卸载即注销 (与 LoginSheet 同形);
     //! 有意不与登录浮层抢 Escape: 抽屉内点登录会先收抽屉再开门, 两浮层不会同时在场.
@@ -114,12 +131,18 @@ export default function AppShell(): ReactElement
         <div className="shell">
             <Sidebar
                 collapsed={collapsed}
-                onToggle={() => setCollapsed((c) => !c)}
-                onOpenLogin={user == null ? () => { setDrawerOpen(false); gate.requireAuth(() => {}) } : undefined}
+                onToggleCollapse={() => setCollapsed((c) => !c)}
+                section={section}
+                onSectionChange={handleSectionChange}
+                extensionsLabel="扩展"  //* Task 12 下发部署配置前先用默认值.
                 sessions={sessions ?? undefined}
                 onDeleteSession={handleDeleteSession}
                 onOpenSession={handleOpenSession}
-                onAsk={handleAsk}
+                onNewChat={handleNewChat}
+                menuOpen={menuOpen}
+                onMenuToggle={() => setMenuOpen((o) => !o)}  //* 菜单实体 Task 6 渲染, 过渡期仅持态.
+                onOpenCrisis={() => navigate('/crisis')}  //* Task 8 换危机 Flyout 开关.
+                onOpenLogin={user == null ? () => { setDrawerOpen(false); gate.requireAuth(() => {}) } : undefined}
                 drawerOpen={drawerOpen}
                 onCloseDrawer={() => setDrawerOpen(false)}
             />

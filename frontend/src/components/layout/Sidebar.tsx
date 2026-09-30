@@ -1,15 +1,17 @@
-//* 左栏: 折叠 (48px 图标条) <-> 展开 (260px 内容区), 宽度数值来自产品规格, 颜色走设计令牌 (.sidebar 类).
-//* 纯 props 驱动 (不读 Context, 便于无头测试): 壳仅对访客传 onOpenLogin, 故该 prop 在位即视为访客态 —
-//* 会话区与"你的情境"区只对登录用户渲染 (产品裁决). 会话数据 Task 10 经壳接入, 本组件只渲染与回调.
-//* Task 10 契约扩展: 新增可选 onOpenSession (点击会话项打开), 既有 prop 语义与缺省行为不变.
-//* Task 12 契约扩展: 新增可选 onAsk (情境卡唤起聊天), "你的情境"占位由 <ContextRail/> 实体取代 —
-//* 数据自加载, 空数组/失败整区自动静默 (adapter=none 自动静默); onAsk 缺省时卡片退化为纯展示.
-//* Task 14 契约扩展: 新增可选 drawerOpen/onCloseDrawer — <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉,
-//* 开合态由壳持有 (组件局部的 React 态, 不落盘); 两 prop 缺省即桌面形态, 既有调用方零改动.
-import { Link } from 'react-router-dom'
+//* 左栏 (v2 手风琴): 折叠 (48px 图标条) <-> 展开 (260px 内容区), 宽度数值来自产品规格, 颜色走设计令牌 (.sidebar 类).
+//* 结构照 spec §5.1/§5.2: 折叠钮 / 扩展节 (总览 + 注册表条目) / 会话节 (新建会话 + 条目列表) / 底部头像行.
+//* 手风琴语义: section 由壳持有 (单一状态, 两节互斥且必有一个展开), 点节标题上抛 onSectionChange 由壳导航
+//* sectionRoute; 扩展/总览条目点击由本组件直接导航 — 契约无 onOpenExtension(id), 条目级去向归侧栏, 节级归壳.
+//* 访客判定沿旧约: 壳仅对访客传 onOpenLogin, 该 prop 在场即访客态; 侧栏结构照常渲染, 交互上抛壳过登录门.
+//* 登录用户的用户名经 useAuth 读取 (契约无 user prop); 删除 × 不再做 confirm 门控, 直接上抛 (确认模态 Task 11).
+//* onOpenCrisis 暂不消费: 危机入口收进壳的汉堡菜单 (Task 6/8), 该 prop 仅作契约保留位.
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { ReactElement } from 'react'
-import ContextRail from '../sidebar/ContextRail'
 import Icon from '../ui/Icon'
+import { extensions, overviewProvider } from '../../extensions/registry'
+import { sectionRoute } from '../../utils/sidebarSections'
+import { useAuth } from '../../hooks/useAuth'
+import type { SidebarSection } from '../../utils/sidebarSections'
 import type { ChatSessionVo } from '../../types'
 
 //* 偏好键与取值归本组件所有, 壳只经它读初始形态 (AppShell 惰性还原).
@@ -20,43 +22,59 @@ const WIDTH_EXPANDED = 260
 
 export interface ISidebarProps
 {
+    section: SidebarSection  //* 当前展开节 (单一状态, 手风琴语义)
     collapsed: boolean
-    onToggle(): void
+    onSectionChange(section: SidebarSection): void  //* 点节标题 -> 壳导航到 sectionRoute(section)
+    onToggleCollapse(): void
+    extensionsLabel: string  //* 板块显示名 (部署配置, Task 12 下发前壳传默认值 "扩展")
     sessions?: ChatSessionVo[]
     onDeleteSession?(id: string): void
-    //* Task 10 扩展: 提供时会话项变为可点按钮 (打开会话), 缺省保持纯展示 (向后兼容).
     onOpenSession?(id: string): void
-    //* Task 12 扩展: 提供时情境卡可点唤起聊天发送, 缺省纯展示 (向后兼容).
-    onAsk?(q: string): void
-    onOpenLogin?(): void
-    //* Task 14 扩展: 移动端抽屉开合态 (仅驱动 className/遮罩渲染), 缺省 false 即桌面形态.
-    drawerOpen?: boolean
+    onNewChat?(): void
+    menuOpen: boolean  //* 汉堡菜单开合态 (菜单实体在壳, Task 6), 仅作 aria 状态镜像
+    onMenuToggle(): void
+    onOpenCrisis(): void  //* 打开危机 Flyout (Task 8 接线, 本任务先留 prop)
+    onOpenLogin?(): void  //* 提供即访客态: 头像行显示 登录/注册, 条目交互上抛
+    drawerOpen?: boolean  //* <768px 抽屉开合态 (仅驱动 className/遮罩渲染), 缺省即桌面形态
     onCloseDrawer?(): void
 }
 
-//* 删除是破坏性操作: 以原生 confirm 二次确认 (测试 mock 该方法断言门控), 拒绝即不动数据.
-function requestDelete(session: ChatSessionVo, onDeleteSession?: (id: string) => void): void
+export default function Sidebar({
+    section, collapsed, onSectionChange, onToggleCollapse, extensionsLabel,
+    sessions, onDeleteSession, onOpenSession, onNewChat, menuOpen, onMenuToggle,
+    onOpenLogin, drawerOpen, onCloseDrawer,
+}: ISidebarProps): ReactElement
 {
-    if(onDeleteSession == null)
-        return
-    if(window.confirm(`确定删除会话 "${session.preview}"?`))
-        onDeleteSession(session.sessionId)
-}
-
-export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession, onOpenSession, onAsk, onOpenLogin, drawerOpen, onCloseDrawer }: ISidebarProps): ReactElement
-{
+    const navigate = useNavigate()
+    const { pathname } = useLocation()
+    const { user } = useAuth()
     const guest = onOpenLogin != null
     const drawer = drawerOpen === true
+    const extBase = sectionRoute('extensions')
 
     //* 折叠切换持久化: 先按当前形态计算去向再落盘, 壳据此翻转 React 态 (存储所有权在组件, 壳只管渲染).
     const handleToggle = (): void =>
     {
         localStorage.setItem(SIDEBAR_PREF_KEY, collapsed ? 'expanded' : 'collapsed')
-        onToggle()
+        onToggleCollapse()
     }
 
+    //* 折叠图标列点节图标 = 展开侧栏并切到对应节 (双上抛, 壳负责导航).
+    const expandTo = (next: SidebarSection): void =>
+    {
+        onSectionChange(next)
+        onToggleCollapse()
+    }
+
+    const sidebarClass = ['sidebar', collapsed ? 'collapsed' : '', drawer ? 'drawer-open' : ''].
+        filter(Boolean).
+        join(' ')
+
+    //* 条目选中态: 当前路由即该扩展页 (总览 = /extensions, 条目 = /extensions/:id), 淡品牌底由 CSS 承载.
+    const rowClass = (target: string): string => (pathname === target ? 'sidebar-row active' : 'sidebar-row')
+
     return (
-        <aside className={drawer ? 'sidebar drawer-open' : 'sidebar'} style={{ width: collapsed ? WIDTH_COLLAPSED : WIDTH_EXPANDED }}>
+        <aside className={sidebarClass} style={{ width: collapsed ? WIDTH_COLLAPSED : WIDTH_EXPANDED }}>
             {/* 抽屉遮罩: 仅抽屉态渲染, 点击即关 (Escape 关闭归壳); 桌面端该节点根本不出现, 无回归面. */}
             {drawer && onCloseDrawer != null && (
                 <div className="drawer-overlay" aria-hidden="true" onClick={onCloseDrawer} />
@@ -69,68 +87,127 @@ export default function Sidebar({ collapsed, onToggle, sessions, onDeleteSession
                 aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
                 onClick={handleToggle}
             >
-                {collapsed && <Icon name="panel" size={17} className="icon-rot" />}
-                {!collapsed && <Icon name="panel" size={17} />}
+                <Icon name="panel" size={17} className={collapsed ? 'icon-rot' : undefined} />
             </button>
             <div id="sidebar-body" className="sidebar-body">
                 {collapsed ? (
-                    guest && (
-                        <button type="button" className="sidebar-mini" aria-label="登录 / 注册" onClick={onOpenLogin}>
-                            登录
+                    <nav className="sidebar-rail" aria-label="侧栏快捷入口">
+                        <button type="button" className="sidebar-mini" aria-label={extensionsLabel} title={extensionsLabel} onClick={() => expandTo('extensions')}>
+                            <Icon name="grid" size={17} />
                         </button>
-                    )
-                ) : guest ? (
-                    <>
-                        <p className="sidebar-empty">登录后可同步会话与你的情境</p>
-                        <button type="button" className="btn btn-primary" onClick={onOpenLogin}>登录 / 注册</button>
-                    </>
+                        <button type="button" className="sidebar-mini" aria-label="会话" title="会话" onClick={() => expandTo('sessions')}>
+                            <Icon name="chat" size={17} />
+                        </button>
+                        <button type="button" className="sidebar-mini" aria-label="新建会话" title="新建会话" onClick={() => onNewChat?.()}>
+                            <Icon name="chat-plus" size={17} />
+                        </button>
+                    </nav>
                 ) : (
                     <>
-                        <section aria-label="会话区">
-                            <h2 className="sidebar-title">会话</h2>
-                            {sessions == null || sessions.length === 0 ? (
-                                <p className="sidebar-empty">还没有会话, 想聊的时候随时开始.</p>
-                            ) : (
-                                <ul className="sidebar-list">
-                                    {sessions.map((s) => (
-                                        <li key={s.sessionId} className="sidebar-item">
-                                            {onOpenSession == null ? (
-                                                <span className="sidebar-preview">{s.preview}</span>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    className="sidebar-preview sidebar-open"
-                                                    onClick={() => onOpenSession(s.sessionId)}
-                                                >
-                                                    {s.preview}
-                                                </button>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className="sidebar-del"
-                                                aria-label={`删除会话: ${s.preview}`}
-                                                onClick={() => requestDelete(s, onDeleteSession)}
-                                            >
-                                                ×
-                                            </button>
-                                        </li>
+                        <section className="sidebar-section">
+                            <button
+                                type="button"
+                                className="sidebar-section-title"
+                                aria-expanded={section === 'extensions'}
+                                onClick={() => onSectionChange('extensions')}
+                            >
+                                <Icon name="grid" size={16} />
+                                <span className="sidebar-section-name">{extensionsLabel}</span>
+                                <Icon name="chevron" size={14} className="sidebar-section-arrow" />
+                            </button>
+                            {section === 'extensions' && (
+                                <div className="sidebar-items">
+                                    {overviewProvider != null && (
+                                        <button type="button" className={rowClass(extBase)} onClick={() => navigate(extBase)}>
+                                            <Icon name={overviewProvider.icon} size={16} />
+                                            <span className="sidebar-row-name">总览</span>
+                                        </button>
+                                    )}
+                                    {extensions.map((e) => (
+                                        <button
+                                            key={e.id}
+                                            type="button"
+                                            className={rowClass(`${extBase}/${e.id}`)}
+                                            onClick={() => navigate(`${extBase}/${e.id}`)}
+                                        >
+                                            <Icon name={e.icon} size={16} />
+                                            <span className="sidebar-row-name">{e.name}</span>
+                                            {e.mock === true && <span className="sidebar-tag">Mock</span>}
+                                        </button>
                                     ))}
-                                </ul>
+                                </div>
                             )}
                         </section>
-                        {/* 你的情境区 (Task 12): 占位文案由 ContextRail 实体取代 — 自加载课表/考试/日程,
-                            空数组或请求失败时整区自隐藏 (含标题), 点击卡片经壳的 sendRequest 通道唤起聊天. */}
-                        <ContextRail onAsk={onAsk} />
+                        <section className="sidebar-section">
+                            <button
+                                type="button"
+                                className="sidebar-section-title"
+                                aria-expanded={section === 'sessions'}
+                                onClick={() => onSectionChange('sessions')}
+                            >
+                                <Icon name="chat" size={16} />
+                                <span className="sidebar-section-name">会话</span>
+                                <Icon name="chevron" size={14} className="sidebar-section-arrow" />
+                            </button>
+                            {section === 'sessions' && (
+                                <div className="sidebar-items">
+                                    <button type="button" className="sidebar-new" onClick={() => onNewChat?.()}>
+                                        <Icon name="chat-plus" size={16} />
+                                        新建会话
+                                    </button>
+                                    {sessions == null || sessions.length === 0 ? (
+                                        <p className="sidebar-empty">还没有会话, 想聊的时候随时开始.</p>
+                                    ) : (
+                                        <ul className="sidebar-list">
+                                            {sessions.map((s) => (
+                                                <li key={s.sessionId} className="sidebar-row">
+                                                    <button
+                                                        type="button"
+                                                        className="sidebar-row-main"
+                                                        onClick={() => onOpenSession?.(s.sessionId)}
+                                                    >
+                                                        {s.preview}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="sidebar-del"
+                                                        aria-label={`删除会话: ${s.preview}`}
+                                                        onClick={() => onDeleteSession?.(s.sessionId)}
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            )}
+                        </section>
                     </>
                 )}
             </div>
-            <nav className="sidebar-nav" aria-label="页面导航">
-                {/* 危机支持入口对访客同样可见: 公开路由是产品红线, 不设登录门. 折叠态以 SVG 救生圈图标承载 (评审整改: 弃用裸 "SOS" 文本). */}
-                <Link className="sidebar-item sidebar-crisis" to="/crisis" aria-label="危机支持">
-                    <Icon name="buoy" size={16} />
-                    {!collapsed && <span>危机支持</span>}
-                </Link>
-            </nav>
+            {/* 底部头像行: 登录用户 = 头像+用户名+汉堡钮, 访客 = 登录/注册 (折叠态缩为 "登录" 以适配 48px). */}
+            <div className="sidebar-foot">
+                {guest ? (
+                    <button type="button" className="sidebar-login" aria-label="登录 / 注册" onClick={onOpenLogin}>
+                        {collapsed ? '登录' : '登录 / 注册'}
+                    </button>
+                ) : (
+                    <>
+                        <span className="sidebar-avatar" aria-hidden="true">{(user?.username ?? '').charAt(0)}</span>
+                        <span className="sidebar-username">{user?.username}</span>
+                        <button
+                            type="button"
+                            className="sidebar-menu"
+                            aria-label="打开菜单"
+                            aria-expanded={menuOpen}
+                            onClick={onMenuToggle}
+                        >
+                            <Icon name="menu" size={17} />
+                        </button>
+                    </>
+                )}
+            </div>
         </aside>
     )
 }

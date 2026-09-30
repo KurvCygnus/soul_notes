@@ -7,6 +7,7 @@ export type IconName =
     | 'sun' | 'cloud' | 'rain' | 'thunder' | 'gauge'
     | 'pen' | 'calendar' | 'cloud-sun' | 'mic'
     | 'panel' | 'buoy' | 'menu' | 'phone'
+    | 'chat' | 'chat-plus' | 'grid' | 'chevron'  //* 手风琴侧栏 v2 新增: 会话气泡/气泡加号/扩展宫格/节标题箭头.
 
 const PATHS: Record<IconName, ReactElement> = {
     sun: (
@@ -80,6 +81,26 @@ const PATHS: Record<IconName, ReactElement> = {
     ),
     phone: (
         <path d="M21 16.6v2.6a1.9 1.9 0 0 1-2.1 1.9 18.9 18.9 0 0 1-8.2-2.9 18.6 18.6 0 0 1-5.7-5.7A18.9 18.9 0 0 1 2.1 4.3 1.9 1.9 0 0 1 4 2.2h2.6a1.9 1.9 0 0 1 1.9 1.6c.1.9.3 1.7.6 2.5a1.9 1.9 0 0 1-.4 2L7.5 9.5a15.2 15.2 0 0 0 6.1 6.1l1.2-1.2a1.9 1.9 0 0 1 2-.4c.8.3 1.6.5 2.5.6a1.9 1.9 0 0 1 1.7 2z" />
+    ),
+    chat: (
+        <path d="M4.5 7A2.5 2.5 0 0 1 7 4.5h10A2.5 2.5 0 0 1 19.5 7v6a2.5 2.5 0 0 1-2.5 2.5h-7L5.5 19.5v-4H7A2.5 2.5 0 0 1 4.5 13z" />
+    ),
+    'chat-plus': (
+        <>
+            <path d="M4.5 7A2.5 2.5 0 0 1 7 4.5h10A2.5 2.5 0 0 1 19.5 7v6a2.5 2.5 0 0 1-2.5 2.5h-7L5.5 19.5v-4H7A2.5 2.5 0 0 1 4.5 13z" />
+            <path d="M9.5 10h5M12 7.5v5" />
+        </>
+    ),
+    grid: (
+        <>
+            <rect x="4" y="4" width="7" height="7" rx="2" />
+            <rect x="13" y="4" width="7" height="7" rx="2" />
+            <rect x="4" y="13" width="7" height="7" rx="2" />
+            <rect x="13" y="13" width="7" height="7" rx="2" />
+        </>
+    ),
+    chevron: (
+        <path d="M7 10l5 5 5-5" />
     ),
 }
 

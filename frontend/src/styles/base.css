@@ -19,25 +19,56 @@ button { font: inherit; cursor: pointer; }
 /* 主区顶栏 (Task 12, Task 14 改常驻): 汉堡钮 (移动端抽屉入口, 桌面端 display:none) + 天气胶囊靠右;
    汉堡 margin-right:auto 在桌面端因 display:none 失效, 胶囊单独在场时仍由 flex-end 靠右, 布局语义不漂移 */
 .topbar { flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 12px 0; }
-.sidebar { flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow: hidden; transition: width .18s ease; }
+/* v2 手风琴侧栏 (v4 视觉定稿): 条目一律无框纯文本行, hover 淡高亮 (仅背景令牌), 选中项淡品牌底
+   (color-mix 低 alpha, 不新造颜色令牌); 宽度过渡与箭头旋转走动效令牌 (D23), 折叠钮单图形旋转 (.icon-rot). */
+.sidebar { flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow: hidden; transition: width var(--dur-base) var(--ease-enter); }
 .sidebar-toggle { align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; border: none; background: none; color: var(--muted); padding: 4px; border-radius: var(--radius); }
 .icon-rot { transform: rotate(180deg); }
 .sidebar-toggle:hover { background: var(--card); color: var(--ink); }
-.sidebar-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-.sidebar-title { margin: 0 0 4px; font-size: 12px; color: var(--muted); }
-.sidebar-empty { margin: 0; font-size: 13px; color: var(--faint); }
+.sidebar-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+/* 节标题行: 无框文本行 + 箭头; 箭头朝向随 aria-expanded 旋转 (jsdom 只断状态, 时序归令牌). */
+.sidebar-section { display: flex; flex-direction: column; }
+.sidebar-section-title { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); padding: 6px 8px; border-radius: var(--radius); font-size: 13px; font-weight: 600; text-align: left; }
+.sidebar-section-title:hover { background: var(--card); color: var(--ink); }
+.sidebar-section-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-section-arrow { flex-shrink: 0; transition: transform var(--dur-fast) var(--ease-enter); }
+.sidebar-section-title[aria-expanded="false"] .sidebar-section-arrow { transform: rotate(-90deg); }
+.sidebar-items { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 4px; }
 .sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.sidebar-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: var(--radius); color: var(--ink); text-decoration: none; font-size: 14px; }
-.sidebar-item:hover { background: var(--card); }
-/* 会话预览两行截断 (Task 14): 用 -webkit-line-clamp 前缀语法 — 虽带前缀, 但 Chrome/Edge/Safari/Firefox 68+
+/* 条目行: 无框纯文本行, hover 淡高亮, 选中淡品牌底; li (会话) 与 button (扩展) 共用同一形态. */
+.sidebar-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--radius); font-size: 14px; text-align: left; }
+button.sidebar-row { border: none; background: none; color: var(--ink); font: inherit; }
+.sidebar-row:hover { background: var(--card); }
+.sidebar-row.active { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.sidebar-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Mock/占位行尾小字: 非徽标 (无边框无底), 仅弱化小字标注. */
+.sidebar-tag { flex-shrink: 0; font-size: 11px; color: var(--faint); }
+.sidebar-new { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); font: inherit; font-size: 14px; padding: 6px 8px; border-radius: var(--radius); text-align: left; }
+.sidebar-new:hover { background: var(--card); color: var(--ink); }
+.sidebar-empty { margin: 0; font-size: 13px; color: var(--faint); padding: 2px 8px 4px; }
+/* 会话预览两行截断: 用 -webkit-line-clamp 前缀语法 — 虽带前缀, 但 Chrome/Edge/Safari/Firefox 68+
    十余年全线支持, 而无前缀的新标准 line-clamp 独立语法 2024 年才落地且旧浏览器不认, 双写反而在支持差异下行为不一;
    以覆盖面最稳的前缀版为准, 万一前缀失效则整段显示不破版. overflow:hidden 同时把 flex 子项的 min-width 归零, 预览可收缩换行. */
-.sidebar-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
-.sidebar-del { flex-shrink: 0; margin-left: auto; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; }
+.sidebar-row-main { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
+/* 删除 ×: hover/focus 才显 (CSS 职责, 键盘可达性经 focus-within 同步), 点击直接上抛壳 (确认模态 Task 11). */
+.sidebar-del { flex-shrink: 0; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; visibility: hidden; }
 .sidebar-del:hover { color: var(--danger); }
-.sidebar-mini { border: none; background: none; color: var(--muted); font-size: 13px; padding: 2px 0; }
-.sidebar-mini:hover { color: var(--ink); }
-.sidebar-nav { margin-top: auto; }
+.sidebar-row:hover .sidebar-del, .sidebar-row:focus-within .sidebar-del { visibility: visible; }
+/* 折叠图标列 (48px): 节图标/新建会话 纯图标钮, 点按展开并切节. */
+.sidebar-rail { display: flex; flex-direction: column; gap: 4px; }
+.sidebar-mini { display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 5px; border-radius: var(--radius); }
+.sidebar-mini:hover { background: var(--card); color: var(--ink); }
+/* 底部头像行: 登录用户 = 头像+用户名+汉堡钮, 访客 = 登录/注册; 折叠态收成仅头像/登录入口. */
+.sidebar-foot { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 8px 8px 2px; border-top: 1px solid var(--line); }
+.sidebar-avatar { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); font-size: 13px; font-weight: 600; }
+.sidebar-username { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.sidebar-menu { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 4px; border-radius: var(--radius); }
+.sidebar-menu:hover { background: var(--card); color: var(--ink); }
+.sidebar-login { min-width: 0; border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 6px; border-radius: var(--radius); text-align: left; }
+.sidebar-login:hover { background: var(--card); color: var(--ink); }
+.sidebar.collapsed .sidebar-foot { justify-content: center; padding-left: 2px; padding-right: 2px; }
+.sidebar.collapsed .sidebar-login { padding: 4px 2px; }
+.sidebar.collapsed .sidebar-username, .sidebar.collapsed .sidebar-menu { display: none; }
 /* 情境卡组 (Task 12): 今日课表卡 + 近期安排卡, 可点卡片整块响应; 考试临近强调只用琥珀令牌 */
 .context-rail { display: flex; flex-direction: column; gap: 8px; }
 .context-card { width: 100%; text-align: left; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); font: inherit; box-shadow: var(--shadow); }
@@ -108,7 +139,6 @@ button.weather-chip:hover { border-color: var(--brand); }
 .composer-stop { border: 1px solid var(--danger); background: none; color: var(--danger); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
 .composer-spacer { flex: 1; }
 .hero-box .composer { margin: 28px auto 0; max-width: 480px; }
-.sidebar-open { flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
 .crisis-view { max-width: 640px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
 .crisis-view h1 { margin: 0; font-size: 22px; }
 .crisis-lead { margin: 0; color: var(--muted); }
