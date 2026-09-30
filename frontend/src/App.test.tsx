@@ -1,13 +1,22 @@
 //* 壳与路由测试 (Task 6 重写): 路由表行为 / 访客保护门 / UserMenu 五项开合 / 主题切换持久化 / 主区跟随.
 //* 登录态经 persistAuth 预置 (AuthProvider 惰性水合), fetch 全局 stub (会话列表/情境聚合/品牌名等均成功壳,
 //* 消费点自行降级, 不产生未处理拒绝). 深链用 window.history.replaceState 预置初始路径 (BrowserRouter 直读 location).
+//* Task 8 增补: connectAlertSocket 整体 mock (RED 注入走 AlertContext.test 同款 onRed 回调, 不真开 WebSocket);
+//* getCachedHotline 局部 mock 落回 DEFAULT (与真实降级语义一致, 换取时序确定性).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { persistAuth } from './api/auth'
-import { DEFAULT_HOTLINE } from './api/hotline'
+import { getCachedHotline, DEFAULT_HOTLINE } from './api/hotline'
+import { connectAlertSocket } from './api/ws'
 import type { AuthData } from './types'
+
+vi.mock('./api/ws', () => ({ connectAlertSocket: vi.fn() }))
+vi.mock('./api/hotline', async (importOriginal) =>
+{
+    return { ...(await importOriginal<typeof import('./api/hotline')>()), getCachedHotline: vi.fn() }
+})
 
 const AUTHED: AuthData = { token: 't', userId: 'u1', username: '小明', role: 'STUDENT' }
 
@@ -46,6 +55,8 @@ describe('App (壳与路由 v2)', () =>
         localStorage.clear()
         openAt('/')
         stubSuccessFetch()
+        vi.mocked(connectAlertSocket).mockReturnValue(vi.fn())//* 登录壳建连后 user 变迁的 cleanup 需要可调用的关闭函数
+        vi.mocked(getCachedHotline).mockResolvedValue(DEFAULT_HOTLINE)//* 危机浮层刷新落回内置默认 (与真实降级同值)
     })
     afterEach(() =>
     {
@@ -251,6 +262,26 @@ describe('App (壳与路由 v2)', () =>
         expect(screen.queryByRole('menu')).not.toBeInTheDocument()
         await user.click(within(dlg).getByRole('button', { name: '我知道了' }))
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('RED -> 危机 Flyout 壳级交接: 查看全部求助资源 关 RED 并开 Flyout, 交接断链即 Flyout 缺席', async () =>
+    {
+        loginLocally()
+        const user = userEvent.setup()
+        render(<App />)
+        await settle()
+        //* 经 WS 通道回调注入 RED (AlertContext.test 同款模式): 壳应渲染 RED 安全模态, Flyout 不在场.
+        const onRed = vi.mocked(connectAlertSocket).mock.calls[0]?.[1]
+        expect(onRed).toBeInstanceOf(Function)
+        act(() => onRed?.({ type: 'RED_ALERT', reason: '壳级交接' }))
+        expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: '危机支持' })).not.toBeInTheDocument()
+
+        await user.click(screen.getByRole('button', { name: '查看全部求助资源' }))
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()//* RED 先关 (壳 dismissRed)
+        const flyout = screen.getByRole('dialog', { name: '危机支持' })//* Flyout 后开 (壳 setCrisisOpen) — 双断言缺一即交接断链
+        expect(within(flyout).getByRole('link', { name: '400-161-9995' })).toHaveAttribute('href', 'tel:400-161-9995')
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()//* 红线: RED 不被 Flyout 遮挡, 两者不同时在场
     })
 
     it('UserMenu 菜单项: 个人资料/设置/关于 各自导航并收起菜单', async () =>
