@@ -1,6 +1,6 @@
 //* 应用壳: 左栏 + 主区插槽 (<Outlet/>), 登录浮层与 RED 预警弹窗的全局挂载点, 壳状态单一持有 (spec §4.2/§5.1):
 //* 手风琴 section (默认会话节, 主区跟随 sectionRoute) / collapsed (soul.sidebar 持久化语义, 存储所有权在 Sidebar) /
-//* menuOpen (汉堡用户菜单) / drawerOpen (移动端抽屉, 刻意不落盘) / crisisOpen (菜单内危机占位, Flyout 归 Task 8).
+//* menuOpen (汉堡用户菜单) / drawerOpen (移动端抽屉, 刻意不落盘) / crisisOpen (危机 Flyout, Task 8: 菜单 + RED 双入口).
 //* 门桥接 (分层裁决): LoginSheet 不碰 AuthContext, 壳把它焊在门上 — onAuthed -> gate.confirm (补发 pending),
 //* onCancel -> gate.cancel (丢弃). 受保护路由的访客门在 App.tsx (<RequireAuth>), 与此处共享同一扇门.
 //* 会话状态提升 (Task 10 裁决沿用): 壳拥有 sessions (登录后拉取/登出即清) 与 openRequest 通道, 经 Outlet context 下发;
@@ -11,7 +11,6 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
 import { deleteSession, listSessions } from '../../api/chat'
-import { DEFAULT_HOTLINE } from '../../api/hotline'
 import { useAuth } from '../../hooks/useAuth'
 import { useAlert } from '../../hooks/useAlert'
 import { useChatGate } from '../../hooks/useChatGate'
@@ -20,6 +19,7 @@ import { sectionRoute } from '../../utils/sidebarSections'
 import WeatherCapsule from '../weather/WeatherCapsule'
 import LoginSheet from '../auth/LoginSheet'
 import RedAlertModal from '../alert/RedAlertModal'
+import CrisisFlyout from '../crisis/CrisisFlyout'
 import Icon from '../ui/Icon'
 import UserMenu from './UserMenu'
 import { useBrandName } from '../../hooks/useBrandName'
@@ -108,6 +108,14 @@ export default function AppShell(): ReactElement
         setMenuOpen(false)
         setCrisisOpen(true)
     }, [])
+    const handleCrisisClose = useCallback(() => { setCrisisOpen(false) }, [])
+    //* RED -> Flyout 桥 (Task 8): "查看全部求助资源" 上抛至此 — 先关 RED 再开 Flyout (两浮层互斥,
+    //* 红线: RED 是永远置顶的安全模态, 不允许被 Flyout 盖住或长时间与 Flyout 同屏).
+    const handleOpenResources = useCallback(() =>
+    {
+        dismissRed()
+        setCrisisOpen(true)
+    }, [dismissRed])
     const handleMenuNavigate = useCallback((to: string) =>
     {
         setMenuOpen(false)
@@ -147,20 +155,6 @@ export default function AppShell(): ReactElement
             then(() => setSessionState(prev => (prev.list == null ? prev : { owner: prev.owner, list: prev.list.filter(s => s.sessionId !== id) }))).
             catch(() => toast('会话删除失败, 请稍后再试.', 'error'))  //! 失败保留原会话可重试, 不静默吞错.
     }, [])
-
-    //* 危机占位 Escape 关闭: 仅在场期间挂 document 级监听 (与抽屉/菜单同形), Task 8 换 Flyout 后由其接管.
-    useEffect(() =>
-    {
-        if(!crisisOpen)
-            return
-        const onKey = (e: KeyboardEvent): void =>
-        {
-            if(e.key === 'Escape')
-                setCrisisOpen(false)
-        }
-        document.addEventListener('keydown', onKey)
-        return () => document.removeEventListener('keydown', onKey)
-    }, [crisisOpen])
 
     const ctx: IChatViewContext = { sessions, reloadSessions, openRequest, sendRequest }
 
@@ -213,24 +207,14 @@ export default function AppShell(): ReactElement
                 </div>
                 <Outlet context={ctx} />
             </main>
-            {/* 危机占位 (Task 8 换 Flyout): 菜单危机入口先落到最小可用浮层 — 号码取内置默认 (同步常量, 零网络),
-                兑现"危机入口永远可达热线"的产品红线; 遮罩点击/Escape/我知道了 三路关闭. */}
-            {crisisOpen && (
-                <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="危机支持" onClick={() => setCrisisOpen(false)}>
-                    <section className="card crisis-placeholder" onClick={e => e.stopPropagation()}>
-                        <h2>危机支持</h2>
-                        <p className="crisis-lead">如果你此刻感到不安全, 请立即求助. 你不是一个人, 这些渠道随时愿意接住你.</p>
-                        <a className="crisis-phone" href={`tel:${DEFAULT_HOTLINE.primary}`}>{DEFAULT_HOTLINE.primary}</a>
-                        <p className="crisis-emergency">紧急情况 (人身安全受到威胁) 请立即拨打 110 或 120.</p>
-                        <button type="button" className="btn" onClick={() => setCrisisOpen(false)}>我知道了</button>
-                    </section>
-                </div>
-            )}
+            {/* 危机 Flyout (Task 8): 常驻挂载, open=false 时组件自渲染 null; 菜单与 RED 双入口均落到此层 —
+                号码默认兜底 + 三级缓存刷新 (零网络首绘可用), 遮罩点击/Escape/我知道了 三路关闭, 对访客无门 (红线). */}
+            <CrisisFlyout open={crisisOpen} onClose={handleCrisisClose} />
             {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用. */}
             {gate.open && <LoginSheet onAuthed={(d) => gate.confirm(d)} onCancel={gate.cancel} />}
             {/* RED 预警弹窗挂在路由内容之外 (Task 13 brief): 路由切换不卸载, z-index 置顶盖过登录浮层;
-                关闭只经显式"我知道了"/跳转危机页, 弹窗自身不响应 Escape. */}
-            {red != null && <RedAlertModal alert={red} onClose={dismissRed} />}
+                关闭只经显式"我知道了"/上抛查看全部求助资源 (壳关 RED 并开危机 Flyout), 弹窗自身不响应 Escape. */}
+            {red != null && <RedAlertModal alert={red} onClose={dismissRed} onOpenResources={handleOpenResources} />}
         </div>
     )
 }

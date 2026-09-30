@@ -2,9 +2,10 @@
 //* 状态初值直接取内置默认热线 (同步常量), getCachedHotline 仅在挂载后异步刷新 — 零网络下弹窗照样完整可用.
 //* 语义裁决: role=alertdialog + aria-modal; Escape 不挂监听 (安全模态必须显式"我知道了", 防误触跳过求助信息);
 //* 服务端随帧下发的 alert.hotline 是本次预警的最新号码, 优先于三级缓存结果.
+//* Task 8: /crisis 路由已撤, "查看全部求助资源" 改为上抛 onOpenResources (壳负责关 RED 并开危机 Flyout);
+//! 未接线时兜底走 onClose — 安全出口绝不悬空, 弹层自身不再触碰路由.
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
-import { Link } from 'react-router-dom'
 import { getCachedHotline, DEFAULT_HOTLINE } from '../../api/hotline'
 import type { IRedAlertMessage } from '../../api/ws'
 import type { HotlineInfo } from '../../types'
@@ -13,9 +14,10 @@ export interface IRedAlertModalProps
 {
     alert: IRedAlertMessage
     onClose(): void
+    onOpenResources?: () => void
 }
 
-export default function RedAlertModal({ alert, onClose }: IRedAlertModalProps): ReactElement
+export default function RedAlertModal({ alert, onClose, onOpenResources }: IRedAlertModalProps): ReactElement
 {
     //* 首屏即默认兜底: useState 初值为同步常量, 首绘绝不等待网络; 缓存/API 到达后原位刷新.
     const [hotline, setHotline] = useState<HotlineInfo>(DEFAULT_HOTLINE)
@@ -76,7 +78,7 @@ export default function RedAlertModal({ alert, onClose }: IRedAlertModalProps): 
                     </a>
                 )}
                 <div className="red-alert-foot">
-                    <Link to="/crisis" className="red-alert-more" onClick={onClose}>查看全部求助资源</Link>
+                    <button type="button" className="red-alert-more" onClick={onOpenResources ?? onClose}>查看全部求助资源</button>
                     <button type="button" className="btn" onClick={onClose}>我知道了</button>
                 </div>
             </div>

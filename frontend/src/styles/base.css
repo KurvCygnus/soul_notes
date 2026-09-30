@@ -128,9 +128,16 @@ button.weather-chip:hover { border-color: var(--brand); }
 /* 危机支持置顶且 danger 令牌点出安全语义 (菜单五项中唯一的彩色条目). */
 .user-menu-item-crisis { color: var(--danger); }
 
-/* 危机占位浮层 (Task 6 最小形态, Task 8 换 Flyout): 复用 .modal-overlay + 危机页既有文案类, 卡片自定宽度. */
-.crisis-placeholder { width: min(420px, 92vw); display: flex; flex-direction: column; gap: 10px; padding: 20px; }
-.crisis-placeholder h2 { margin: 0; font-size: 18px; }
+/* 危机 Flyout (Task 8, D22): 菜单/RED 双入口的居中安全浮层, 访客无门 (红线). 层级阶梯裁决 (数值沿用
+   本文件既有裸值注释惯例, 不设 --z 令牌): 登录 60 < 抽屉 scrim 70 < 抽屉 80 < 危机 Flyout 85 = 菜单遮罩 85
+   (开 Flyout 前菜单必先收起, 二者互斥不同屏, 同值无争) < 菜单 86 < RED 预警 100 — 85 压过移动端抽屉,
+   抽屉在场时 Flyout 仍完整可见, RED 弹窗唤起 Flyout 前先自行关闭, 永远置顶的安全模态不被遮挡.
+   遮罩裸值沿用 .modal-overlay 前例 rgba(47, 59, 58, .35): 令牌无 alpha 形态, 不新造颜色. */
+.crisis-flyout { position: fixed; inset: 0; z-index: 85; background: rgba(47, 59, 58, .35); display: grid; place-items: center; padding: 16px; }
+.crisis-flyout-panel { width: min(420px, 92vw); max-height: 90dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 20px; animation: crisis-flyout-in var(--dur-base) var(--ease-enter); }
+.crisis-flyout-panel h2 { margin: 0; font-size: 18px; }
+/* 入场动效 (D23 令牌): 淡入 + 0.97 缩放; 出场即时卸载 — 危机信息离场无过渡价值, 退场动画反需延迟卸载簿记. */
+@keyframes crisis-flyout-in { from { opacity: 0; transform: scale(.97); } }
 
 
 /* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens; Task 12 起随顶栏在 .main 内纵向伸缩) */
@@ -173,15 +180,12 @@ button.weather-chip:hover { border-color: var(--brand); }
 .composer-stop { border: 1px solid var(--danger); background: none; color: var(--danger); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
 .composer-spacer { flex: 1; }
 .hero-box .composer { margin: 28px auto 0; max-width: 480px; }
-.crisis-view { max-width: 640px; margin: 0 auto; padding: 32px 16px; display: flex; flex-direction: column; gap: 16px; }
-.crisis-view h1 { margin: 0; font-size: 22px; }
 .crisis-lead { margin: 0; color: var(--muted); }
 .crisis-card { padding: 16px; }
-.crisis-card h2 { margin: 0 0 8px; font-size: 16px; }
+.crisis-card h3 { margin: 0 0 8px; font-size: 16px; }
 .crisis-card p { margin: 0; }
-.crisis-loading { color: var(--faint); }
 .crisis-emergency { margin: 0; color: var(--danger); font-weight: 600; }
-/* 危机页真实数据态 (Task 13): 主号码放大可点拨, 寄语弱化不喧宾 */
+/* 危机浮层数据态: 主号码放大可点拨, 寄语弱化不喧宾 */
 .crisis-phone { display: inline-block; margin: 2px 0 8px; font-size: 24px; font-weight: 700; color: var(--ink); text-decoration: none; }
 .crisis-phone:hover { color: var(--brand); }
 .crisis-message { color: var(--muted); }
@@ -200,7 +204,8 @@ button.weather-chip:hover { border-color: var(--brand); }
 .red-alert-backup a { color: var(--ink); font-weight: 600; }
 .red-alert-book { text-align: center; text-decoration: none; }
 .red-alert-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.red-alert-more { color: var(--muted); font-size: 13px; }
+/* Task 8: /crisis 路由已撤, "查看全部求助资源" 由 Link 改按钮上抛壳开 Flyout — 补钮级重置保原链接观感. */
+.red-alert-more { border: none; background: none; padding: 0; color: var(--muted); font-size: 13px; text-align: left; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* 移动端抽屉 (Task 14, <768px): 左栏变固定定位 overlay 抽屉, 汉堡钮是唯一入口.

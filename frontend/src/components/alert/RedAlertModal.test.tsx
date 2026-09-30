@@ -4,7 +4,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
 import { getCachedHotline } from '../../api/hotline'
 import RedAlertModal from './RedAlertModal'
 import type { HotlineInfo } from '../../types'
@@ -22,9 +21,13 @@ const CACHED: HotlineInfo = {
     appointmentUrl: 'https://counsel.example.com/book',
 }
 
-function mount(alert: Parameters<typeof RedAlertModal>[0]['alert'], onClose = vi.fn()): ReturnType<typeof render>
+function mount(
+    alert: Parameters<typeof RedAlertModal>[0]['alert'],
+    onClose = vi.fn(),
+    onOpenResources?: () => void,
+): ReturnType<typeof render>
 {
-    return render(<MemoryRouter><RedAlertModal alert={alert} onClose={onClose} /></MemoryRouter>)
+    return render(<RedAlertModal alert={alert} onClose={onClose} onOpenResources={onOpenResources} />)
 }
 
 describe('RedAlertModal (RED 预警弹窗)', () =>
@@ -66,6 +69,8 @@ describe('RedAlertModal (RED 预警弹窗)', () =>
         vi.mocked(getCachedHotline).mockResolvedValue(CACHED)
         mount({ type: 'RED_ALERT', hotline: '010-00000000' })
         expect(screen.getByRole('link', { name: /010-00000000/ })).toHaveAttribute('href', 'tel:010-00000000')
+        await screen.findByRole('link', { name: '021-12345678' })//* 缓存刷新在 act 内落定 (消 act 警告), 优先级不被覆盖
+        expect(screen.getByRole('link', { name: /010-00000000/ })).toHaveAttribute('href', 'tel:010-00000000')
     })
 
     it('预约入口按 appointmentUrl 判空显隐', async () =>
@@ -81,19 +86,26 @@ describe('RedAlertModal (RED 预警弹窗)', () =>
         expect(screen.queryByRole('link', { name: '预约学校心理咨询' })).not.toBeInTheDocument()
     })
 
-    it('我知道了显式关闭; Escape 不关闭 (安全模态必须显式确认); 查看全部求助资源 → /crisis 且同时关弹层', async () =>
+    it('我知道了显式关闭; Escape 不关闭 (安全模态必须显式确认); 查看全部求助资源上抛壳 (壳关 RED 开 Flyout, 弹层自身不关)', async () =>
     {
         vi.mocked(getCachedHotline).mockReturnValue(new Promise<HotlineInfo>(() => {}))
         const onClose = vi.fn()
+        const onOpenResources = vi.fn()
         const u = userEvent.setup()
-        mount({ type: 'RED_ALERT', reason: 'r' }, onClose)
+        const view = mount({ type: 'RED_ALERT', reason: 'r' }, onClose, onOpenResources)
 
         await u.keyboard('{Escape}')
         expect(onClose).not.toHaveBeenCalled()//* 产品红线: Escape 不关闭, 防止误触跳过求助信息
 
-        await u.click(screen.getByRole('link', { name: '查看全部求助资源' }))
-        expect(screen.getByRole('link', { name: '查看全部求助资源' })).toHaveAttribute('href', '/crisis')
-        expect(onClose).toHaveBeenCalledOnce()//* 导航与关闭同时发生: 危机页不被弹层遮挡
+        await u.click(screen.getByRole('button', { name: '查看全部求助资源' }))
+        expect(onOpenResources).toHaveBeenCalledOnce()
+        expect(onClose).not.toHaveBeenCalled()//* 上抛不自带关闭: RED -> Flyout 交替由壳一次性完成
+        view.unmount()
+
+        //! 未接线兜底: onOpenResources 缺席时至少关 RED, 安全出口绝不悬空.
+        mount({ type: 'RED_ALERT', reason: 'r' }, onClose)
+        await u.click(screen.getByRole('button', { name: '查看全部求助资源' }))
+        expect(onClose).toHaveBeenCalledOnce()
 
         await u.click(screen.getByRole('button', { name: '我知道了' }))
         expect(onClose).toHaveBeenCalledTimes(2)
