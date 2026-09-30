@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="sage">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,6 +8,16 @@
     <!-- 声明亮暗双主题: 原生控件 (滚动条/表单/输入法) 跟随系统配色, 与 tokens.css 的 prefers-color-scheme 令牌组呼应. -->
     <meta name="color-scheme" content="light dark" />
     <title>心灵札记</title>
+    <script>
+      //? 防 FOUC 早脚本: 首帧绘制前读 localStorage 主题, 合法即改写 <html data-theme> (tokens.css 按该属性挂载色板);
+      //? 键名/名单/回退与 src/utils/theme.ts 完全一致 (缺失/非法保持默认雾杉), try/catch 兜隐私模式禁写 storage 的抛错.
+      (function ()
+      {
+        var t;
+        try { t = localStorage.getItem('soul.theme'); } catch (e) { return; }
+        if (t === 'sage' || t === 'dusk') document.documentElement.setAttribute('data-theme', t);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
