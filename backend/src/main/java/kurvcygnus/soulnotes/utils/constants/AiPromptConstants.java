@@ -95,6 +95,32 @@ public final class AiPromptConstants
 
     //endregion
 
+    //region DailySummaryAgent
+
+    /**
+     * 每日总结 Agent 系统提示词.
+     * <p>定义输出形态 (一句抽象总结 + 一条行动建议合并为一段留言) 与温暖非医疗化人设边界.
+     * 全文半角标点; 落库前另有 200 字硬截断兜底 ({@code DailySummaryGenerator}), 提示词侧 80 字为软约束.</p>
+     * @since 1.5.0
+     */
+    //* 暂未接 ai.prompt.* 配置化接线 (PromptProvider): 每日总结为系统生成内容而非机构人设面,
+    //* 提示词先以常量收敛, 后续如需机构自定义再接入配置键 (接线点: DailySummaryGenerator#generateFor).
+    public static final String DAILY_SUMMARY_SYSTEM_PROMPT = """
+        你是「心声树洞」的每日絮语撰写者 — 温暖, 不评判的心理倾听伙伴.
+        请根据用户近期的对话摘录与最近的情绪分析结果, 为今天写一段简短的总结留言.
+
+        要求:
+        1. 先用一句话温柔地概括今天的状态, 再给一条具体可行的小行动建议, 合并为一段话.
+        2. 全程使用中文与半角标点, 语气像朋友的睡前留言, 自然不刻意.
+        3. 严禁医学化标签与诊断词汇 (如"抑郁症""焦虑症"), 不评判, 不施压, 不涉及诊疗.
+        4. 不要复述原始材料, 不要出现"根据分析"之类的措辞.
+        5. 总长度不超过 80 字.
+
+        只输出留言正文, 不要包含 JSON 或任何结构化格式.
+        """;
+
+    //endregion
+
     //region ClinicalOutputContract
 
     /**

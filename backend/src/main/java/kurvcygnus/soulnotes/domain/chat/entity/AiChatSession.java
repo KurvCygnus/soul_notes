@@ -94,6 +94,18 @@ public final class AiChatSession extends PanacheEntityBase
      * @return 会话列表 (可能为空, 恒非 null)
      */
     public static @NotNull Uni<List<AiChatSession>> findByUserId(@NotNull UUID userId) { return find("userId = ?1 ORDER BY updatedAt DESC", userId).list(); }
+
+    /**
+     * 查询活跃时间晚于给定时刻的会话, 按更新时间倒序.
+     *
+     * @param cutoff 活跃下界时刻 (含)
+     * @return 会话列表 (可能为空, 恒非 null); 消费方为每日总结的活跃窗聚合, 命中 idx_chat_sessions_user_id 之外的行扫描可接受 (调度低峰路径)
+     * @since 1.5.0
+     */
+    public static @NotNull Uni<List<AiChatSession>> findUpdatedSince(@NotNull Instant cutoff)
+    {
+        return find("updatedAt >= ?1 ORDER BY updatedAt DESC", cutoff).list();
+    }
     //endregion
 
     //region JSON 辅助

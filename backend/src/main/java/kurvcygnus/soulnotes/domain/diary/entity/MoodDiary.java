@@ -2,6 +2,7 @@ package kurvcygnus.soulnotes.domain.diary.entity;
 
 import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import io.quarkus.hibernate.reactive.panache.PanacheQuery;
+import io.smallrye.mutiny.Uni;
 import jakarta.persistence.*;
 import kurvcygnus.soulnotes.config.ReactiveJsonStringJdbcType;
 import org.hibernate.annotations.JdbcType;
@@ -10,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -105,6 +107,18 @@ public final class MoodDiary extends PanacheEntityBase
         }
         query.append(" ORDER BY createdAt DESC");
         return find(query.toString(), params.toArray());
+    }
+
+    /**
+     * 查询创建时间晚于给定时刻的日记, 按创建时间倒序.
+     *
+     * @param cutoff 创建下界时刻 (含)
+     * @return 日记列表 (可能为空, 恒非 null); 消费方为每日总结的活跃窗聚合, 与 {@code findByUserAndDateRange} 同为倒序约定
+     * @since 1.5.0
+     */
+    public static @NotNull Uni<List<MoodDiary>> findCreatedSince(@NotNull Instant cutoff)
+    {
+        return find("createdAt >= ?1 ORDER BY createdAt DESC", cutoff).list();
     }
     //endregion
 }

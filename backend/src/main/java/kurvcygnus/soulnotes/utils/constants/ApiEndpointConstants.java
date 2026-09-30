@@ -26,6 +26,8 @@ public final class ApiEndpointConstants
     public static final @NotNull String CLINICAL_BASE = "/api/v1/clinical";
     /** 情境域基础路径 ({@code /summary}, 前端"你的情境"卡数据源). */
     public static final @NotNull String CONTEXT_BASE = "/api/v1/context";
+    /** 每日总结域基础路径 ({@code /daily} 与 {@code /recent}, 前端"每日絮语"卡数据源). */
+    public static final @NotNull String SUMMARY_BASE = "/api/v1/summary";
     /** 品牌信息基础路径 (公开只读, 前端标题/浮层文案的数据源, 消费 {@code app.brand-name} 配置). */
     public static final @NotNull String BRAND_BASE = "/api/v1/brand";
 }
