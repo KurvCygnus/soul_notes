@@ -27,7 +27,7 @@ import { useBrandName } from '../../hooks/useBrandName'
 import Sidebar from './Sidebar'
 import { SIDEBAR_PREF_KEY } from './Sidebar'
 import type { SidebarSection } from '../../utils/sidebarSections'
-import type { IChatViewContext, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
+import type { IChatViewContext, INewChatRequest, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
 import type { ChatSessionVo } from '../../types'
 
 export default function AppShell(): ReactElement
@@ -54,6 +54,9 @@ export default function AppShell(): ReactElement
     //* Task 12 通道 (情境卡唤起聊天): ContextRail 已随 homepage-v2 退场 (扩展 chips 插槽取代), 通道本体与
     //* ChatView 的 nonce 判重消费链保留 — 零生产者时恒 null 无害, 未来唤起类入口可原地复用 (回归测试钉住).
     const [sendRequest] = useState<ISendRequest | null>(null)
+    //* 新建会话通道 (终审整改): 侧栏 "新建会话" 登录态路径的下发载体 — nonce 单调递增, 重复点击也重新触发,
+    //* ChatView 以模块级台账判重消费 (startNewChat 复位). 会话状态归 ChatView 所有, 壳只发请求不越层操作.
+    const [newChatRequest, setNewChatRequest] = useState<INewChatRequest | null>(null)
     //* 移动端抽屉开合态: 组件局部, 刻意不持久化 (桌面/移动共享同一状态, 落盘反而会在换端时误开抽屉).
     const [drawerOpen, setDrawerOpen] = useState(false)
     //* 删除确认流 (Task 11): pendingDeleteId 非空 = 确认模态在场 — 侧栏 × 只表达"请求删除", 真正删除
@@ -99,13 +102,18 @@ export default function AppShell(): ReactElement
         navigate(sectionRoute(next))
     }, [navigate])
 
-    //* 新建会话: 访客先过登录门 (红线: 访客任何交互触发登录浮层); 登录态 Task 9 接线 ChatView 复位,
-    //* 过渡期仅收抽屉 (桌面端无副作用, 抽屉内点按不至于盖着聊天区).
+    //* 新建会话: 访客先过登录门 (红线: 访客任何交互触发登录浮层); 登录态经 nonce 通道下发 ChatView 复位
+    //* (startNewChat, 终审整改 — 此前登录态路径无消费通道, 按钮对登录用户是死的). 先收抽屉: 桌面端无副作用,
+    //* 抽屉内点按不至于盖着聊天区.
     const handleNewChat = useCallback(() =>
     {
         setDrawerOpen(false)
         if(user == null)
+        {
             gate.requireAuth(() => {})
+            return
+        }
+        setNewChatRequest(prev => ({ nonce: (prev?.nonce ?? 0) + 1 }))
     }, [gate, user])
 
     //* 菜单项统一收口: 先收菜单再执行动作, 保证菜单不跨路由/浮层残留. onClose 引用稳定 (UserMenu effect 依赖).
@@ -172,7 +180,7 @@ export default function AppShell(): ReactElement
             catch(() => toast('会话删除失败, 请稍后再试.', 'error'))
     }, [pendingDeleteId])
 
-    const ctx: IChatViewContext = { sessions, reloadSessions, openRequest, sendRequest }
+    const ctx: IChatViewContext = { sessions, reloadSessions, openRequest, sendRequest, newChatRequest }
 
     return (
         <div className="shell">

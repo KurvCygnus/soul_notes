@@ -1,5 +1,6 @@
 //* ChatView 接线测试 (homepage-v2 Task 9 重构): Composer 上抛 text 后的访客门接线 (requireAuth 包 doSend),
-//* chips 插槽的登录直发/访客开门分叉, 以及情境卡唤起通道 (sendRequest → handleSend, nonce 判重防重放).
+//* chips 插槽的登录直发/访客开门分叉, 以及壳下发的两条 nonce 请求通道 (sendRequest 唤起发送 / newChatRequest
+//* 新建会话复位, 均 nonce 判重防重放).
 //* 层次裁决: 门状态机本体另有 [[useChatGate.test]], chips 上限策略另有 [[homeChips.test]] —
 //* 此处只验接线与分叉. 用 <Outlet context> 模拟壳层下发 (不引 AppShell/LoginSheet, 避免浮层测试耦合进接线断言).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -33,7 +34,7 @@ vi.mock('../api/chat', () => ({
 
 const AUTHED: AuthData = { token: 't', userId: 'u1', username: 'n', role: 'STUDENT' }
 
-const CTX: IChatViewContext = { sessions: null, reloadSessions: () => {}, openRequest: null, sendRequest: null }
+const CTX: IChatViewContext = { sessions: null, reloadSessions: () => {}, openRequest: null, sendRequest: null, newChatRequest: null }
 
 //* 登录态下 ChatView 会挂 DailySummaryLine (composer 随行): 全局 fetch 桩成成功空壳, 钩子自行降级隐藏.
 //* 每次调用给全新 Response 实例 (体一次性, 共享单例会让后续消费者全部拒绝 — 桩语义是"每个请求独立成功").
@@ -156,14 +157,66 @@ describe('ChatView (输入区接线)', () =>
         await screen.findByText('重挂载前的提问')
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
         utils.unmount()
-        //* 同 nonce 重挂载 (情境卡点击后去 /crisis 再返回): 台账已记账 → 不重发.
+        //* 同 nonce 重挂载 (壳路由切换整体卸载 → 回聊天位): 台账已记账 → 不重发.
         //* 修前台账是 mount-scoped ref, 重挂后归零把已消费 nonce 当新请求重放 (重复消息 + 二次 LLM 调用).
         const remounted = renderChat({ ...CTX, sendRequest: { content: '重挂载前的提问', nonce: 3 } })
         await screen.findByText('你好, 今天想聊点什么?')  //* remount 落定 (空消息回到 hero).
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
-        //* 新 nonce (卡片再次点击) → 照常放行.
+        //* 新 nonce (再次下发请求) → 照常放行.
         remounted.rerender(chatTree({ ...CTX, sendRequest: { content: '重挂载后的新提问', nonce: 4 } }))
         await screen.findByText('重挂载后的新提问')
         expect(vi.mocked(streamMessage)).toHaveBeenCalledTimes(2)
+    })
+
+    it('新建会话通道 (终审整改): newChatRequest nonce 判重, 同一 nonce 只复位一次, 重放不清已有会话', async () =>
+    {
+        //* 壳侧栏 "新建会话" 登录态路径经此通道复位 ChatView (startNewChat), 壳不越层操作会话状态.
+        //* 会话在场的观测锚是 .bubble-user (chip 题面与气泡文本同串, findByText 会双命中, 沿用访客门测试先例).
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        const user = userEvent.setup()
+        const utils = renderChat()
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))  //* 先建立会话 (乐观气泡在场).
+        expect(document.querySelector('.bubble-user')).not.toBeNull()
+        expect(screen.queryByText('你好, 今天想聊点什么?')).not.toBeInTheDocument()
+        //* nonce 前进 → startNewChat 复位回 hero.
+        utils.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 1 } }))
+        await screen.findByText('你好, 今天想聊点什么?')
+        expect(document.querySelector('.bubble-user')).toBeNull()  //* 复位已清屏.
+        //* 重新建立会话后, 壳层以新对象重放同一 nonce (重渲染/重挂载下发形态) → 台账判重, 不得再次清屏.
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()
+        utils.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 1 } }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()  //! 同 nonce 重放若清屏, 正在进行的对话会被误杀.
+        //* nonce 前进 → 照常放行.
+        utils.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 2 } }))
+        await screen.findByText('你好, 今天想聊点什么?')
+        expect(document.querySelector('.bubble-user')).toBeNull()
+    })
+
+    it('新建会话通道重挂载 (模块台账回归): unmount→remount 同 nonce 不重复复位, 新 nonce 放行', async () =>
+    {
+        //* 消费台账为模块级且跨用例存活 (同文件内模块只加载一次): newChat 通道 nonce 同样全文件单调递增 (上例已消费 1/2).
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        const utils = renderChat({ ...CTX, newChatRequest: { nonce: 3 } })
+        await screen.findByText('你好, 今天想聊点什么?')  //* mount 即消费 (空态 hero, 复位幂等落定).
+        const user = userEvent.setup()
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()
+        utils.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 3 } }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()  //* 本挂载内同 nonce 重放不清屏.
+        utils.unmount()
+        //* 同 nonce 重挂载 (扩展节展开整体卸载 → 回会话节): 台账已记账 → 不把已消费请求当新请求重放,
+        //* 否则重挂后经 openRequest 恢复的会话会被重放的 startNewChat 误清.
+        const remounted = renderChat({ ...CTX, newChatRequest: { nonce: 3 } })
+        await screen.findByText('你好, 今天想聊点什么?')  //* remount 落定 (空消息回到 hero).
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()
+        remounted.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 3 } }))
+        expect(document.querySelector('.bubble-user')).not.toBeNull()  //! 模块台账跨挂载: 同 nonce 不清屏.
+        remounted.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 4 } }))
+        await screen.findByText('你好, 今天想聊点什么?')
+        expect(document.querySelector('.bubble-user')).toBeNull()
     })
 })

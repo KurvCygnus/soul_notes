@@ -110,6 +110,21 @@ describe('Composer (输入区)', () =>
         expect(screen.getByPlaceholderText(PLACEHOLDER_CHAT)).toBeInTheDocument()
     })
 
+    it('发送钮 spec (D2/D5/§5.4): 圆形 SVG 上箭头无文字, 语义由 aria-label 承载, 点击直发输入框内容', async () =>
+    {
+        const user = userEvent.setup()
+        const onSend = vi.fn()
+        renderComposer(onSend)
+        const send = screen.getByRole('button', { name: '发送' })
+        expect(send).not.toHaveTextContent('发送')  //* 无文字 (spec §5.4): 可访问名全归 aria-label, 按钮本体只剩图标.
+        expect(send.querySelector('svg')).not.toBeNull()  //* SVG-first 纪律: 上箭头经 [[Icon]] 渲染, 非 Unicode 字符.
+        expect(send).toHaveClass('composer-send')  //* 圆形底由专用类承担 (base.css 令牌化, 非 btn 家族胶囊形).
+        await user.type(screen.getByRole('textbox'), '点按钮也能发')
+        await user.click(send)
+        expect(onSend).toHaveBeenCalledOnce()
+        expect(onSend).toHaveBeenCalledWith('点按钮也能发')
+    })
+
     it('disabled: 发送按钮/chips/语音钮停用, Enter 不触发发送', async () =>
     {
         const user = userEvent.setup()

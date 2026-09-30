@@ -9,7 +9,8 @@ import { connectAlertSocket } from '../api/ws'
 import { useAuth } from '../hooks/useAuth'
 import type { IRedAlertMessage } from '../api/ws'
 
-//* 弹窗状态切片: [[useAlert]] 的返回契约 (AppShell 渲染浮层 / useChatSend 日记兜底消费).
+//* 弹窗状态切片: [[useAlert]] 的返回契约 (唯一消费者 AppShell: red 驱动 RedAlertModal, dismissRed 关闭并桥接危机 Flyout;
+//* showRed 是 WS onRed 之外的契约级入口, 当前无第二调用方 — 日记兜底消费已随 D16 退场, 见文件头单一来源裁决).
 export interface IAlertState
 {
     red: IRedAlertMessage | null

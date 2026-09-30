@@ -18,6 +18,14 @@ export interface ISendRequest
     nonce: number
 }
 
+//* 新建会话请求 (终审整改): 侧栏 "新建会话" 登录态路径 (壳持有) → ChatView startNewChat() 复位 —
+//* 会话状态归 ChatView 所有, 壳只发请求不越层操作. 与前两者同一通道机制 (nonce 单调递增, 重复点击也
+//* 重新下发), ChatView 以模块级台账判重防路由重挂重放.
+export interface INewChatRequest
+{
+    nonce: number
+}
+
 export interface IChatViewContext
 {
     //* null = 访客/加载中; 空数组 = 已加载但无会话.
@@ -27,4 +35,6 @@ export interface IChatViewContext
     openRequest: ISessionOpenRequest | null
     //* Task 12: 情境卡唤起请求 (null = 无); nonce 判重, 同一请求只发送一次.
     sendRequest: ISendRequest | null
+    //* 终审整改: 新建会话请求 (null = 无); nonce 判重, 同一请求只复位一次.
+    newChatRequest: INewChatRequest | null
 }

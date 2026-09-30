@@ -190,8 +190,8 @@ export default function Composer({ onSend, disabled = false, chips, onRequireLog
                     </span>
                 )}
                 {voice === 'transcribing' && <span className="composer-rec" role="status">转写中...</span>}
-                <button type="button" className="btn btn-primary composer-send" disabled={disabled} onClick={() => { submit(text) }}>
-                    发送
+                <button type="button" className="composer-send" aria-label="发送" disabled={disabled} onClick={() => { submit(text) }}>
+                    <Icon name="arrow-up" size={18} />
                 </button>
             </div>
         </div>

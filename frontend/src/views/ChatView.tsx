@@ -3,7 +3,8 @@
 //* 状态与发送管线全部收敛在 [[useChatSend]] (会话绑定/竞态守卫/降级/中止/登出复位), 本组件只做视图编排;
 //* chips 插槽 (D25): 注册表摊平的扩展贡献 + 内置文案经 [[selectVisibleChips]] 收敛后注入 Composer;
 //* 访客门全量接线: 文本发送的门在 useChatSend 内 (requireAuth 包 doSend, 登录后补发), chips 走壳式
-//* 空动作开门 (上抛不直发), 登录用户无门直发. Task 12: 消费壳下发的 sendRequest (情境卡唤起), nonce 判重防重放.
+//* 空动作开门 (上抛不直发), 登录用户无门直发. 壳下发的两条 nonce 请求通道 (sendRequest 唤起发送 /
+//* newChatRequest 新建会话复位, 终审整改) 在此消费, 判重防重放.
 import { useCallback, useEffect } from 'react'
 import type { ReactElement } from 'react'
 import { useOutletContext } from 'react-router-dom'
@@ -17,15 +18,17 @@ import { useChatGate } from '../hooks/useChatGate'
 import { useChatSend } from '../hooks/useChatSend'
 import type { IChatViewContext } from './chatContext'
 
-//* 情境唤起通道的消费台账必须是模块级: ChatView 与危机页是同壳兄弟路由, `/` ↔ `/crisis` 来回切换会整体卸载重挂,
-//* mount-scoped ref 重挂后归零, 会把已消费的 nonce 当新请求重放 (重复用户消息 + 未请求的二次 LLM 调用,
-//* 且登出换号后新用户的首聊会重放前账号的提问 — 评审定级 Important). 模块级台账跨挂载存活于整个页面会话:
-//* 同 nonce 只消费一次 (登出不清理也不会跨账号重放), 新 nonce 照常放行, "卡片在 /crisis 点击 → 回聊天即发送"的预期不受影响.
+//* nonce 消费台账必须是模块级: ChatView 随壳路由挂卸 (扩展节展开即整体卸载, 回会话节重挂),
+//* mount-scoped ref 重挂后归零, 会把已消费的 nonce 当新请求重放 — sendRequest 重放 = 重复用户消息 +
+//* 未请求的二次 LLM 调用 (登出换号后还会把前账号的提问发出去), newChatRequest 重放 = 重挂后经
+//* openRequest 恢复的会话被误清 (评审均定级 Important). 模块级台账跨挂载存活于整个页面会话:
+//* 同 nonce 只消费一次 (登出不清理也不会跨账号重放), 新 nonce 照常放行.
 let lastConsumedSendNonce = 0
+let lastConsumedNewChatNonce = 0
 
 export default function ChatView(): ReactElement
 {
-    const { sessions, reloadSessions, openRequest, sendRequest } = useOutletContext<IChatViewContext>()
+    const { sessions, reloadSessions, openRequest, sendRequest, newChatRequest } = useOutletContext<IChatViewContext>()
     const { user } = useAuth()
     const { requireAuth } = useChatGate()
     const { messages, streaming, streamError, startNewChat, handleSend } = useChatSend({ sessions, openRequest, reloadSessions })
@@ -36,8 +39,9 @@ export default function ChatView(): ReactElement
     //* chips 的访客门: 空动作 pending — 登录成功补发一次 no-op (不替用户直发候选题面), cancel 丢弃.
     const requireLogin = useCallback(() => { requireAuth(() => {}) }, [requireAuth])
 
-    //* 情境卡唤起通道: nonce 判重 (台账见模块顶注; handleSend 身份因上游重建而变化导致 effect 重跑, 也不会重放同一请求),
-    //* 经聊天发送管线走与 Composer 完全相同的门 + 流式路径.
+    //* 壳下发发送请求通道: nonce 判重 (台账见模块顶注; handleSend 身份因上游重建而变化导致 effect 重跑,
+    //* 也不会重放同一请求), 经聊天发送管线走与 Composer 完全相同的门 + 流式路径.
+    //* 生产者现状: 情境卡已随 homepage-v2 退场, 通道恒 null 无害, 留作未来唤起类入口原地复用.
     useEffect(() =>
     {
         if(sendRequest == null || sendRequest.nonce === lastConsumedSendNonce)
@@ -45,6 +49,16 @@ export default function ChatView(): ReactElement
         lastConsumedSendNonce = sendRequest.nonce
         handleSend(sendRequest.content)
     }, [sendRequest, handleSend])
+
+    //* 壳下发新建会话通道 (终审整改): nonce 判重, 消费即 startNewChat 复位 — 与会话内工具条 "新对话"
+    //* 同一终点, 侧栏钮对登录用户由此获得与工具条等价的能力.
+    useEffect(() =>
+    {
+        if(newChatRequest == null || newChatRequest.nonce === lastConsumedNewChatNonce)
+            return
+        lastConsumedNewChatNonce = newChatRequest.nonce
+        startNewChat()
+    }, [newChatRequest, startNewChat])
 
     const showHero = messages.length === 0
     //* 流式期间禁并发 (Composer 侧停用, doSend 的 abort 仅兜底); 两态共用同一实例, 同屏只渲染一处.

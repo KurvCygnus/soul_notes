@@ -8,6 +8,7 @@ export type IconName =
     | 'pen' | 'calendar' | 'cloud-sun' | 'mic'
     | 'panel' | 'buoy' | 'menu' | 'phone'
     | 'chat' | 'chat-plus' | 'grid' | 'chevron'  //* 手风琴侧栏 v2 新增: 会话气泡/气泡加号/扩展宫格/节标题箭头.
+    | 'arrow-up'  //* 输入区圆形发送钮 (终审整改, spec D2/D5/§5.4): 上箭头, 圆形底由宿主类承担.
 
 const PATHS: Record<IconName, ReactElement> = {
     sun: (
@@ -101,6 +102,12 @@ const PATHS: Record<IconName, ReactElement> = {
     ),
     chevron: (
         <path d="M7 10l5 5 5-5" />
+    ),
+    'arrow-up': (
+        <>
+            <path d="M12 19V5" />
+            <path d="m5 12 7-7 7 7" />
+        </>
     ),
 }
 
