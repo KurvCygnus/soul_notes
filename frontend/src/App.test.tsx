@@ -55,6 +55,10 @@ describe('App (壳与路由 v2)', () =>
         localStorage.clear()
         openAt('/')
         stubSuccessFetch()
+        //* 显式清 mock 状态 (仓库约定, AlertContext/CrisisFlyout 测试同款): RED 交接用例锚定 connectAlertSocket
+        //* 的 onRed 回调, 若调用历史跨测试累积, calls[0] 会落到陈旧 provider — clearAllMocks 保证 RED 注入
+        //* 永远命中本用例自己的建连, 顺序无关不靠 runner 隐式默认.
+        vi.clearAllMocks()
         vi.mocked(connectAlertSocket).mockReturnValue(vi.fn())//* 登录壳建连后 user 变迁的 cleanup 需要可调用的关闭函数
         vi.mocked(getCachedHotline).mockResolvedValue(DEFAULT_HOTLINE)//* 危机浮层刷新落回内置默认 (与真实降级同值)
     })
