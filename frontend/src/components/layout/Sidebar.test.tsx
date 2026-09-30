@@ -144,7 +144,7 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         expect(screen.getByRole('button', { name: '扩展' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: '会话' })).toBeInTheDocument()
         expect(screen.getByRole('button', { name: '新建会话' })).toBeInTheDocument()
-        expect(screen.getByRole('button', { name: '登录 / 注册' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '登录' })).toBeInTheDocument()  //* 折叠态可见文本即可访问名 (T6 名实一致整改: 不再有 aria-label 覆写).
         //* 仅图标列: 展开态内容 (会话预览/条目) 一律不渲染.
         expect(screen.queryByText('最近的考试压力')).not.toBeInTheDocument()
         expect(screen.queryByText('总览')).not.toBeInTheDocument()

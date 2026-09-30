@@ -109,6 +109,7 @@ export default function Sidebar({
                                 type="button"
                                 className="sidebar-section-title"
                                 aria-expanded={section === 'extensions'}
+                                aria-controls="sidebar-section-extensions"
                                 onClick={() => onSectionChange('extensions')}
                             >
                                 <Icon name="grid" size={16} />
@@ -116,7 +117,7 @@ export default function Sidebar({
                                 <Icon name="chevron" size={14} className="sidebar-section-arrow" />
                             </button>
                             {section === 'extensions' && (
-                                <div className="sidebar-items">
+                                <div id="sidebar-section-extensions" className="sidebar-items">
                                     {overviewProvider != null && (
                                         <button type="button" className={rowClass(extBase)} onClick={() => navigate(extBase)}>
                                             <Icon name={overviewProvider.icon} size={16} />
@@ -143,6 +144,7 @@ export default function Sidebar({
                                 type="button"
                                 className="sidebar-section-title"
                                 aria-expanded={section === 'sessions'}
+                                aria-controls="sidebar-section-sessions"
                                 onClick={() => onSectionChange('sessions')}
                             >
                                 <Icon name="chat" size={16} />
@@ -150,7 +152,7 @@ export default function Sidebar({
                                 <Icon name="chevron" size={14} className="sidebar-section-arrow" />
                             </button>
                             {section === 'sessions' && (
-                                <div className="sidebar-items">
+                                <div id="sidebar-section-sessions" className="sidebar-items">
                                     <button type="button" className="sidebar-new" onClick={() => onNewChat?.()}>
                                         <Icon name="chat-plus" size={16} />
                                         新建会话
@@ -189,7 +191,8 @@ export default function Sidebar({
             {/* 底部头像行: 登录用户 = 头像+用户名+汉堡钮, 访客 = 登录/注册 (折叠态缩为 "登录" 以适配 48px). */}
             <div className="sidebar-foot">
                 {guest ? (
-                    <button type="button" className="sidebar-login" aria-label="登录 / 注册" onClick={onOpenLogin}>
+                    //* 无 aria-label: 可访问名直接取可见文本, 折叠态 ("登录") 与展开态 ("登录 / 注册") 名实一致 (T5 评审遗留).
+                    <button type="button" className="sidebar-login" onClick={onOpenLogin}>
                         {collapsed ? '登录' : '登录 / 注册'}
                     </button>
                 ) : (
@@ -200,7 +203,9 @@ export default function Sidebar({
                             type="button"
                             className="sidebar-menu"
                             aria-label="打开菜单"
+                            aria-haspopup="menu"
                             aria-expanded={menuOpen}
+                            aria-controls="user-menu"  //* 菜单实体在壳 ([[UserMenu]] id="user-menu"), 此处仅指认归属.
                             onClick={onMenuToggle}
                         >
                             <Icon name="menu" size={17} />

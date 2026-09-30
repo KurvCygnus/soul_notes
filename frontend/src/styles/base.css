@@ -99,6 +99,40 @@ button.weather-chip:hover { border-color: var(--brand); }
 .chat-placeholder h1 { margin: 0 0 8px; font-size: 24px; }
 .chat-placeholder p { margin: 0; color: var(--muted); }
 
+/* 壳内二级页共用骨架 (Task 6): 页头 + 空态, 占位页与设置页同形态; 容器居中限宽防宽屏拉长行. */
+.view-header h1 { margin: 0; font-size: 20px; }
+.view-empty { margin: 0; font-size: 13px; color: var(--faint); }
+.placeholder-view { max-width: 720px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+
+/* 扩展页容器 (Task 6): 总览/扩展页在主区的统一留白容器, 页面组件自渲染 ExtPageHeader/ExtCard. */
+.ext-page { max-width: 860px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* 设置页 (Task 6): 主题分段控件 — aria-pressed 即选中态走品牌令牌, 边框分隔沿用 --line-strong. */
+.settings-view { max-width: 720px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+.settings-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.settings-card-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
+.settings-theme { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.settings-theme-opt { border: none; background: var(--card); color: var(--ink); font: inherit; padding: 7px 18px; transition: background var(--dur-fast) var(--ease-enter); }
+.settings-theme-opt + .settings-theme-opt { border-left: 1px solid var(--line-strong); }
+.settings-theme-opt:hover { background: var(--bg); }
+.settings-theme-opt[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.settings-hint { margin: 0; font-size: 12px; color: var(--faint); }
+
+/* 汉堡用户菜单 (Task 6, spec §7): 侧栏头像行上方向上弹出 (transform-origin 左下), 遮罩透明全屏收点击;
+   层级: 抽屉 80 之上 (移动端抽屉内也能开菜单), 登录浮层 60 与 RED 预警 100 之外互不重叠 (菜单仅登录态存在). */
+.user-menu-mask { position: fixed; inset: 0; z-index: 85; }
+.user-menu { position: fixed; left: 12px; bottom: 52px; z-index: 86; min-width: 168px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); transform-origin: bottom left; animation: user-menu-in var(--dur-fast) var(--ease-enter); }
+@keyframes user-menu-in { from { opacity: 0; transform: translateY(6px); } }
+.user-menu-item { border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; border-radius: var(--radius); }
+.user-menu-item:hover { background: var(--bg); }
+/* 危机支持置顶且 danger 令牌点出安全语义 (菜单五项中唯一的彩色条目). */
+.user-menu-item-crisis { color: var(--danger); }
+
+/* 危机占位浮层 (Task 6 最小形态, Task 8 换 Flyout): 复用 .modal-overlay + 危机页既有文案类, 卡片自定宽度. */
+.crisis-placeholder { width: min(420px, 92vw); display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.crisis-placeholder h2 { margin: 0; font-size: 18px; }
+
+
 /* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens; Task 12 起随顶栏在 .main 内纵向伸缩) */
 .chat-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .chat-toolbar { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
