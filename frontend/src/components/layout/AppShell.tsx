@@ -111,8 +111,14 @@ export default function AppShell(): ReactElement
     const handleMenuNavigate = useCallback((to: string) =>
     {
         setMenuOpen(false)
+        if(user == null)
+        {
+            //* 访客点门保护项: 过登录门而非导航 (pending no-op, 登录后原地放行到当前路由); 危机支持不走此路 (公开红线).
+            gate.requireAuth(() => {})
+            return
+        }
         navigate(to)
-    }, [navigate])
+    }, [gate, navigate, user])
     const handleLogout = useCallback(() =>
     {
         setMenuOpen(false)
@@ -177,9 +183,10 @@ export default function AppShell(): ReactElement
                 drawerOpen={drawerOpen}
                 onCloseDrawer={() => setDrawerOpen(false)}
             />
-            {/* 汉堡用户菜单 (仅登录用户): 锚定侧栏头像行向上弹出, 定位/遮罩/动效归 CSS. */}
-            {user != null && menuOpen && (
+            {/* 汉堡用户菜单 (访客/登录用户均可达 — 红线: 危机入口对访客无门): guest 态下门保护项过登录门, 登出隐藏. */}
+            {menuOpen && (
                 <UserMenu
+                    guest={user == null}
                     onClose={handleMenuClose}
                     onOpenCrisis={handleOpenCrisis}
                     onOpenProfile={() => handleMenuNavigate('/profile')}

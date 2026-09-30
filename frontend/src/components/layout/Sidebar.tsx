@@ -4,7 +4,7 @@
 //* sectionRoute; 扩展/总览条目点击由本组件直接导航 — 契约无 onOpenExtension(id), 条目级去向归侧栏, 节级归壳.
 //* 访客判定沿旧约: 壳仅对访客传 onOpenLogin, 该 prop 在场即访客态; 侧栏结构照常渲染, 交互上抛壳过登录门.
 //* 登录用户的用户名经 useAuth 读取 (契约无 user prop); 删除 × 不再做 confirm 门控, 直接上抛 (确认模态 Task 11).
-//* onOpenCrisis 暂不消费: 危机入口收进壳的汉堡菜单 (Task 6/8), 该 prop 仅作契约保留位.
+//* onOpenCrisis 仍由壳承接: 菜单实体在壳 ([[UserMenu]]), 侧栏汉堡钮 (访客/登录用户两态都在场) 只作开合与 aria 镜像.
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { ReactElement } from 'react'
 import Icon from '../ui/Icon'
@@ -69,6 +69,22 @@ export default function Sidebar({
     const sidebarClass = ['sidebar', collapsed ? 'collapsed' : '', drawer ? 'drawer-open' : ''].
         filter(Boolean).
         join(' ')
+
+    //* 汉堡钮 (头像行右槽): 开合态归壳持有, 菜单实体在壳 ([[UserMenu]] id 对应 aria-controls);
+    //* 访客同样渲染 (红线: 危机入口对访客可达, 壳对访客菜单隐藏登出/门保护项过门), 两态共用同一按钮形态.
+    const menuButton = (
+        <button
+            type="button"
+            className="sidebar-menu"
+            aria-label="打开菜单"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-controls="user-menu"
+            onClick={onMenuToggle}
+        >
+            <Icon name="menu" size={17} />
+        </button>
+    )
 
     //* 条目选中态: 当前路由即该扩展页 (总览 = /extensions, 条目 = /extensions/:id), 淡品牌底由 CSS 承载.
     const rowClass = (target: string): string => (pathname === target ? 'sidebar-row active' : 'sidebar-row')
@@ -191,25 +207,19 @@ export default function Sidebar({
             {/* 底部头像行: 登录用户 = 头像+用户名+汉堡钮, 访客 = 登录/注册 (折叠态缩为 "登录" 以适配 48px). */}
             <div className="sidebar-foot">
                 {guest ? (
-                    //* 无 aria-label: 可访问名直接取可见文本, 折叠态 ("登录") 与展开态 ("登录 / 注册") 名实一致 (T5 评审遗留).
-                    <button type="button" className="sidebar-login" onClick={onOpenLogin}>
-                        {collapsed ? '登录' : '登录 / 注册'}
-                    </button>
+                    //* 访客双件套 (D18 结构照常): 姓名槽让位给登录钮, 汉堡照常在场 (危机入口红线, T6 评审整改).
+                    //* 无 aria-label: 可访问名直接取可见文本, 折叠态 ("登录") 与展开态 ("登录 / 注册") 名实一致.
+                    <>
+                        <button type="button" className="sidebar-login" onClick={onOpenLogin}>
+                            {collapsed ? '登录' : '登录 / 注册'}
+                        </button>
+                        {menuButton}
+                    </>
                 ) : (
                     <>
                         <span className="sidebar-avatar" aria-hidden="true">{(user?.username ?? '').charAt(0)}</span>
                         <span className="sidebar-username">{user?.username}</span>
-                        <button
-                            type="button"
-                            className="sidebar-menu"
-                            aria-label="打开菜单"
-                            aria-haspopup="menu"
-                            aria-expanded={menuOpen}
-                            aria-controls="user-menu"  //* 菜单实体在壳 ([[UserMenu]] id="user-menu"), 此处仅指认归属.
-                            onClick={onMenuToggle}
-                        >
-                            <Icon name="menu" size={17} />
-                        </button>
+                        {menuButton}
                     </>
                 )}
             </div>

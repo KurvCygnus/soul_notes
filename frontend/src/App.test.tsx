@@ -61,7 +61,36 @@ describe('App (壳与路由 v2)', () =>
         expect(screen.getByRole('heading', { name: '你好, 今天想聊点什么?' })).toBeInTheDocument()
         expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
         expect(screen.getByRole('button', { name: '登录 / 注册' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: '打开菜单' })).toBeInTheDocument()  //* 访客头像行双件套: 登录钮 + 汉堡 (红线: 危机入口对访客可达).
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('访客菜单 (红线闭合): 危机支持无门直达热线占位, 门保护项触发登录门, 登出隐藏', async () =>
+    {
+        const user = userEvent.setup()
+        render(<App />)
+        await settle()
+        await user.click(screen.getByRole('button', { name: '打开菜单' }))
+        expect(screen.getAllByRole('menuitem').map(el => el.textContent)).
+            toEqual(['危机支持', '个人资料', '设置', '关于'])  //* 登出对访客无意义, 隐藏.
+
+        //* 公开能力: 危机支持直开热线占位, 登录浮层不得在场 (对访客无门).
+        await user.click(screen.getByRole('menuitem', { name: '危机支持' }))
+        expect(screen.getByRole('dialog', { name: '危机支持' })).toBeInTheDocument()
+        expect(screen.queryByRole('dialog', { name: /登录/ })).not.toBeInTheDocument()
+
+        //* 门保护项: 上抛壳过登录门 (不导航不渲染受保护页), 菜单收起; 取消复位后逐项验证.
+        await user.click(screen.getByRole('button', { name: '我知道了' }))
+        for(const item of ['个人资料', '设置', '关于'])
+        {
+            await user.click(screen.getByRole('button', { name: '打开菜单' }))
+            await user.click(screen.getByRole('menuitem', { name: item }))
+            expect(await screen.findByRole('dialog', { name: /登录/ })).toBeInTheDocument()
+            expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+            expect(screen.queryByRole('heading', { name: item })).not.toBeInTheDocument()
+            fireEvent.click(screen.getByRole('button', { name: '取消' }))  //* 显式取消关门 (浮层无遮罩点击关闭), 下一轮重开.
+            await settle()
+        }
     })
 
     it('访客进入受保护路由: 不渲染页面内容并触发登录门 (gate.open -> 登录浮层在场)', async () =>

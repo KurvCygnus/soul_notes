@@ -154,7 +154,7 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         expect(onToggleCollapse).toHaveBeenCalledOnce()
     })
 
-    it('头像行: 登录用户 = 头像+用户名+汉堡钮 (上抛 onMenuToggle); 访客 = 登录 / 注册钮 (上抛 onOpenLogin)', async () =>
+    it('头像行: 访客 = 登录 / 注册 + 汉堡双件套 (危机入口红线); 登录用户 = 头像+用户名+汉堡, 各自上抛', async () =>
     {
         const user = userEvent.setup()
         const onMenuToggle = vi.fn()
@@ -162,14 +162,17 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         const { rerender } = render(renderSidebar(baseProps({ onMenuToggle, onOpenLogin })))
         await user.click(screen.getByRole('button', { name: '登录 / 注册' }))
         expect(onOpenLogin).toHaveBeenCalledOnce()
+        //* 访客汉堡照常在场 (T6 评审整改: 危机入口对访客可达), 开合上抛壳.
+        await user.click(screen.getByRole('button', { name: '打开菜单' }))
+        expect(onMenuToggle).toHaveBeenCalledOnce()
 
-        //* 壳在登录后停止下发 onOpenLogin: 头像行切换为 头像+用户名+汉堡钮.
+        //* 壳在登录后停止下发 onOpenLogin: 头像行切换为 头像+用户名+汉堡.
         authUser.current = USER
         rerender(renderSidebar(baseProps({ onMenuToggle })))
         expect(screen.getByText('小明')).toBeInTheDocument()
         expect(document.querySelector('.sidebar-avatar')).not.toBeNull()
         await user.click(screen.getByRole('button', { name: '打开菜单' }))
-        expect(onMenuToggle).toHaveBeenCalledOnce()
+        expect(onMenuToggle).toHaveBeenCalledTimes(2)
         expect(screen.queryByRole('button', { name: '登录 / 注册' })).not.toBeInTheDocument()
     })
 
