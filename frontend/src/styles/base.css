@@ -99,6 +99,21 @@ button.weather-chip:hover { border-color: var(--brand); }
 .chat-placeholder h1 { margin: 0 0 8px; font-size: 24px; }
 .chat-placeholder p { margin: 0; color: var(--muted); }
 
+/* 每日总结「」行 (homepage-v2 Task 10): 输入区下的质性暗行 + 最近列表 popover, 形态对齐 .weather-pop;
+   暗行取 --faint/--muted 双档 (静默不喧宾, hover 提示可点), 配色/圆角/阴影全部取自 tokens; 进场动效归 Task 13. */
+.summary-line { position: relative; margin: 10px auto 0; max-width: 480px; }
+.summary-line-trigger { border: none; background: none; color: var(--faint); font: inherit; font-size: 13px; padding: 2px 8px; border-radius: var(--radius); cursor: pointer; }
+.summary-line-trigger:hover { color: var(--muted); background: var(--bg); }
+.summary-pop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 50; width: min(320px, 90vw); padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.summary-pop-title { margin: 0; font-size: 13px; font-weight: 600; }
+.summary-pop-empty { margin: 0; font-size: 12px; color: var(--faint); }
+.summary-pop-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+.summary-pop-item { border-top: 1px solid var(--line); padding: 8px 0; }
+.summary-pop-item:first-child { border-top: none; padding-top: 0; }
+.summary-pop-item:last-child { padding-bottom: 0; }
+.summary-pop-date { font-size: 12px; color: var(--faint); }
+.summary-pop-content { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+
 /* 壳内二级页共用骨架 (Task 6): 页头 + 空态, 占位页与设置页同形态; 容器居中限宽防宽屏拉长行. */
 .view-header h1 { margin: 0; font-size: 20px; }
 .view-empty { margin: 0; font-size: 13px; color: var(--faint); }

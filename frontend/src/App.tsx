@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import type { ReactElement } from 'react'
 import { BrowserRouter, Navigate, Route, Routes, useParams } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
+import DailySummaryLine from './components/summary/DailySummaryLine'
 import { AuthProvider } from './context/AuthContext'
 import { AlertProvider } from './context/AlertContext'
 import { useAuth } from './hooks/useAuth'
@@ -21,11 +22,15 @@ import SettingsView from './views/SettingsView'
 //* 聊天位占位 hero (Task 9 换 ChatView 重接线): 会话状态与发送通道仍由壳经 Outlet context 持有, 契约不变.
 function ChatHero(): ReactElement
 {
+    const { user } = useAuth()
     return (
         <div className="chat-placeholder">
             <div className="hero-box">
                 <h1>你好, 今天想聊点什么?</h1>
                 <p>我是你的倾听伙伴, 任何想法都可以在这里慢慢说.</p>
+                {/* 每日总结「」行挂 composer 槽 (Task 10): 登录态限定 (访客请求必 401, 无谓打点); 无总结/失败整件隐身.
+                    T9 重接线后此挂载随 Composer 迁回 ChatView (组件自包含, 迁移零改动). */}
+                {user != null && <DailySummaryLine />}
             </div>
         </div>
     )

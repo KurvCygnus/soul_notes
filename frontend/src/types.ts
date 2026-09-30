@@ -131,3 +131,13 @@ export type ContextSummary = {
 }
 
 //endregion
+
+//region 每日总结
+
+//* GET /summary/daily 与 /summary/recent 条目, 即后端 DailySummaryVo (date 为 LocalDate ISO 串, content 为质性文案).
+export type DailySummaryVo = {
+    date: string
+    content: string
+}
+
+//endregion
