@@ -1,0 +1,15 @@
+/* 扩展页面展示原语 (Task 3, D8): 六原语样式, 颜色/圆角/动效全部引用设计令牌, 扩展侧零自造样式值.
+   胶囊圆角 999px 沿用 base.css 既有 pill 惯例 (.badge/.composer-chip), 非新造形状值. */
+
+.ext-page-header { display: flex; align-items: center; gap: 8px; color: var(--brand); }
+.ext-page-title { margin: 0; font-size: 18px; color: var(--ink); }
+.ext-badge { border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+.ext-list-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+.ext-list-main { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.ext-list-sub { margin-left: auto; flex-shrink: 0; font-size: 12px; color: var(--muted); }
+.ext-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.ext-card-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ext-empty { margin: 0; font-size: 13px; color: var(--faint); }
+/* 呼吸式加载脉冲: 时长/缓动走动效令牌 (D23), reduced-motion 由 base.css 全局规则统一掐断. */
+.ext-loading { margin: 0; font-size: 13px; color: var(--faint); animation: ext-pulse var(--dur-slow) var(--ease-enter) infinite alternate; }
+@keyframes ext-pulse { from { opacity: 1; } to { opacity: .4; } }
