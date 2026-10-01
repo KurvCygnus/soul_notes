@@ -198,6 +198,37 @@ class ChatPipelineTest
         //* meta 回传的必须是本次实际使用的会话 (新建会话同样回传): 流收尾即回复已落库, 与最新会话对账.
         assertEquals(latestSession(account.userId()).id, sessionId, "meta 的 sessionId 必须为实际落库的会话 ID");
     }
+
+    //* 回归 (线上冒烟): 携既有 sessionId 流式续聊 — SSE 流链 (Multi 返回值) 无环境 Mutiny 会话,
+    //* loadOwnedSession 裸 findById 曾抛 "No current Mutiny.Session found" 500 (error id 237bab41).
+    //* 契约: 200 + 流首 meta 回显该既有 sessionId + meta 之外至少一个 token 事件
+    //* (顺带补齐 B2 meta 契约"既有会话回显"分支的直测, 此前仅新建会话路径有覆盖).
+    @Test
+    void chatStream_ExistingSession_ShouldEchoOwnedSessionIdAndStreamTokens() throws Exception
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithText("第一轮对话已落库。");
+        chatSend(account.token(), "第一轮非流式消息");
+
+        //* 经 /send 真实链路取得归属清晰的既有会话 ID (直插造数不含消息追加语义, 与本题无关).
+        final var sessionId = RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions").
+            then().
+            statusCode(200).
+            extract().path("data[0].sessionId").toString();
+
+        MockLlmProfile.server().respondWithChunks("第二轮", "也在。");
+        final var events = streamViaSse(account.token(), sessionId, "在同一会话里继续说");
+
+        assertFalse(events.isEmpty(), "SSE 流必须到达事件");
+        final var meta = readTree(events.getFirst(), "流首 meta 事件");
+        assertEquals("meta", meta.path("type").asText(), PrintUtils.quickFormat("流首事件必须为 meta JSON, 实际: {}", events.getFirst()));
+        assertEquals(UUID.fromString(sessionId), UUID.fromString(meta.path("sessionId").asText()), "meta 必须回显续聊的既有 sessionId");
+        assertTrue(events.size() >= 2, PrintUtils.quickFormat("meta 之外还应到达 token 事件, 实际: {}", events));
+    }
     //endregion
 
     //region ⑤ /ws/chat WebSocket
@@ -489,14 +520,20 @@ class ChatPipelineTest
 
     //* SSE 流式读取辅助: 沿用 ④ 用例的 HttpClient 按行读流写法, 聚合全部 data 行 (含流首 meta 事件),
     //* 供 meta 契约与 token 拼接用例共享同一读取口径.
-    private List<String> streamViaSse(String token, String content) throws Exception
+    private List<String> streamViaSse(String token, String content) throws Exception { return streamViaSse(token, null, content); }
+
+    //* SSE 流式读取辅助 (带 sessionId): 续聊既有会话回归用例的请求口径, 其余与无参版本共享同一读取逻辑.
+    private List<String> streamViaSse(String token, String sessionId, String content) throws Exception
     {
+        final var body = sessionId == null ?
+            PrintUtils.quickFormat("{\"content\":\"{}\"}", content) :
+            PrintUtils.quickFormat("{\"sessionId\":\"{}\",\"content\":\"{}\"}", sessionId, content);
         final var request = HttpRequest.newBuilder(streamUri).
             header("Authorization", PipelineUsers.bearer(token)).
             header("Content-Type", "application/json").
             header("Accept", "text/event-stream").
             timeout(Duration.ofSeconds(30)).
-            POST(HttpRequest.BodyPublishers.ofString(PrintUtils.quickFormat("{\"content\":\"{}\"}", content))).
+            POST(HttpRequest.BodyPublishers.ofString(body)).
             build();
 
         final var payloads = new ArrayList<String>();

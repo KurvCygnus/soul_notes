@@ -252,34 +252,41 @@ public final class ChatService
      * 加载会话并校验归属.
      *
      * @implNote 不存在与越权一律以 "不存在" 同码同文案回应, 不泄露资源存在性, 防会话枚举越权.
+     *           查找经 {@code Panache.withTransaction} 独立事务自持会话: SSE 流链 (Multi 返回值)
+     *           无法使用 {@code @WithTransaction}, 无环境 Mutiny 会话, 裸 findById 曾抛
+     *           "No current Mutiny.Session found" 500 (线上冒烟实证); 已有事务环境的调用点
+     *           (listMessages/deleteSession) 则并入既有事务, 归属校验语义不变.
      */
     private static @NotNull Uni<AiChatSession> loadOwnedSession(@NotNull UUID sessionId, @NotNull UUID userId)
     {
-        return AiChatSession.
-            <AiChatSession>findById(sessionId).
-            onItem().
-            ifNull().
-            failWith(
-                () -> IBusinessException.of(
-                    ErrorCode.SESSION_NOT_FOUND,
-                    "会话不存在",
-                    NoSuchElementException::new,
-                    "CHAT_SESSION_LOOKUP_NOT_FOUND"
-                ).asException()
-            ).
-            flatMap(
-                session ->
-                session.userId.equals(userId) ?
-                    Uni.createFrom().item(session) :
-                    Uni.createFrom().failure(
-                        IBusinessException.of(
-                            ErrorCode.SESSION_NOT_FOUND,
-                            "会话不存在",
-                            NoSuchElementException::new,
-                            "CHAT_SESSION_FOREIGN_ACCESS"
-                        ).asException()
-                    )
-            );
+        return Panache.withTransaction(
+            () ->
+            AiChatSession.
+                <AiChatSession>findById(sessionId).
+                onItem().
+                ifNull().
+                failWith(
+                    () -> IBusinessException.of(
+                        ErrorCode.SESSION_NOT_FOUND,
+                        "会话不存在",
+                        NoSuchElementException::new,
+                        "CHAT_SESSION_LOOKUP_NOT_FOUND"
+                    ).asException()
+                ).
+                flatMap(
+                    session ->
+                    session.userId.equals(userId) ?
+                        Uni.createFrom().item(session) :
+                        Uni.createFrom().failure(
+                            IBusinessException.of(
+                                ErrorCode.SESSION_NOT_FOUND,
+                                "会话不存在",
+                                NoSuchElementException::new,
+                                "CHAT_SESSION_FOREIGN_ACCESS"
+                            ).asException()
+                        )
+                )
+        );
     }
 
     //* 加载已有 Session, 或创建新的 Session.
