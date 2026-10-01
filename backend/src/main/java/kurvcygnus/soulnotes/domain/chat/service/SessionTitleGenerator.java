@@ -137,10 +137,14 @@ public final class SessionTitleGenerator
      * 归一化 LLM 回复: 剥离首尾空白与成对包裹引号; 纯空白拒绝; 超长截断封顶.
      *
      * @param reply LLM 原始回复
-     * @return 可落库标题; 纯空白为 {@code null} (调用方转兜底标题)
+     * @return 可落库标题; 纯空白或 {@code null} 为 {@code null} (调用方转兜底标题)
      */
-    static @Nullable String normalizedTitle(@NotNull String reply)
+    static @Nullable String normalizedTitle(@Nullable String reply)
     {
+        //* null 回复按失败同语义拒绝 (转兜底标题): 模型偶发空 content 成功返回, 归一化若 NPE
+        //! 会夭折整条链, 兜底落库永远到不了 — 会话将永久无标题 (问题存档: 曾因此跳过兜底).
+        if(reply == null)
+            return null;
         final var stripped = unwrapQuotes(reply.strip());
         if(stripped.isEmpty())
             return null;

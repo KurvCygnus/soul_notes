@@ -158,6 +158,14 @@ class ChatSessionTitleTest
     }
 
     @Test
+    void normalizedTitle_ShouldRejectNullReply()
+    {
+        //* AI 成功返回但产物为 null (模型空 content): 必须与空白回复同语义拒绝 (转兜底标题),
+        //! 而非归一化步骤 NPE — NPE 会让整条生成链在兜底落库之前夭折, 会话永久无标题.
+        assertNull(SessionTitleGenerator.normalizedTitle(null), "null 回复必须拒绝 (转兜底标题), 不得 NPE");
+    }
+
+    @Test
     void fallbackTitle_ShouldStripAndCapAt20()
     {
         assertEquals("睡不着的夜", SessionTitleGenerator.fallbackTitle("  睡不着的夜  "), "兜底标题应剥离首尾空白");

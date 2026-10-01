@@ -46,8 +46,8 @@ public final class AiChatSession extends PanacheEntityBase
     @Column(name = "warning_triggered", nullable = false)
     public boolean warningTriggered;
 
-    //* 会话标题 (首轮交换完成后由 AI 生成, fail-open): 可空 — 存量会话与本轮生成失败前的窗口内均为 null,
-    //* 读取端 (VO/前端) 以预览兜底, 不做回填.
+    //* 会话标题 (首轮交换完成后由 AI 生成, fail-open): 可空 — 存量会话与本轮生成失败前的窗口内为 null,
+    //* null 残留由启动回填器 (SessionTitleBackfiller) 以首条用户消息截断一次性收敛; 运行中窗口读取端以预览兜底.
     @Column(name = "title")
     public String title;
 
@@ -111,6 +111,14 @@ public final class AiChatSession extends PanacheEntityBase
     {
         return find("updatedAt >= ?1 ORDER BY updatedAt DESC", cutoff).list();
     }
+
+    /**
+     * 查询无标题会话, 按更新时间倒序.
+     *
+     * @return 会话列表 (可能为空, 恒非 null); 消费方为启动回填 (一次性扫全库, 低频路径可接受)
+     * @since 1.6.0
+     */
+    public static @NotNull Uni<List<AiChatSession>> findTitleless() { return find("title IS NULL ORDER BY updatedAt DESC").list(); }
     //endregion
 
     //region JSON 辅助
