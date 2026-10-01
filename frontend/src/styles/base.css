@@ -43,14 +43,14 @@ button { font: inherit; cursor: pointer; }
 @keyframes sidebar-items-in { from { opacity: 0; } }
 .sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 /* 条目行: 无框纯文本行, hover 淡高亮, 选中淡品牌底; li (会话) 与 button (扩展) 共用同一形态. */
-.sidebar-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--radius); font-size: 14px; text-align: left; }
+.sidebar-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--radius); font-size: 13px; text-align: left; }
 button.sidebar-row { border: none; background: none; color: var(--ink); font: inherit; }
 .sidebar-row:hover { background: var(--card); }
 .sidebar-row.active { background: color-mix(in srgb, var(--brand) 10%, transparent); }
 .sidebar-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Mock/占位行尾小字: 非徽标 (无边框无底), 仅弱化小字标注. */
 .sidebar-tag { flex-shrink: 0; font-size: 11px; color: var(--faint); }
-.sidebar-new { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); font: inherit; font-size: 14px; padding: 6px 8px; border-radius: var(--radius); text-align: left; }
+.sidebar-new { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 6px 8px; border-radius: var(--radius); text-align: left; }
 .sidebar-new:hover { background: var(--card); color: var(--ink); }
 .sidebar-empty { margin: 0; font-size: 13px; color: var(--faint); padding: 2px 8px 4px; }
 /* 会话预览两行截断: 用 -webkit-line-clamp 前缀语法 — 虽带前缀, 但 Chrome/Edge/Safari/Firefox 68+
