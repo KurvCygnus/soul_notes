@@ -94,13 +94,26 @@ class ChatServiceTest
 
     @SuppressWarnings("ConstantConditions")//! 测试缝: Vertx 为类级共享实例, 其余未用依赖置 null 是纯单测构造服务实例的唯一途径.
     private static ChatService newService(boolean taggingOn, PromptProvider promptProvider, ClinicalSchemaNormalizer normalizer)
-    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, noneInjector(), normalizer, null, newDispatchStub(), VERTX, 50, taggingOn); }
+    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, noneInjector(), normalizer, null, newDispatchStub(), newTitleGeneratorStub(), VERTX, 50, taggingOn); }
 
     //* 主链路替身: buildSystemPrompt 在 executeBlocking 内执行, 必须注入可用的 PromptProvider (空配置 = 内置默认).
     @SuppressWarnings("ConstantConditions")//! 测试缝: clinicalAssessmentService 置 null — 本组用例不驱动评估落库挂点.
     private static ChatService newService(boolean taggingOn, EmpatheticChatAgent chatAgent)
     {
-        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), noneInjector(), unusedNormalizer(), null, newDispatchStub(), VERTX, 50, taggingOn);
+        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), noneInjector(), unusedNormalizer(), null, newDispatchStub(), newTitleGeneratorStub(), VERTX, 50, taggingOn);
+    }
+
+    //* 标题生成器替身: 本组用例只驱动 callAiAndRespond 拆流路径 (不经过标题挂点), 空实现占位即可.
+    private static SessionTitleGenerator newTitleGeneratorStub()
+    {
+        return new SessionTitleGenerator(new StubTitleAgent(), VERTX);
+    }
+
+    //* 标题 Agent 替身: 本组用例不触达标题链路, 恒抛错以暴露意外触达.
+    private static final class StubTitleAgent implements kurvcygnus.soulnotes.ai.agent.SessionTitleAgent
+    {
+        @Override public String generateTitle(String systemPrompt, String userContent, String assistantReply)
+        { throw new UnsupportedOperationException("本组测试不驱动标题生成链路"); }
     }
 
     //* 情境注入器替身: adapter=none → render 恒空串, 本组用例的字节级 prompt 断言与 1.4 基线保持一致.

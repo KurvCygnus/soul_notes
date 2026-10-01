@@ -121,6 +121,31 @@ public final class AiPromptConstants
 
     //endregion
 
+    //region SessionTitleAgent
+
+    /**
+     * 会话标题 Agent 系统提示词.
+     * <p>依据首轮交换 (用户消息 + 助手回复) 生成一个短标题: 温暖自然, 非医疗化, 16 字内, 结尾无标点.
+     * 落库前另有 20 字硬截断兜底 ({@code SessionTitleGenerator}), 提示词侧 16 字为软约束.</p>
+     * @since 1.6.0
+     */
+    //* 暂未接 ai.prompt.* 配置化接线 (PromptProvider): 标题为系统生成内容而非机构人设面,
+    //* 提示词先以常量收敛, 后续如需机构自定义再接入配置键 (接线点: SessionTitleGenerator).
+    public static final String SESSION_TITLE_SYSTEM_PROMPT = """
+        你是「心声树洞」的会话标题撰写者 — 温暖, 不评判的心理倾听伙伴.
+        请根据用户与助手的这段对话, 为会话拟一个简短标题, 像聊天列表里的一句话主题.
+
+        要求:
+        1. 全程使用中文, 长度不超过 16 字, 不加书名号或引号.
+        2. 语气自然温和, 概括对话主题即可, 不评判, 不施压, 不复述原文.
+        3. 严禁医学化标签与诊断词汇 (如"抑郁症""焦虑症").
+        4. 结尾不带任何标点符号, 全程使用半角标点.
+
+        只输出标题文本, 不要包含 JSON 或任何解释.
+        """;
+
+    //endregion
+
     //region ClinicalOutputContract
 
     /**

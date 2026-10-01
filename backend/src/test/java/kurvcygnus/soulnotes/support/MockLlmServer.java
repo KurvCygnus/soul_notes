@@ -35,6 +35,8 @@ import java.util.concurrent.Executors;
  *     次轮 (请求携带 {@code role=tool} 消息) 回显工具结果文本; {@code stream=true} 的工具轮请求显式 500 拒绝
  *     (真实客户端工具轮恒非流式, 组合不构成合法契约)</li>
  *     <li>④ 预警 JSON — 请求体携带 {@link #RED_KEYWORD} 且不携带工具时, 返回 {@code warningLevel=RED} 的检测结果 JSON</li>
+ *     <li>⑤ 会话标题 — 请求体携带 {@link #TITLE_ANCHOR} 且不携带工具时, 返回 canned 标题文本;
+ *     {@link #failTitleRequests()} 布防后改返 500 (fail-open 兜底用例)</li>
  * </ul>
  * <p>请求区分契约: 请求体含 {@code tools} 数组视为共情对话 Agent, 否则视为结构化输出 Agent (预警检测).
  * 每个请求体全文按序录制, 供用例断言 systemPrompt 组装与工具轮次.</p>
@@ -49,6 +51,11 @@ public final class MockLlmServer
 {
     //* 预警链路探测关键词: 无工具请求命中即返回 RED JSON, 集成测试以消息内容触发预警分支.
     public static final String RED_KEYWORD = "SOULNOTES-RED-PROBE";
+
+    //* 会话标题链路契约: 标题 Agent 请求不带 tools, 与预警检测请求同形态 — 以标题系统提示词的
+    //* 稳定锚点词区分; 命中即返回 canned 标题 (预警 JSON 对标题链路无断言价值).
+    public static final String TITLE_ANCHOR = "会话标题";
+    public static final String TITLE_REPLY  = "备考夜谈";
 
     //* JVM 全局端口仲裁键: System property 跨类加载器域共享, 是本类唯一的跨域同步点.
     private static final String PORT_PROPERTY = "soulnotes.mock-llm.port";
@@ -68,6 +75,8 @@ public final class MockLlmServer
     private volatile String replyText = "";
     private volatile List<String> sseChunks = List.of();
     private volatile String toolFunction = "getCrisisMessage";
+    //* 标题请求故障布防: 置位后标题锚点请求显式 500, 供 fail-open 兜底落库用例驱动 AI 失败分支.
+    private volatile boolean titleError = false;
 
     private MockLlmServer(HttpServer server)
     {
@@ -130,6 +139,7 @@ public final class MockLlmServer
         server.createContext("/__mock/state", this::handleStateControl);
         server.createContext("/__mock/reset", this::handleResetControl);
         server.createContext("/__mock/requests", this::handleRequestsControl);
+        server.createContext("/__mock/title-error", this::handleTitleErrorControl);
     }
 
     private static Thread daemonThread(Runnable task)
@@ -185,6 +195,17 @@ public final class MockLlmServer
     }
 
     //* ④ 模式免编程: 请求体携带 RED_KEYWORD 即返回 RED 预警 JSON (关键词契约, 无需预先布防).
+    //* 标题请求故障布防: 置位后标题锚点请求一律 500 (模拟 AI 故障, fail-open 兜底用例); reset() 自动解除.
+    public void failTitleRequests()
+    {
+        if(controlHttp != null)
+        {
+            control("POST", "/__mock/title-error", Map.of("enabled", true));
+            return;
+        }
+        titleError = true;
+    }
+
     //* 清空录制与编程状态, 用例间互不串扰.
     public void reset()
     {
@@ -203,6 +224,7 @@ public final class MockLlmServer
         replyText = "";
         sseChunks = List.of();
         toolFunction = "getCrisisMessage";
+        titleError = false;
     }
 
     //* 已收请求体快照 (按到达顺序), 供断言 systemPrompt 组装与工具轮次.
@@ -287,6 +309,14 @@ public final class MockLlmServer
         exchange.getRequestBody().readAllBytes();
         synchronized(requestBodies) { writeJson(exchange, Map.of("requests", Map.of("bodies", List.copyOf(requestBodies)))); }
     }
+
+    //* 标题故障布防的远程转发端点: 远程域经此置位真实服务器的 titleError 标志.
+    private void handleTitleErrorControl(HttpExchange exchange) throws IOException
+    {
+        final var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        titleError = parse(body).path("enabled").asBoolean(false);
+        writeRawJson(exchange, "{\"ok\":true}");
+    }
     //endregion
 
     //region 请求处理
@@ -327,7 +357,18 @@ public final class MockLlmServer
                 writeJson(exchange, completionPayload(replyText));
             return;
         }
-        //* 无工具请求 = 结构化输出 Agent (预警检测): 关键词命中返回 RED, 其余返回可解析的 NONE,
+        //* 无工具请求 = 结构化输出 Agent (预警检测) 或标题 Agent: 以标题系统提示词锚点区分.
+        if(body.contains(TITLE_ANCHOR))
+        {
+            if(titleError)
+            {
+                writeRawJson(exchange, 500, "{\"error\":{\"message\":\"标题生成请求已被布防为失败\"}}");
+                return;
+            }
+            writeJson(exchange, completionPayload(TITLE_REPLY));
+            return;
+        }
+        //* 其余无工具请求 = 预警检测: 关键词命中返回 RED, 其余返回可解析的 NONE,
         //* 保证生产侧检测结果反序列化始终成功, 降级链路零告警噪音.
         writeJson(exchange, completionPayload(body.contains(RED_KEYWORD) ? RED_DETECTION_JSON : NONE_DETECTION_JSON));
     }

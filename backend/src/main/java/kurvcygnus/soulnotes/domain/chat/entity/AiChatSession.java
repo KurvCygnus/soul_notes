@@ -46,6 +46,11 @@ public final class AiChatSession extends PanacheEntityBase
     @Column(name = "warning_triggered", nullable = false)
     public boolean warningTriggered;
 
+    //* 会话标题 (首轮交换完成后由 AI 生成, fail-open): 可空 — 存量会话与本轮生成失败前的窗口内均为 null,
+    //* 读取端 (VO/前端) 以预览兜底, 不做回填.
+    @Column(name = "title")
+    public String title;
+
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
     //endregion

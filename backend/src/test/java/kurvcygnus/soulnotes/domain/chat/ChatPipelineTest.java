@@ -72,9 +72,14 @@ class ChatPipelineTest
     @TestHTTPResource(ApiEndpointConstants.CHAT_BASE + "/stream") URI streamUri;
     @TestHTTPResource("/ws/chat") URI wsUri;
 
-    //* 用例隔离: 清空 mock 录制与编程状态, 防止跨用例的请求累积干扰断言.
+    //* 用例隔离: 清空 mock 录制与编程状态, 防止跨用例的请求累积干扰断言;
+    //* 标题列为增量迁移, 测试库可能未应用, 幂等补齐 (SchemaGuards 契约).
     @org.junit.jupiter.api.BeforeEach
-    void rearm() { MockLlmProfile.server().reset(); }
+    void rearm()
+    {
+        kurvcygnus.soulnotes.support.SchemaGuards.ensureChatSessionTitleColumn(sessionFactory);
+        MockLlmProfile.server().reset();
+    }
 
     //region ① /chat/send 非流式
     @Test

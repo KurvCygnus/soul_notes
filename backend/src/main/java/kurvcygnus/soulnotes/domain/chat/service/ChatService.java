@@ -76,6 +76,8 @@ public final class ChatService
     //* RED 预警统一分发收口: per-user 冷却闸门 + 渠道 fan-out + "渠道全空"WARN 哨兵均内含于分发器,
     //* 本服务只负责触发 — 冷却只闸门外呼, 落库标记 warningTriggered 仍在本服务.
     private final @NotNull AlertDispatchService alertDispatchService;
+    //* 会话标题生成器: 首轮交换完成后的 fire-and-forget 挂点 (fail-open, 内部自持线程纪律).
+    private final @NotNull SessionTitleGenerator sessionTitleGenerator;
     private final @NotNull Vertx vertx;
     //* 会话历史最多保留的消息条数, 防止 JSONB 无限增长与 Token 超限.
     private final int maxHistoryMessages;
@@ -92,6 +94,7 @@ public final class ChatService
         @NotNull ClinicalSchemaNormalizer schemaNormalizer,
         @NotNull ClinicalAssessmentService clinicalAssessmentService,
         @NotNull AlertDispatchService alertDispatchService,
+        @NotNull SessionTitleGenerator sessionTitleGenerator,
         @NotNull Vertx vertx,
         @ConfigProperty(name = "chat.history.max-messages", defaultValue = "50") int maxHistoryMessages,
         @ConfigProperty(name = "clinical.tagging", defaultValue = "false") boolean clinicalTagging
@@ -104,6 +107,7 @@ public final class ChatService
         this.schemaNormalizer = schemaNormalizer;
         this.clinicalAssessmentService = clinicalAssessmentService;
         this.alertDispatchService = alertDispatchService;
+        this.sessionTitleGenerator = sessionTitleGenerator;
         this.vertx = vertx;
         this.maxHistoryMessages = maxHistoryMessages;
         this.clinicalTagging = clinicalTagging;
@@ -132,6 +136,8 @@ public final class ChatService
         //* 同 id 重 INSERT, 集成测试实证 duplicate key 23505) — 加载与持久化必须同事务, 实体经原子引用
         //* 带出事务供挂点取 id/userId (单链顺序写读, 无并发竞争).
         final var sessionRef = new AtomicReference<AiChatSession>();
+        //* 首轮交换判定必须在追加用户消息前采样 (messages 为空即首轮): 标题只从首轮交换生成.
+        final var firstExchangeRef = new AtomicBoolean();
         return Panache.withTransaction(
             () ->
             getOrCreateSession(req.sessionId(), userId).
@@ -139,6 +145,7 @@ public final class ChatService
                     session ->
                     {
                         sessionRef.set(session);
+                        firstExchangeRef.set(countMessages(session.messages) == 0);
                         session.addMessage("user", req.content());
                         session.truncate(maxHistoryMessages);
                         return callAiAndRespond(session, req.content());
@@ -146,13 +153,14 @@ public final class ChatService
                 )
             ).
             invoke(outcome ->
-                fireClinicalRecord(
-                    Objects.requireNonNull(
+                {
+                    final var session = Objects.requireNonNull(
                         sessionRef.get(),
                         "Param \"session\" must not be null!"
-                    ),
-                    outcome.clinicalPayload()
-                )
+                    );
+                    fireClinicalRecord(session, outcome.clinicalPayload());
+                    fireSessionTitle(session, firstExchangeRef.get(), req.content(), outcome.visible());
+                }
             ).
             map(outcome -> new ChatMessageVo("assistant", outcome.visible(), Instant.now())
         );
@@ -184,15 +192,23 @@ public final class ChatService
     {
         //! 该链路的返回值即最终流; IDE 数据流分析对 transformToMulti 误报"值从未被用作发布者".
         final var sid = parseSessionId(sessionId);
+        //* 首轮交换判定必须在追加用户消息前采样 (getOrCreateSession 产物为加载时快照): 标题只从首轮交换生成.
+        final var firstExchangeRef = new AtomicBoolean();
         return getOrCreateSession(sid, userId).
-            chain(session -> appendUserMessage(session.id, content)).
+            chain(
+                session ->
+                {
+                    firstExchangeRef.set(countMessages(session.messages) == 0);
+                    return appendUserMessage(session.id, content);
+                }
+            ).
             onItem().transformToMulti(
                 session ->
                 //* 流首恒发 meta 事件 (回传实际使用的 sessionId), 之后才是 token 流 —
                 //* 串联而非先发 token 再补 meta: 前端在首个 token 前就必须能绑定会话.
                 Multi.createBy().concatenating().streams(
                     Multi.createFrom().item(metaEvent(session.id)),
-                    streamAiReply(session, content)
+                    streamAiReply(session, content, firstExchangeRef.get())
                 )
             );
     }
@@ -213,6 +229,7 @@ public final class ChatService
                         s.id,
                         countMessages(s.messages),
                         s.updatedAt,
+                        s.title,
                         getPreview(s.messages)
                     )
                 ).toList()
@@ -374,7 +391,7 @@ public final class ChatService
     //! 流式路径裁定: emit 给前端的 token 保持原文, 拆流只作用于落库文本 (经 splitForStore) —
     //* 契约块是 HTML 注释, 前端 markdown 渲染下天然不可见, 与后端剥离构成双保险; 若缓冲到流结束再拆流,
     //* 须扣留全部 token, 既破坏逐字渲染体验, 流中断时已扣留内容还会整段丢失, 权衡后不采纳.
-    private @NotNull Multi<String> streamAiReply(@NotNull AiChatSession session, @NotNull String content)
+    private @NotNull Multi<String> streamAiReply(@NotNull AiChatSession session, @NotNull String content, boolean firstExchange)
     {
         final var history = buildConversationHistory(session);
         return Multi.createFrom().<String>emitter(
@@ -408,7 +425,13 @@ public final class ChatService
                                 },
                                 false
                             ).subscribe().with(
-                                _ -> emitter.complete(),
+                                _ ->
+                                {
+                                    emitter.complete();
+                                    //* 标题生成是流收尾后的 fire-and-forget 挂点: 不 await (LLM 秒级耗时绝不可延迟收流),
+                                    //* 线程纪律由生成器内部自持 (duplicated context + executeBlocking).
+                                    fireSessionTitle(session, firstExchange, content, split.text());
+                                },
                                 t ->
                                 {
                                     LOG.warn("流式回复持久化失败: {}", t.getMessage());
@@ -431,6 +454,8 @@ public final class ChatService
                                 {
                                     emitter.emit(FALLBACK_REPLY);
                                     emitter.complete();
+                                    //* 降级路径的首条助手回复同样已落库 (兜底文案): 首轮交换完成后照常触发标题挂点.
+                                    fireSessionTitle(session, firstExchange, content, FALLBACK_REPLY);
                                 },
                                 t ->
                                 {
@@ -557,6 +582,21 @@ public final class ChatService
     //* 失败仅 WARN — 对话可用性 > 评估完整性 (Spec §7 best-effort 边界).
     //* send 挂点经此出口订阅即弃 (响应映射不等落库); stream 挂点直接 await 记录 Uni 保活 worker 上下文.
     private void fireClinicalRecord(@NotNull AiChatSession session, @Nullable JsonNode payload) { recordClinicalAssessment(session, payload).subscribe().with(v -> {}); }
+
+    /**
+     * 会话标题 fire-and-forget 挂点: 仅当本轮是该会话的首轮交换且标题尚缺时触发
+     * (send/stream 两路径收口); 生成器内部 fail-open 自持线程纪律, 本方法零阻塞零抛出.
+     *
+     * @implNote 标题生成含秒级 LLM 调用, 绝不允许进入 SSE 流的 await 链 — 调用点一律放在
+     *           回复持久化完成与流收尾之后, 订阅即弃 (SessionTitleGenerator 契约恒成功完成).
+     */
+    private void fireSessionTitle(@NotNull AiChatSession session, boolean firstExchange, @NotNull String userContent, @NotNull String assistantReply)
+    {
+        //* 非首轮 (历史续聊) 或已有标题 (存量为 null 才生成): 双重闸门, 避免无谓的外呼.
+        if(!firstExchange || session.title != null)
+            return;
+        sessionTitleGenerator.fire(session.id, userContent, assistantReply);
+    }
 
     //* 落库 Uni 构造 (两挂点共享, 各自恰好订阅一次): 失败在内部归一为正常完成 — 订阅方无需失败分支.
     private @NotNull Uni<Void> recordClinicalAssessment(@NotNull AiChatSession session, @Nullable JsonNode payload)
