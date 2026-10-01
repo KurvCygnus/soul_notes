@@ -33,11 +33,18 @@ export default function ChatView(): ReactElement
     const { requireAuth } = useChatGate()
     const { messages, streaming, streamError, startNewChat, handleSend, activeSessionId } = useChatSend({ sessions, openRequest, reloadSessions })
 
-    //* 会话标题 (主区左上): 事实源是 sessions 列表 — 按绑定会话 ID 取材, 首轮交换后端经 reloadSessions
-    //* 刷新列表后标题随之到位; 存量会话无 title (null/缺席) 时不渲染, hero 空态亦无标题.
-    const openTitle = activeSessionId == null ?
-        null :
-        (sessions ?? []).find(s => s.sessionId === activeSessionId)?.title || null
+    //* 会话标题 (主区左上) 兜底链: title -> 首条用户消息截断 20 字 -> preview -> 不渲染.
+    //* 事实源: sessions 列表按绑定会话 ID 取材 (首轮交换后端经 reloadSessions 刷新后 AI 标题随之到位);
+    //* 存量无标题会话以已加载历史的首条用户消息截断兜底 (与后端启动回填同口径: strip 后 20 字封顶),
+    //* 历史尚无用户消息时退 preview, 全缺则不渲染 — hero 空态亦无标题.
+    const openSession = activeSessionId == null ?
+        undefined :
+        (sessions ?? []).find(s => s.sessionId === activeSessionId)
+    const firstUserContent = messages.find(m => m.role === 'user')?.content.trim() ?? ''
+    const openTitle = openSession?.title ||
+        (firstUserContent === '' ? null : firstUserContent.slice(0, 20)) ||
+        openSession?.preview ||
+        null
 
     //* chips 插槽 (D25): 注册表是静态装配, 摊平 + 上限收敛为纯函数, 每渲染重算成本可忽略 (个位数条目).
     const chips = selectVisibleChips(homeChips)

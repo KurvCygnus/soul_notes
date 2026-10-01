@@ -136,7 +136,8 @@ describe('ChatView (输入区接线)', () =>
         localStorage.setItem(TOKEN_KEY, AUTHED.token)
         localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
         const utils = renderChat({ ...CTX, sendRequest: { content: '帮我看看今天的课', nonce: 1 } })
-        await screen.findByText('帮我看看今天的课')  //* 用户气泡 (乐观追加) — 请求已进管线.
+        //* 用户气泡 (乐观追加) — 请求已进管线; selector 钉死气泡: 无标题会话的标题兜底链会以同文渲染 .chat-title.
+        await screen.findByText('帮我看看今天的课', { selector: '.bubble-text' })
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
         expect(vi.mocked(streamMessage)).toHaveBeenCalledWith(expect.objectContaining({ content: '帮我看看今天的课' }))
         //* 壳层重渲染可能以新对象下发同一 nonce: 判重后不得重复发送 (即使 handleSend 身份随 ctx 变化).
@@ -144,7 +145,7 @@ describe('ChatView (输入区接线)', () =>
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
         //* nonce 前进 → 新请求放行, 内容随之更新.
         utils.rerender(chatTree({ ...CTX, sendRequest: { content: '快要考试了, 帮我梳理一下复习节奏', nonce: 2 } }))
-        await screen.findByText('快要考试了, 帮我梳理一下复习节奏')
+        await screen.findByText('快要考试了, 帮我梳理一下复习节奏', { selector: '.bubble-text' })
         expect(vi.mocked(streamMessage)).toHaveBeenCalledTimes(2)
     })
 
@@ -154,7 +155,8 @@ describe('ChatView (输入区接线)', () =>
         localStorage.setItem(TOKEN_KEY, AUTHED.token)
         localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
         const utils = renderChat({ ...CTX, sendRequest: { content: '重挂载前的提问', nonce: 3 } })
-        await screen.findByText('重挂载前的提问')
+        //* selector 钉死气泡: 无标题会话的标题兜底链会以同文渲染 .chat-title (上例同款).
+        await screen.findByText('重挂载前的提问', { selector: '.bubble-text' })
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
         utils.unmount()
         //* 同 nonce 重挂载 (壳路由切换整体卸载 → 回聊天位): 台账已记账 → 不重发.
@@ -164,7 +166,7 @@ describe('ChatView (输入区接线)', () =>
         expect(vi.mocked(streamMessage)).toHaveBeenCalledOnce()
         //* 新 nonce (再次下发请求) → 照常放行.
         remounted.rerender(chatTree({ ...CTX, sendRequest: { content: '重挂载后的新提问', nonce: 4 } }))
-        await screen.findByText('重挂载后的新提问')
+        await screen.findByText('重挂载后的新提问', { selector: '.bubble-text' })
         expect(vi.mocked(streamMessage)).toHaveBeenCalledTimes(2)
     })
 
@@ -241,7 +243,7 @@ describe('ChatView (输入区接线)', () =>
         expect(screen.getByRole('button', { name: '新对话' })).toBeInTheDocument()  //* 新对话钮保持在场.
     })
 
-    it('会话标题 (存量无 title): 打开的会话无标题时工具条不渲染标题元素, 仅有新对话钮', async () =>
+    it('会话标题兜底链 (存量无 title): 回退已加载历史的首条用户消息, 而非干脆不展示', async () =>
     {
         localStorage.setItem(TOKEN_KEY, AUTHED.token)
         localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
@@ -257,6 +259,45 @@ describe('ChatView (输入区接线)', () =>
         renderChat({ ...CTX, sessions })
         await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
         await screen.findByText('我在听.')  //* 流式回复到达 (会话已绑定, 消息流在屏).
-        expect(document.querySelector('.chat-title')).toBeNull()
+        expect(document.querySelector('.chat-title')).toHaveTextContent('我最近压力有点大')
+    })
+
+    it('会话标题兜底链截断: 首条用户消息超 20 字时截断封顶 (与后端回填同口径)', async () =>
+    {
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        const longMessage = '最近考试压力很大, 晚上总是翻来覆去睡不着, 白天也没法集中精神'
+        vi.mocked(listMessages).mockResolvedValue([
+            { role: 'user', content: longMessage, ts: null },
+            { role: 'assistant', content: '我在听.', ts: null },
+        ])
+        const sessions: ChatSessionVo[] = [
+            { sessionId: 's9', messageCount: 2, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力' },
+        ]
+        const user = userEvent.setup()
+        renderChat({ ...CTX, sessions })
+        await user.type(screen.getByRole('textbox'), `${longMessage}{Enter}`)
+        await screen.findByText('我在听.')
+        const titleEl = document.querySelector('.chat-title')
+        expect(titleEl).toHaveTextContent(longMessage.slice(0, 20))
+        expect(titleEl?.textContent).toHaveLength(20)  //* 封顶断言: 全文含前缀为子串, 仅长度能钉死截断语义.
+    })
+
+    it('会话标题兜底链末端: 历史里没有用户消息时退 preview, 皆无则不渲染标题', async () =>
+    {
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        //* 历史仅有助手消息 (无用户消息可取): 兜底链落到 sessions 条目的 preview.
+        vi.mocked(listMessages).mockResolvedValue([
+            { role: 'assistant', content: '我在听.', ts: null },
+        ])
+        const sessions: ChatSessionVo[] = [
+            { sessionId: 's9', messageCount: 1, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力' },
+        ]
+        const user = userEvent.setup()
+        renderChat({ ...CTX, sessions })
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        await screen.findByText('我在听.')
+        expect(document.querySelector('.chat-title')).toHaveTextContent('最近的考试压力')
     })
 })
