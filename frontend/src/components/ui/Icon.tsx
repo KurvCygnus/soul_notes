@@ -7,6 +7,7 @@ export type IconName =
     | 'sun' | 'cloud' | 'rain' | 'thunder' | 'gauge'
     | 'pen' | 'calendar' | 'cloud-sun' | 'mic'
     | 'panel' | 'buoy' | 'menu' | 'phone'
+    | 'user' | 'sliders' | 'info' | 'logout'
     | 'chat' | 'chat-plus' | 'grid' | 'chevron'  //* 手风琴侧栏 v2 新增: 会话气泡/气泡加号/扩展宫格/节标题箭头.
     | 'arrow-up'  //* 输入区圆形发送钮 (终审整改, spec D2/D5/§5.4): 上箭头, 圆形底由宿主类承担.
 
@@ -82,6 +83,28 @@ const PATHS: Record<IconName, ReactElement> = {
     ),
     phone: (
         <path d="M21 16.6v2.6a1.9 1.9 0 0 1-2.1 1.9 18.9 18.9 0 0 1-8.2-2.9 18.6 18.6 0 0 1-5.7-5.7A18.9 18.9 0 0 1 2.1 4.3 1.9 1.9 0 0 1 4 2.2h2.6a1.9 1.9 0 0 1 1.9 1.6c.1.9.3 1.7.6 2.5a1.9 1.9 0 0 1-.4 2L7.5 9.5a15.2 15.2 0 0 0 6.1 6.1l1.2-1.2a1.9 1.9 0 0 1 2-.4c.8.3 1.6.5 2.5.6a1.9 1.9 0 0 1 1.7 2z" />
+    ),
+    user: (
+        <>
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </>
+    ),
+    sliders: (
+        <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+    ),
+    info: (
+        <>
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8h.01M12 11.5V16" />
+        </>
+    ),
+    logout: (
+        <>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="m16 17 5-5-5-5" />
+            <path d="M21 12H9" />
+        </>
     ),
     chat: (
         <path d="M4.5 7A2.5 2.5 0 0 1 7 4.5h10A2.5 2.5 0 0 1 19.5 7v6a2.5 2.5 0 0 1-2.5 2.5h-7L5.5 19.5v-4H7A2.5 2.5 0 0 1 4.5 13z" />

@@ -121,9 +121,10 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 /* 汉堡用户菜单 (Task 6, spec §7): 侧栏头像行上方向上弹出 (transform-origin 左下), 遮罩透明全屏收点击;
    层级: 抽屉 80 之上 (移动端抽屉内也能开菜单), 登录浮层 60 与 RED 预警 100 之外互不重叠 (菜单仅登录态存在). */
 .user-menu-mask { position: fixed; inset: 0; z-index: 85; }
-.user-menu { position: fixed; left: 12px; bottom: 52px; z-index: 86; min-width: 168px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); transform-origin: bottom left; animation: user-menu-in var(--dur-fast) var(--ease-enter); }
+.user-menu { position: fixed; left: 12px; bottom: 56px; z-index: 86; width: 236px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); transform-origin: bottom left; animation: user-menu-in var(--dur-fast) var(--ease-enter); }
 @keyframes user-menu-in { from { opacity: 0; transform: translateY(6px); } }
-.user-menu-item { border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; border-radius: var(--radius); }
+.user-menu-item { display: flex; align-items: center; gap: 9px; border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; border-radius: var(--radius); }
+.user-menu-item-logout { color: var(--danger); }
 .user-menu-item:hover { background: var(--bg); }
 /* 危机支持置顶且 danger 令牌点出安全语义 (菜单五项中唯一的彩色条目). */
 .user-menu-item-crisis { color: var(--danger); }
@@ -203,7 +204,8 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 .composer-send { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: var(--brand); color: var(--brand-ink); padding: 0; }
 .composer-send:hover { filter: brightness(1.08); }
 .composer-send:disabled { opacity: .5; cursor: not-allowed; }
-.hero-box { width: min(720px, 100%); }  //* 走查修正: place-items:center 使 hero 收缩包裹, 必须显式定宽否则输入框被 chips 行宽度钳死.
+/* 走查修正: place-items:center 使 hero 收缩包裹, 必须显式定宽, 否则输入框被 chips 行宽度钳死. */
+.hero-box { width: min(720px, 100%); }
 .hero-box .composer-wrap { margin: 28px auto 0; max-width: none; }
 .crisis-lead { margin: 0; color: var(--muted); }
 .crisis-card { padding: 16px; }
