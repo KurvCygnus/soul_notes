@@ -180,12 +180,14 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 @keyframes chat-blink { 50% { opacity: 0; } }
 .chat-error { margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--card); color: var(--danger); font-size: 13px; }
 /* 输入区 (Task 11, T9 单态化): 聊天单模式 + chips 插槽 + 语音; 圆角盒配色全部取自设计令牌 (记一笔琥珀态已废). */
-.composer { margin: 10px 16px 14px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
-.composer-textarea { width: 100%; border: none; background: transparent; color: var(--ink); font: inherit; resize: none; padding: 0; min-height: 24px; max-height: 38vh; overflow-y: auto; }
+.composer-wrap { margin: 10px 16px 14px; }
+.composer { padding: 12px 14px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.composer-textarea { width: 100%; border: none; background: transparent; color: var(--ink); font: inherit; resize: none; padding: 0; min-height: 112px; max-height: 38vh; overflow-y: auto; }
 .composer-textarea:focus { outline: none; }
 .composer-textarea::placeholder { color: var(--faint); }
 .composer-textarea:disabled { opacity: .5; }
 .composer-bar { display: flex; align-items: center; gap: 8px; }
+.composer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .composer-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-strong); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
 .composer-chip:hover { border-color: var(--brand); color: var(--ink); }
 .composer-chip:disabled, .composer-mic:disabled { opacity: .5; cursor: not-allowed; }
@@ -201,7 +203,7 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 .composer-send { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: var(--brand); color: var(--brand-ink); padding: 0; }
 .composer-send:hover { filter: brightness(1.08); }
 .composer-send:disabled { opacity: .5; cursor: not-allowed; }
-.hero-box .composer { margin: 28px auto 0; max-width: 480px; }
+.hero-box .composer-wrap { margin: 28px auto 0; max-width: 480px; }
 .crisis-lead { margin: 0; color: var(--muted); }
 .crisis-card { padding: 16px; }
 .crisis-card h3 { margin: 0 0 8px; font-size: 16px; }

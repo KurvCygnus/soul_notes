@@ -151,49 +151,56 @@ export default function Composer({ onSend, disabled = false, chips, onRequireLog
             growTextarea(textRef.current)
     }, [text])
 
+    //* 结构裁决 (走查指令): chips 在对话框卡片外面的下方一行, 卡片内只留输入与发送.
     return (
-        <div className="composer">
-            <textarea
-                ref={textRef}
-                className="composer-textarea"
-                aria-label="消息输入框"
-                rows={1}
-                value={text}
-                placeholder={PLACEHOLDER_CHAT}
-                disabled={disabled}
-                onChange={(e) => { setText(e.target.value) }}
-                onKeyDown={handleKeyDown}
-            />
-            <div className="composer-bar">
-                {chips.map(chip => (
-                    <button
-                        key={chip.label}
-                        type="button"
-                        className="composer-chip"
-                        disabled={disabled}
-                        onClick={() => { handleChip(chip) }}
-                    >
-                        <span>{chip.label}</span>
+        <div className="composer-wrap">
+            <div className='composer'>
+                <textarea
+                    ref={textRef}
+                    className="composer-textarea"
+                    aria-label="消息输入框"
+                    rows={1}
+                    value={text}
+                    placeholder={PLACEHOLDER_CHAT}
+                    disabled={disabled}
+                    onChange={(e) => { setText(e.target.value) }}
+                    onKeyDown={handleKeyDown}
+                />
+                <div className="composer-bar">
+                    <span className="composer-spacer" />
+                    {voice === 'idle' && (
+                        <button type="button" className="composer-mic" aria-label="语音输入" disabled={disabled} onClick={startVoice}>
+                            <Icon name="mic" size={16} />
+                        </button>
+                    )}
+                    {voice === 'recording' && (
+                        <span className="composer-rec" role="status">
+                            <span className="composer-rec-dot" aria-hidden="true" />
+                            {`已录 ${elapsed}s · 还可录 ${recordableSecondsLeft(elapsed)}s`}
+                            <button type="button" className="composer-stop" onClick={stopVoice}>停止</button>
+                        </span>
+                    )}
+                    {voice === 'transcribing' && <span className="composer-rec" role="status">转写中...</span>}
+                    <button type="button" className="composer-send" aria-label="发送" disabled={disabled} onClick={() => { submit(text) }}>
+                        <Icon name="arrow-up" size={18} />
                     </button>
-                ))}
-                <span className="composer-spacer" />
-                {voice === 'idle' && (
-                    <button type="button" className="composer-mic" aria-label="语音输入" disabled={disabled} onClick={startVoice}>
-                        <Icon name="mic" size={16} />
-                    </button>
-                )}
-                {voice === 'recording' && (
-                    <span className="composer-rec" role="status">
-                        <span className="composer-rec-dot" aria-hidden="true" />
-                        {`已录 ${elapsed}s · 还可录 ${recordableSecondsLeft(elapsed)}s`}
-                        <button type="button" className="composer-stop" onClick={stopVoice}>停止</button>
-                    </span>
-                )}
-                {voice === 'transcribing' && <span className="composer-rec" role="status">转写中...</span>}
-                <button type="button" className="composer-send" aria-label="发送" disabled={disabled} onClick={() => { submit(text) }}>
-                    <Icon name="arrow-up" size={18} />
-                </button>
+                </div>
             </div>
+            {chips.length > 0 && (
+                <div className="composer-chips">
+                    {chips.map(chip => (
+                        <button
+                            key={chip.label}
+                            type="button"
+                            className="composer-chip"
+                            disabled={disabled}
+                            onClick={() => { handleChip(chip) }}
+                        >
+                            <span>{chip.label}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
         </div>
     )
 }
