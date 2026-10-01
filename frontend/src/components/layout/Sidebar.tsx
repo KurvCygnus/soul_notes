@@ -182,10 +182,18 @@ export default function Sidebar({
                                                 <li key={s.sessionId} className="sidebar-row">
                                                     <button
                                                         type="button"
-                                                        className="sidebar-row-main"
+                                                        className={s.title ? 'sidebar-row-main titled' : 'sidebar-row-main'}
                                                         onClick={() => onOpenSession?.(s.sessionId)}
                                                     >
-                                                        {s.preview}
+                                                        {s.title ? (
+                                                            //* 标题主行 + 预览副行 (titled 形态); 存量无标题维持单预览 (预览即主行).
+                                                            <>
+                                                                <span className="session-title">{s.title}</span>
+                                                                <span className="session-preview">{s.preview}</span>
+                                                            </>
+                                                        ) : (
+                                                            s.preview
+                                                        )}
                                                     </button>
                                                     <button
                                                         type="button"

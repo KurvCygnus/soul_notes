@@ -110,6 +110,27 @@ describe('Sidebar (手风琴侧栏 v2)', () =>
         expect(onOpenSession).toHaveBeenCalledWith('s1')
     })
 
+    it('会话标题主行: 有 title 时标题为主行 (session-title), 预览降为副行 (session-preview); 点击仍上抛 onOpenSession', async () =>
+    {
+        const user = userEvent.setup()
+        const onOpenSession = vi.fn()
+        const titled: ChatSessionVo[] = [
+            { sessionId: 's1', messageCount: 2, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力', title: '备考夜谈' },
+        ]
+        render(renderSidebar(baseProps({ sessions: titled, onOpenSession })))
+        expect(screen.getByText('备考夜谈')).toHaveClass('session-title')
+        expect(screen.getByText('最近的考试压力')).toHaveClass('session-preview')
+        await user.click(screen.getByText('备考夜谈'))
+        expect(onOpenSession).toHaveBeenCalledWith('s1')
+    })
+
+    it('存量会话无 title: 主行兜底为预览 (现行单预览形态), 不渲染标题/副行结构', () =>
+    {
+        render(renderSidebar(baseProps({ sessions: SESSIONS })))
+        expect(screen.getByText('最近的考试压力').classList.contains('session-title')).toBe(false)
+        expect(document.querySelector('.session-preview')).toBeNull()
+    })
+
     it('扩展条目: 条目来自注册表, Mock 项行尾 Mock 小字 (非徽标), 总览条目在场', () =>
     {
         render(renderSidebar(baseProps({ section: 'extensions' })))

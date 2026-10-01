@@ -31,7 +31,13 @@ export default function ChatView(): ReactElement
     const { sessions, reloadSessions, openRequest, sendRequest, newChatRequest } = useOutletContext<IChatViewContext>()
     const { user } = useAuth()
     const { requireAuth } = useChatGate()
-    const { messages, streaming, streamError, startNewChat, handleSend } = useChatSend({ sessions, openRequest, reloadSessions })
+    const { messages, streaming, streamError, startNewChat, handleSend, activeSessionId } = useChatSend({ sessions, openRequest, reloadSessions })
+
+    //* 会话标题 (主区左上): 事实源是 sessions 列表 — 按绑定会话 ID 取材, 首轮交换后端经 reloadSessions
+    //* 刷新列表后标题随之到位; 存量会话无 title (null/缺席) 时不渲染, hero 空态亦无标题.
+    const openTitle = activeSessionId == null ?
+        null :
+        (sessions ?? []).find(s => s.sessionId === activeSessionId)?.title || null
 
     //* chips 插槽 (D25): 注册表是静态装配, 摊平 + 上限收敛为纯函数, 每渲染重算成本可忽略 (个位数条目).
     const chips = selectVisibleChips(homeChips)
@@ -89,6 +95,7 @@ export default function ChatView(): ReactElement
             ) : (
                 <>
                     <div className="chat-toolbar">
+                        {openTitle != null && <div className="chat-title" title={openTitle}>{openTitle}</div>}
                         <button type="button" className="btn btn-sm" onClick={startNewChat}>新对话</button>
                     </div>
                     <ChatStream messages={messages} streaming={streaming} />

@@ -25,10 +25,12 @@ export type AuthData = {
 //region 聊天
 
 //* 会话列表条目 (GET /chat/sessions), 即后端 ChatSessionVo.
+//* title: 首轮交换后 AI 生成; 存量会话为 null/缺席, 前端以 preview 兜底展示主行.
 export type ChatSessionVo = {
     sessionId: string
     messageCount: number
     lastUpdateTime: string
+    title?: string | null
     preview: string
 }
 

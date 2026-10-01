@@ -32,6 +32,9 @@ export interface IChatSendState
     startNewChat(): void
     //* Task 11 Composer 的接线点: 访客经门拦截 (requireAuth 已登录时同步放行), 登录后补发.
     handleSend(content: string): void
+    //* 当前打开 (绑定) 的会话 ID; null = 无 (hero/新对话). 渲染态: 视图层据此从 sessions 列表取材
+    //* (会话标题主区左上展示), 事实源仍是 sessions 列表 (reload 后标题随之刷新).
+    activeSessionId: string | null
 }
 
 //* 流式增量: 追加到末尾消息. 单发送不变量: 流式期间末尾必为本条的 assistant 气泡 (历史加载由 gen 守卫互斥).
@@ -77,6 +80,8 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
     const [messages, setMessages] = useState<IDisplayMessage[]>([])
     const [streaming, setStreaming] = useState(false)
     const [streamError, setStreamError] = useState<string | null>(null)
+    //* 绑定会话的渲染态镜像: sessionIdRef 仍是唯一事实 (竞态守卫读 ref), 本 state 只供视图取材.
+    const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
 
     const sessionIdRef = useRef<string | null>(null)
     const genRef = useRef(0)
@@ -117,6 +122,7 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
         abortRef.current?.abort()  //* 切换即中止 (机制 3): 在途流随旧会话一起丢弃.
         const gen = ++genRef.current
         sessionIdRef.current = id
+        setActiveSessionId(id)
         setStreaming(false)
         setStreamError(null)
         loadMessages(id, gen)
@@ -127,6 +133,7 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
         abortRef.current?.abort()
         ++genRef.current
         sessionIdRef.current = null
+        setActiveSessionId(null)
         setStreaming(false)
         setStreamError(null)
         setMessages([])
@@ -185,7 +192,11 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
             sessionId: sessionIdRef.current,
             content,
             signal: controller.signal,
-            onMeta: id => { sessionIdRef.current = id },  //* meta 绑定: 后端实际使用的会话 ID, 后续发送续接.
+            onMeta: id =>
+            {
+                sessionIdRef.current = id  //* meta 绑定: 后端实际使用的会话 ID, 后续发送续接.
+                setActiveSessionId(id)
+            },
             onChunk: token =>
             {
                 received = true
@@ -243,5 +254,5 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
         gate.requireAuth(() => doSend(content))
     }, [doSend, gate])
 
-    return { messages, streaming, streamError, startNewChat, handleSend }
+    return { messages, streaming, streamError, startNewChat, handleSend, activeSessionId }
 }

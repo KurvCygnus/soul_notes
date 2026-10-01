@@ -57,6 +57,11 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
    十余年全线支持, 而无前缀的新标准 line-clamp 独立语法 2024 年才落地且旧浏览器不认, 双写反而在支持差异下行为不一;
    以覆盖面最稳的前缀版为准, 万一前缀失效则整段显示不破版. overflow:hidden 同时把 flex 子项的 min-width 归零, 预览可收缩换行. */
 .sidebar-row-main { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; text-align: left; padding: 0; }
+/* 标题态 (会话标题特性): 按钮退化为普通块容器 (标题主行 + 预览副行, 各自单行省略),
+   覆盖基类的 2 行 clamp 语义 (-webkit-box 系属性对 block 子元素不再生效, 无需逐项复位). */
+.sidebar-row-main.titled { display: block; }
+.session-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--ink); }
+.session-preview { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--faint); margin-top: 1px; }
 /* 删除 ×: hover/focus 才显 (CSS 职责, 键盘可达性经 focus-within 同步), 点击上抛壳 = 请求删除 (壳级确认模态后才真删). */
 .sidebar-del { flex-shrink: 0; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; visibility: hidden; }
 .sidebar-del:hover { color: var(--danger); }
@@ -163,7 +168,9 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 
 /* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens; Task 12 起随顶栏在 .main 内纵向伸缩) */
 .chat-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.chat-toolbar { display: flex; justify-content: flex-end; padding: 10px 16px 0; }
+.chat-toolbar { display: flex; align-items: center; gap: 12px; justify-content: flex-end; padding: 10px 16px 0; }
+/* 会话标题 (主区左上): 占据工具条左侧剩余空间, 新对话钮保持右置; 单行省略, 悬停经 title 原生气泡看全文. */
+.chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--ink); }
 .chat-stream { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 10px; }
 .chat-date { align-self: center; font-size: 12px; color: var(--faint); }
 .bubble-row { display: flex; }

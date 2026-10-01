@@ -11,7 +11,7 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { AUTH_KEY } from '../api/auth'
 import { TOKEN_KEY } from '../api/http'
 import { uploadVoice } from '../api/diary'
-import { streamMessage } from '../api/chat'
+import { listMessages, streamMessage } from '../api/chat'
 import { AuthProvider } from '../context/AuthContext'
 import { AlertContext } from '../context/AlertContext'
 import { useChatGate } from '../hooks/useChatGate'
@@ -19,7 +19,7 @@ import { ToastHost } from '../utils/toast'
 import ChatView from './ChatView'
 import type { IStreamOptions } from '../api/chat'
 import type { IChatViewContext } from './chatContext'
-import type { AuthData } from '../types'
+import type { AuthData, ChatSessionVo } from '../types'
 
 vi.mock('../api/diary', () => ({
     uploadVoice: vi.fn(),  //* Composer 有静态 import, mock 必须给全命名导出 (本文件不触发语音链路).
@@ -218,5 +218,45 @@ describe('ChatView (输入区接线)', () =>
         remounted.rerender(chatTree({ ...CTX, newChatRequest: { nonce: 4 } }))
         await screen.findByText('你好, 今天想聊点什么?')
         expect(document.querySelector('.bubble-user')).toBeNull()
+    })
+
+    it('会话标题 (主区左上): 发送绑定会话后工具条左上显示标题 (sessions 列表为事实源), hero 态无标题', async () =>
+    {
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        //* 历史补拉桩: finalizeSend 会以服务端历史替换乐观气泡 — 必须返回对账后的消息, 返回空数组会把视图打回 hero.
+        vi.mocked(listMessages).mockResolvedValue([
+            { role: 'user', content: '我最近压力有点大', ts: null },
+            { role: 'assistant', content: '我在听.', ts: null },
+        ])
+        const sessions: ChatSessionVo[] = [
+            { sessionId: 's9', messageCount: 2, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力', title: '备考夜谈' },
+        ]
+        const user = userEvent.setup()
+        renderChat({ ...CTX, sessions })
+        expect(document.querySelector('.chat-title')).toBeNull()  //* hero 空态不渲染标题.
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        await screen.findByText('备考夜谈')  //* meta 绑定 s9 后标题自 sessions 列表取材, 悬于工具条左上.
+        expect(document.querySelector('.chat-title')).not.toBeNull()
+        expect(screen.getByRole('button', { name: '新对话' })).toBeInTheDocument()  //* 新对话钮保持在场.
+    })
+
+    it('会话标题 (存量无 title): 打开的会话无标题时工具条不渲染标题元素, 仅有新对话钮', async () =>
+    {
+        localStorage.setItem(TOKEN_KEY, AUTHED.token)
+        localStorage.setItem(AUTH_KEY, JSON.stringify(AUTHED))
+        //* 历史补拉桩: 返回对账后的消息, 空数组会把视图打回 hero (上一用例同款注释).
+        vi.mocked(listMessages).mockResolvedValue([
+            { role: 'user', content: '我最近压力有点大', ts: null },
+            { role: 'assistant', content: '我在听.', ts: null },
+        ])
+        const sessions: ChatSessionVo[] = [
+            { sessionId: 's9', messageCount: 2, lastUpdateTime: '2026-09-28T10:00:00', preview: '最近的考试压力' },
+        ]
+        const user = userEvent.setup()
+        renderChat({ ...CTX, sessions })
+        await user.click(screen.getByRole('button', { name: '我最近压力有点大' }))
+        await screen.findByText('我在听.')  //* 流式回复到达 (会话已绑定, 消息流在屏).
+        expect(document.querySelector('.chat-title')).toBeNull()
     })
 })
