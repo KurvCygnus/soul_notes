@@ -203,7 +203,8 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 .composer-send { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: var(--brand); color: var(--brand-ink); padding: 0; }
 .composer-send:hover { filter: brightness(1.08); }
 .composer-send:disabled { opacity: .5; cursor: not-allowed; }
-.hero-box .composer-wrap { margin: 28px auto 0; max-width: 720px; }
+.hero-box { width: min(720px, 100%); }  //* 走查修正: place-items:center 使 hero 收缩包裹, 必须显式定宽否则输入框被 chips 行宽度钳死.
+.hero-box .composer-wrap { margin: 28px auto 0; max-width: none; }
 .crisis-lead { margin: 0; color: var(--muted); }
 .crisis-card { padding: 16px; }
 .crisis-card h3 { margin: 0 0 8px; font-size: 16px; }
