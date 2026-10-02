@@ -72,8 +72,8 @@ export function MockTimetablePage({ query }: IExtensionPageProps): ReactElement
                 row={item => (
                     <ExtListRow
                         key={`${item.timeRange}-${item.course}`}
-                        left={item.timeRange}
-                        right={`${item.course} · ${item.location}`}
+                        left={`${item.course} · ${item.location}`}  //* 课程名在左 (阅读主体), 时间右对齐 — 与总览页行序一致, 右对齐长文本会产生锯齿左缘 (走查实测).
+                        right={item.timeRange}
                     />
                 )}
             />

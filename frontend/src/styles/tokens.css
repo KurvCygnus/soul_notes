@@ -4,7 +4,7 @@
    亮色为默认块, 暗色走 [data-theme][data-mode="dark"] 高特异性覆盖 — prefers-color-scheme 媒体查询退场,
    系统跟随 (mode=system 由 JS 求值落档) 与手动覆盖统一为同一属性管线, 原生控件配色亦按 data-mode 收敛 (见 color-scheme 块).
    令牌名与旧版一致 (--bg/--sidebar/--card/--ink/--muted/--faint/--line/--line-strong/--brand/--brand-ink/
-   --amber-bg/--amber-line/--amber-ink/--danger/--user-bubble/--ai-bubble/--radius/--radius-lg/--shadow),
+   --amber-bg/--amber-line/--amber-ink/--danger/--user-bubble/--ai-bubble/--overlay/--radius/--radius-lg/--shadow),
    消费方 (base.css 等) 零改动. 注意: 注释文本内禁写 "星号斜杠" 序列, 否则会提前闭合块注释炸掉 minify. */
 
 /* 雾杉 (sage) 亮色: 默认主题 (D24), 灰绿基底的低刺激心理向色板. */
@@ -26,6 +26,8 @@
   --danger: #a94a42;
   --user-bubble: #4e7a5a;
   --ai-bubble: #eef1ea;
+  /* 浮层遮罩: 亮色用同 hue 深底半透明, 保持主题气质 (写死深青 rgba 在暗色下不可见, 走查实测). */
+  --overlay: rgba(31, 39, 34, .42);
   --radius: 10px;
   --radius-lg: 16px;
   --shadow: 0 2px 10px rgba(0, 0, 0, .05);
@@ -50,6 +52,7 @@
   --danger: #b0483c;
   --user-bubble: #4f6699;
   --ai-bubble: #eef0f4;
+  --overlay: rgba(30, 34, 42, .42);
   --radius: 10px;
   --radius-lg: 16px;
   --shadow: 0 2px 10px rgba(0, 0, 0, .05);
@@ -74,6 +77,8 @@
   /* 刻意缺口: --danger 沿用亮色 #a94a42 (暗底可读已验证), 不另设暗色档以免双色板语义漂移. */
   --user-bubble: #47684f;
   --ai-bubble: #262b26;
+  /* 暗色遮罩加深: 暗底上遮罩若过浅, 浮层与页面几乎无分层 (走查实测 "无遮罩感"). */
+  --overlay: rgba(0, 0, 0, .55);
   --shadow: 0 2px 10px rgba(0, 0, 0, .35);
 }
 
@@ -96,6 +101,7 @@
   /* 刻意缺口: --danger 沿用亮色 #b0483c. */
   --user-bubble: #46588c;
   --ai-bubble: #22252c;
+  --overlay: rgba(0, 0, 0, .55);
   --shadow: 0 2px 10px rgba(0, 0, 0, .35);
 }
 

@@ -198,7 +198,7 @@ export default function Sidebar({
                                                     <button
                                                         type="button"
                                                         className="sidebar-del"
-                                                        aria-label={`删除会话: ${s.preview}`}
+                                                        aria-label={`删除会话: ${s.title ? s.title : s.preview}`}  //* 标题优先: aria 名应是会话的身份名, 预览 (末条消息) 只是无标题时的兜底 (与上方主行判定同口径).
                                                         onClick={() => onDeleteSession?.(s.sessionId)}
                                                     >
                                                         ×

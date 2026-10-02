@@ -13,9 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RED 预警推送 WebSocket 端点 ({@code /ws/alert}), 承担在线用户的强预警弹窗通道.
@@ -40,8 +38,8 @@ public class AlertWebSocket
     //endregion
 
     //region 连接追踪
-    //* userId → [[WebSocketConnection]] 映射.
-    private final @NotNull Map<UUID, WebSocketConnection> connections = new ConcurrentHashMap<>();
+    //* userId → [[WebSocketConnection]] 映射 (注册表独立成类: 双连接竞态语义可被单元测试钉住).
+    private final @NotNull AlertConnectionRegistry connections = new AlertConnectionRegistry();
 
     //! 生命周期回调由框架通过反射调用, IDE 静态分析误报为未使用.
     @OnOpen @SuppressWarnings("unused")
@@ -51,7 +49,7 @@ public class AlertWebSocket
         if(userIdStr == null)
             return;
         final var userId = UUID.fromString(userIdStr);
-        connections.put(userId, connection);
+        connections.register(userId, connection);
         LOG.info("预警连接已建立: userId={}", userId);
     }
 
@@ -61,7 +59,7 @@ public class AlertWebSocket
         final var userIdStr = connection.userData().get(WebSocketAuthUpgradeCheck.USER_ID_KEY);
         if(userIdStr == null)
             return;
-        connections.remove(UUID.fromString(userIdStr));
+        connections.unregister(UUID.fromString(userIdStr), connection);
         LOG.info("预警连接已关闭: userId={}", userIdStr);
     }
     //endregion
@@ -77,7 +75,7 @@ public class AlertWebSocket
      */
     @SuppressWarnings("NullableProblems") public @NotNull Uni<Void> pushAlert(@NotNull UUID userId, @NotNull String message)
     {
-        final var conn = connections.get(userId);
+        final var conn = connections.connectionOf(userId);
         if(conn == null)
         {
             LOG.warn("用户不在线, 预警推送跳过: userId={}", userId);

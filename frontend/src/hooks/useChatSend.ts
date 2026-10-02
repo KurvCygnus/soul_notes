@@ -70,6 +70,10 @@ function isAbort(e: unknown): boolean
     return e instanceof Error && e.name === 'AbortError'
 }
 
+//* 标题补拉延迟: 会话标题由后端在首轮交换后 fire-and-forget 异步生成 (LLM 调用, 数秒级落库),
+//* 流结束那一刻的立即刷新拿到的还是无标题态 (侧栏与主区标题会长时间停留在 fallback 预览, 走查实测).
+const TITLE_REFRESH_DELAY_MS = 5000
+
 export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatSendParams): IChatSendState
 {
     //* 登录态判定收在门内 ([[IChatGate.requireAuth]] 读 userRef); 这里直读 user 仅为登出复位 (隐私红线):
@@ -167,13 +171,15 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
             startNewChat()
     }, [user, startNewChat])
 
-    //* 发送成功收尾: 补拉历史换 ts 戳版本 (乐观消息无 ts), 并刷新侧栏会话列表.
+    //* 发送成功收尾: 补拉历史换 ts 戳版本 (乐观消息无 ts), 并刷新侧栏会话列表;
+    //* 再延迟补一次刷新 — 把异步落库的会话标题带进侧栏/主区 (fallback 预览只应存在秒级窗口).
     const finalizeSend = useCallback((gen: number): void =>
     {
         const bound = sessionIdRef.current
         if(bound != null)
             loadMessages(bound, gen)
         reloadSessions()
+        setTimeout(reloadSessions, TITLE_REFRESH_DELAY_MS)  //* 刻意不做 gen 守卫: 会话列表是壳层全局态, 切换后补拉依然正确.
     }, [loadMessages, reloadSessions])
 
     const doSend = useCallback((content: string) =>
