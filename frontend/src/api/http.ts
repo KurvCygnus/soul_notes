@@ -77,9 +77,14 @@ export async function api<T = unknown>(path: string, opts: IApiOptions = {}): Pr
     }
     if(res.status === 401)
     {
-        //* 会话级失效: 每次请求恰好广播一次, 随后仍以 ApiError 拒绝, 让调用方自行提示.
-        unauthorizedHandler?.()
-        throw new ApiError(res.status, '登录状态已失效, 请重新登录')
+        //* 先解包业务壳: 免认证端点 (登录/注册) 的 401 携带后端业务文案 ("密码错误"/"用户不存在"),
+        //* 一律替换成泛化文案会让错误密码看起来像会话失效 (走查实测误导).
+        const payload = await res.json().catch(() => null) as ApiResponse<never> | null
+        //* 会话级失效: 认证请求每次恰好广播一次, 随后仍以 ApiError 拒绝, 让调用方自行提示;
+        //! 免认证端点 (auth=false) 的 401 是凭证错误而非会话失效, 广播会误触发全局登出链, 必须跳过.
+        if(opts.auth !== false)
+            unauthorizedHandler?.()
+        throw new ApiError(payload != null && typeof payload.code === 'number' ? payload.code : res.status, payload?.message ?? '登录状态已失效, 请重新登录')
     }
 
     //! 网关错误页可能不是 JSON: 解析失败降级为携带 HTTP 状态码的 ApiError, 而非裸 SyntaxError.

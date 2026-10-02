@@ -15,6 +15,7 @@ import { useChatGate } from './hooks/useChatGate'
 import { findExtension, overviewProvider } from './extensions/registry'
 import { ExtEmpty } from './extensions/helpers'
 import { getContextSummary } from './api/context'
+import { ToastHost } from './utils/toast'
 import ChatView from './views/ChatView'
 import PlaceholderView from './views/PlaceholderView'
 import SettingsView from './views/SettingsView'
@@ -84,6 +85,9 @@ export default function App(): ReactElement
                     </Routes>
                 </AlertProvider>
             </AuthProvider>
+            {/* 全局 toast 宿主: 模块级 store 只需根部挂载一次 — 曾漏挂导致全应用 toast (登录失败/
+                删除失败/麦克风授权等) 静默不可见 (走查实测: 错误密码零反馈). */}
+            <ToastHost />
         </BrowserRouter>
     )
 }
