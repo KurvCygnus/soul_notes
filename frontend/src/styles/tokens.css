@@ -1,6 +1,8 @@
-/* 设计令牌单一事实源 (配色定稿 2026-09-30): 雾杉 (sage) + 暮蓝 (dusk) 双主题, 明暗随系统 prefers-color-scheme.
+/* 设计令牌单一事实源 (配色定稿 2026-09-30): 雾杉 (sage) + 暮蓝 (dusk) 双主题, 明暗由外观模式 (跟随系统/浅色/深色) 决定.
    色值唯一来源 = docs/superpowers/plans/2026-09-30-palette-choice.md (已过 WCAG AA 实测), 改色必须先改工件.
-   挂载约定: <html data-theme="sage" | "dusk">; 亮色为默认块, 暗色在媒体查询内按主题分别覆盖.
+   挂载约定 (外观定稿): <html data-theme="sage"|"dusk" data-mode="light"|"dark">, 双属性由 theme.ts/index.html 早脚本写入;
+   亮色为默认块, 暗色走 [data-theme][data-mode="dark"] 高特异性覆盖 — prefers-color-scheme 媒体查询退场,
+   系统跟随 (mode=system 由 JS 求值落档) 与手动覆盖统一为同一属性管线, 原生控件配色亦按 data-mode 收敛 (见 color-scheme 块).
    令牌名与旧版一致 (--bg/--sidebar/--card/--ink/--muted/--faint/--line/--line-strong/--brand/--brand-ink/
    --amber-bg/--amber-line/--amber-ink/--danger/--user-bubble/--ai-bubble/--radius/--radius-lg/--shadow),
    消费方 (base.css 等) 零改动. 注意: 注释文本内禁写 "星号斜杠" 序列, 否则会提前闭合块注释炸掉 minify. */
@@ -53,52 +55,54 @@
   --shadow: 0 2px 10px rgba(0, 0, 0, .05);
 }
 
-@media (prefers-color-scheme: dark)
+/* 雾杉暗色 (data-mode 挂载): 暗底三层分离 (bg/sidebar/card), 品牌绿提亮为暗底高可读档, brand-ink 反转为深墨保对比. */
+[data-theme="sage"][data-mode="dark"]
 {
-  /* 雾杉暗色: 暗底三层分离 (bg/sidebar/card), 品牌绿提亮为暗底高可读档, brand-ink 反转为深墨保对比. */
-  [data-theme="sage"]
-  {
-    --bg: #181b18;
-    --sidebar: #1f231f;
-    --card: #262b26;
-    --ink: #e6eae4;
-    --muted: #a8b0a6;
-    --faint: #6d756c;
-    --line: #2c322c;
-    --line-strong: #3c443c;
-    --brand: #93bd9a;
-    --brand-ink: #142016;
-    --amber-bg: #322c1c;
-    --amber-line: #57512e;
-    --amber-ink: #dcc27a;
-    /* 刻意缺口: --danger 沿用亮色 #a94a42 (暗底可读已验证), 不另设暗色档以免双色板语义漂移. */
-    --user-bubble: #47684f;
-    --ai-bubble: #262b26;
-    --shadow: 0 2px 10px rgba(0, 0, 0, .35);
-  }
-
-  /* 暮蓝暗色: 与雾杉暗色同构, 仅色相换蓝; 缺口语义保持一致. */
-  [data-theme="dusk"]
-  {
-    --bg: #16181d;
-    --sidebar: #1b1e24;
-    --card: #22252c;
-    --ink: #e4e7ec;
-    --muted: #a5acb8;
-    --faint: #6a7280;
-    --line: #2a2e36;
-    --line-strong: #3a404b;
-    --brand: #93a7db;
-    --brand-ink: #10141c;
-    --amber-bg: #322e1e;
-    --amber-line: #575031;
-    --amber-ink: #dcc27a;
-    /* 刻意缺口: --danger 沿用亮色 #b0483c. */
-    --user-bubble: #46588c;
-    --ai-bubble: #22252c;
-    --shadow: 0 2px 10px rgba(0, 0, 0, .35);
-  }
+  --bg: #181b18;
+  --sidebar: #1f231f;
+  --card: #262b26;
+  --ink: #e6eae4;
+  --muted: #a8b0a6;
+  --faint: #6d756c;
+  --line: #2c322c;
+  --line-strong: #3c443c;
+  --brand: #93bd9a;
+  --brand-ink: #142016;
+  --amber-bg: #322c1c;
+  --amber-line: #57512e;
+  --amber-ink: #dcc27a;
+  /* 刻意缺口: --danger 沿用亮色 #a94a42 (暗底可读已验证), 不另设暗色档以免双色板语义漂移. */
+  --user-bubble: #47684f;
+  --ai-bubble: #262b26;
+  --shadow: 0 2px 10px rgba(0, 0, 0, .35);
 }
+
+/* 暮蓝暗色 (data-mode 挂载): 与雾杉暗色同构, 仅色相换蓝; 缺口语义保持一致. */
+[data-theme="dusk"][data-mode="dark"]
+{
+  --bg: #16181d;
+  --sidebar: #1b1e24;
+  --card: #22252c;
+  --ink: #e4e7ec;
+  --muted: #a5acb8;
+  --faint: #6a7280;
+  --line: #2a2e36;
+  --line-strong: #3a404b;
+  --brand: #93a7db;
+  --brand-ink: #10141c;
+  --amber-bg: #322e1e;
+  --amber-line: #575031;
+  --amber-ink: #dcc27a;
+  /* 刻意缺口: --danger 沿用亮色 #b0483c. */
+  --user-bubble: #46588c;
+  --ai-bubble: #22252c;
+  --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+
+/* color-scheme (外观定稿): 原生控件 (滚动条/表单/输入法) 必须跟随"已解析档位"而非系统 —
+   index.html 的 meta color-scheme 只声明双档支持, 具体档位由此按 data-mode 收敛, 手动深色时原生控件不得残留亮色. */
+:root { color-scheme: light; }
+[data-theme="sage"][data-mode="dark"], [data-theme="dusk"][data-mode="dark"] { color-scheme: dark; }
 
 /* 动效令牌 (D23): 全部过渡/动画只允许引用此处, 组件禁止裸写毫秒/缓动 — 集中调档才能全局统一节奏.
    --dur-blink 是刻意独立于过渡三档的状态闪烁节拍 (流式光标/录音红点): 1s 半明半灭的"呼吸"节奏,

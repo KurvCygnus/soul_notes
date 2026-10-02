@@ -157,12 +157,14 @@ describe('App (壳与路由 v2)', () =>
         expect(document.documentElement.dataset.theme).toBe('dusk')
     })
 
-    it('/settings 其余区域: 建设中空态', async () =>
+    it('/settings 定稿: 主题+外观双分段控件在场, 无建设中占位 (页面已定稿)', async () =>
     {
         loginLocally()
         openAt('/settings')
         render(<App />)
-        expect(await screen.findByText('建设中')).toBeInTheDocument()
+        expect(await screen.findByRole('group', { name: '外观选择' })).toBeInTheDocument()
+        expect(screen.getByRole('group', { name: '主题选择' })).toBeInTheDocument()
+        expect(screen.queryByText('建设中')).not.toBeInTheDocument()
         await settle()
     })
 

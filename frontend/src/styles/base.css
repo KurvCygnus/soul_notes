@@ -113,8 +113,9 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 /* 扩展页容器 (Task 6): 总览/扩展页在主区的统一留白容器, 页面组件自渲染 ExtPageHeader/ExtCard. */
 .ext-page { max-width: 860px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 10px; }
 
-/* 设置页 (Task 6): 主题分段控件 — aria-pressed 即选中态走品牌令牌, 边框分隔沿用 --line-strong. */
-.settings-view { max-width: 720px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+/* 设置页 (Task 6 定稿, Task 15 加宽): 主题+外观分段控件 — aria-pressed 即选中态走品牌令牌, 边框分隔沿用 --line-strong;
+   720px 走查反馈排版太窄, 放宽到 960px (1440 宽屏主区约 1180 可用, 卡片仍居中有呼吸感). */
+.settings-view { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
 .settings-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
 .settings-card-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
 .settings-theme { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
