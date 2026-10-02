@@ -269,8 +269,11 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
     transition: transform var(--dur-base) var(--ease-exit), visibility 0s linear var(--dur-base);
   }
   .sidebar.drawer-open { transform: translateX(0); visibility: visible; transition: transform var(--dur-base) var(--ease-enter); }
-  /* 遮罩 scrim 复用 .red-alert-overlay 的前例特许裸值 rgba(47, 59, 58, .5) (即亮色 --ink 带透明度):
-     遮罩层需要半透明暗色而令牌无 alpha 形态, 沿用既有常量不新造颜色. z-index 70 低于抽屉 80, 高于登录浮层 60 —
-     抽屉内点登录会先收抽屉再开门, 两浮层不同时在场; 100 的 RED 预警弹窗仍在一切之上. */
-  .drawer-open > .drawer-overlay { display: block; position: fixed; inset: 0; z-index: 70; background: rgba(47, 59, 58, .5); }
+  /* 遮罩 scrim 走 [[--overlay]] 令牌 (2026-10-02 走查统一, 原为 .red-alert-overlay 前例裸值 rgba(47,59,58,.5)).
+     //! 遮罩是 aside 的子元素, 其 z-index 只在抽屉自己的层叠上下文内排序 — 曾写 70 压过全部 static 内容,
+     //! 真机视口里抽屉条目永远点不到 (点击全落遮罩 = 只关不开, T14 仅 jsdom 验过节点在位性故未暴露);
+     //! 抽屉三块内容必须显式抬高到遮罩之上 (见下条). 100 的 RED 预警弹窗仍在一切之上. */
+  .drawer-open > .drawer-overlay { display: block; position: fixed; inset: 0; z-index: 70; background: var(--overlay); }
+  /* 抽屉内容 (收起钮/主体/头像行) 抬到遮罩之上: 层叠上下文内的 siblings 排序, 值只需 > 70. */
+  .drawer-open > .sidebar-toggle, .drawer-open > .sidebar-body, .drawer-open > .sidebar-foot { position: relative; z-index: 80; }
 }
