@@ -1,7 +1,7 @@
 //* Mock 课表扩展 (仅开发构建): 课表页 + 总览聚合卡, 外加同构简化的日程 Mock 页 (brief: 日程页同构简化, 不另立文件).
 //* 页面组件只经 props.query 取数 (D11 查询隔离) — 类型上不存在任何会话能力注入通道;
 //* 总览组件无 props 通道 (ComponentType), 是唯一例外形态: 直连只读 context api, 同样零会话引用.
-//* 注: brief 原写总览头图标为 grid, IconName 词表无此字形 — 就近取 gauge (仪表盘 → 总览), 不为 Mock 扩充平台图标词表.
+//* 总览头图标 grid (走查裁决 2026-10-03: 词表本有 grid 四宫格字形, 旧注 "词表无此字形" 系陈误, gauge 视觉歧义已纠正).
 //region import
 import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
@@ -89,7 +89,7 @@ export function MockTimetableOverview(): ReactElement
     const data = state.phase === 'ready' ? state.data : null
     return (
         <>
-            <ExtPageHeader icon="gauge" title="总览" />
+            <ExtPageHeader icon="grid" title="总览" />
             <ExtCard title="今日课表摘要">
                 <ExtSummaryBody
                     state={state}

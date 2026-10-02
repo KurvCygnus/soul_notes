@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import { getCachedHotline, DEFAULT_HOTLINE } from '../../api/hotline'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import type { IRedAlertMessage } from '../../api/ws'
 import type { HotlineInfo } from '../../types'
 
@@ -21,7 +22,10 @@ export default function RedAlertModal({ alert, onClose, onOpenResources }: IRedA
 {
     //* 首屏即默认兜底: useState 初值为同步常量, 首绘绝不等待网络; 缓存/API 到达后原位刷新.
     const [hotline, setHotline] = useState<HotlineInfo>(DEFAULT_HOTLINE)
+    const rootRef = useRef<HTMLDivElement>(null)
     const primaryRef = useRef<HTMLAnchorElement>(null)
+    //* 焦点陷阱 (走查裁决 2026-10-03): 安全模态的 Tab 循环更不允许逸出 — 背景内容被预警遮罩覆盖, 逸出即不可见交互.
+    useFocusTrap(rootRef, true)
 
     useEffect(() =>
     {
@@ -38,7 +42,7 @@ export default function RedAlertModal({ alert, onClose, onOpenResources }: IRedA
         return () => { alive = false }
     }, [])
 
-    //* 焦点管理: 打开即聚焦主热线按钮 (键盘/读屏用户第一落点); 不做焦点圈禁 — 安全模态以显式确认为界.
+    //* 焦点管理: 打开即聚焦主热线按钮 (键盘/读屏用户第一落点); 退场即时卸载 (安全模态离场零延迟, 不参与浮层退场动画).
     useEffect(() =>
     {
         primaryRef.current?.focus()
@@ -48,6 +52,7 @@ export default function RedAlertModal({ alert, onClose, onOpenResources }: IRedA
 
     return (
         <div
+            ref={rootRef}
             className="red-alert-overlay"
             role="alertdialog"
             aria-modal="true"

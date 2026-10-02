@@ -6,3 +6,6 @@ dist/
 
 # ZCode brainstorm companion sessions
 .superpowers/
+
+# TypeScript 增量构建产物
+*.tsbuildinfo

@@ -1,16 +1,20 @@
 //* 登录/注册浮层: 协议强制勾选门禁 + 角色分流 (非 STUDENT 拒入并即时登出), 供访客门 shell (Task 9) 挂载.
-//* 契约: <LoginSheet onAuthed onCancel /> — 成功进入只经 onAuthed, 本组件不直接触碰 AuthContext (分层裁决).
-import { useEffect, useState } from 'react'
-import type { CSSProperties, FormEvent, MouseEvent, ReactElement } from 'react'
+//* 契约: <LoginSheet open onAuthed onCancel /> — 成功进入只经 onAuthed, 本组件不直接触碰 AuthContext (分层裁决).
+//* 常驻挂载 + open 短路 (走查裁决 2026-10-03): 退场动画经 useExitAnimation 簿记, 焦点陷阱罩住 Tab 循环.
+import { useEffect, useRef, useState } from 'react'
+import type { AnimationEvent, CSSProperties, FormEvent, MouseEvent, ReactElement } from 'react'
 import { login, logout, register } from '../../api/auth'
 import { ApiError } from '../../api/http'
 import { toast } from '../../utils/toast'
 import { useBrandName } from '../../hooks/useBrandName'
+import { useExitAnimation } from '../../hooks/useExitAnimation'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import { AGREEMENT } from './agreement'
 import type { AuthData } from '../../types'
 
 export interface ILoginSheetProps
 {
+    open: boolean
     onAuthed(d: AuthData): void
     onCancel(): void
 }
@@ -35,8 +39,11 @@ const ROW_STYLE: CSSProperties = { display: 'flex', gap: '8px', alignItems: 'cen
 
 //endregion
 
-export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): ReactElement
+export default function LoginSheet({ open, onAuthed, onCancel }: ILoginSheetProps): ReactElement | null
 {
+    const { mounted, closing, markExited } = useExitAnimation(open)
+    const rootRef = useRef<HTMLDivElement>(null)
+    useFocusTrap(rootRef, open && !closing)
     const [mode, setMode] = useState<'login' | 'register'>('login')
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -44,10 +51,12 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
     const [showAgreement, setShowAgreement] = useState(false)
     const [busy, setBusy] = useState(false)
 
-    //* Escape 关闭: 挂 document 而非遮罩元素 — 浮层打开时焦点可能仍留在遮罩后方 (调用方未移交焦点),
-    //* 遮罩内监听会漏按键; 以组件生命周期为界, 卸载即注销监听.
+    //* Escape 关闭: 仅 open 态挂 document 级监听 — 浮层打开时焦点可能仍留在遮罩后方 (调用方未移交焦点),
+    //* 遮罩内监听会漏按键; 退场期不再响应 (onCancel 已消费, 重复上抛无意义).
     useEffect(() =>
     {
+        if(!open)
+            return
         const onKey = (e: KeyboardEvent): void =>
         {
             if(e.key === 'Escape')
@@ -55,7 +64,13 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
-    }, [onCancel])
+    }, [open, onCancel])
+
+    const onExitAnimationEnd = (e: AnimationEvent<HTMLDivElement>): void =>
+    {
+        if(closing && e.target === e.currentTarget && e.animationName === 'overlay-exit')
+            markExited()
+    }
 
     const isLogin = mode === 'login'
     //* 品牌域接线 (评审整改): 浮层标题消费后端品牌配置, 不再硬编码产品名 (形状升级: 品牌域快照解构取 brand).
@@ -96,9 +111,12 @@ export default function LoginSheet({ onAuthed, onCancel }: ILoginSheetProps): Re
         setShowAgreement(true)
     }
 
+    if(!mounted)
+        return null
+
     return (
         //! 有意不做遮罩点击关闭: 遮罩误触会静默丢弃已输入的账密 (复审裁决), 关闭只走显式 取消/Escape.
-        <div className="modal-overlay">
+        <div ref={rootRef} className={`modal-overlay${closing ? ' closing' : ''}`} onAnimationEnd={onExitAnimationEnd}>
             <form
                 className="card anim-pop"  //* anim-pop (Task 13): 浮层家族同款入场淡入 + 0.97 缩放 (spec §9.1).
                 style={PANEL_STYLE}

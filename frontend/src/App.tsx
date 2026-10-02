@@ -77,8 +77,8 @@ export default function App(): ReactElement
                             <Route path="extensions/:id" element={<RequireAuth><ExtensionPageRoute /></RequireAuth>} />
                             <Route path="profile" element={<RequireAuth><PlaceholderView title="个人资料" /></RequireAuth>} />
                             <Route path="settings" element={<RequireAuth><SettingsView /></RequireAuth>} />
-                            <Route path="about" element={<RequireAuth><PlaceholderView title="关于" /></RequireAuth>} />
-                            {/* /crisis 不再是路由 (产品红线转由菜单内危机占位承接, Task 8 换 Flyout), 与未知路径一并回首页. */}
+                            {/* /about 已随菜单关于项退场 (走查裁决 2026-10-03): 设置页关于区块是唯一信息源;
+                                /crisis 不再是路由 (产品红线转由菜单内危机占位承接, Task 8 换 Flyout), 与未知路径一并回首页. */}
                             <Route path="crisis" element={<Navigate to="/" replace />} />
                             <Route path="*" element={<Navigate to="/" replace />} />
                         </Route>

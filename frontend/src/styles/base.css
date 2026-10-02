@@ -142,6 +142,12 @@ button.sidebar-row { border: none; background: none; color: var(--ink); font: in
 .anim-pop { animation: anim-pop-in var(--dur-base) var(--ease-enter); }
 @keyframes anim-pop-in { from { opacity: 0; transform: scale(.97); } }
 
+/* 浮层退场 (走查裁决 2026-10-03, 取代 "出场即时卸载"): 关闭瞬间根节点挂 .closing — 淡出 (--ease-exit),
+   animationend (hooks/useExitAnimation, --dur-fast 令牌兜底) 后真卸载; 退场期掐 pointer-events 防幽灵点击.
+   RED 预警弹窗刻意不在列: 安全模态离场零延迟 (Task 13 红线). */
+.crisis-flyout.closing, .confirm-modal.closing, .user-menu.closing, .modal-overlay.closing { animation: overlay-exit var(--dur-fast) var(--ease-exit) forwards; pointer-events: none; }
+@keyframes overlay-exit { to { opacity: 0; } }
+
 /* 危机 Flyout (Task 8, D22): 菜单/RED 双入口的居中安全浮层, 访客无门 (红线). 层级阶梯裁决 (数值沿用
    本文件既有裸值注释惯例, 不设 --z 令牌): 登录 60 < 抽屉 scrim 70 < 抽屉 80 < 危机 Flyout 85 = 菜单遮罩 85
    (开 Flyout 前菜单必先收起, 二者互斥不同屏, 同值无争) < 菜单 86 < 确认模态 90 (Task 11, 删除会话确认,

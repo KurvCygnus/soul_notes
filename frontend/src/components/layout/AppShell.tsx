@@ -208,18 +208,17 @@ export default function AppShell(): ReactElement
                 drawerOpen={drawerOpen}
                 onCloseDrawer={() => setDrawerOpen(false)}
             />
-            {/* 汉堡用户菜单 (访客/登录用户均可达 — 红线: 危机入口对访客无门): guest 态下门保护项过登录门, 登出隐藏. */}
-            {menuOpen && (
-                <UserMenu
-                    guest={user == null}
+            {/* 汉堡用户菜单 (访客/登录用户均可达 — 红线: 危机入口对访客无门): 常驻挂载 (退场动画簿记在组件内),
+                guest 态下门保护项过登录门, 登出隐藏. */}
+            <UserMenu
+                open={menuOpen}
+                guest={user == null}
                     onClose={handleMenuClose}
                     onOpenCrisis={handleOpenCrisis}
                     onOpenProfile={() => handleMenuNavigate('/profile')}
                     onOpenSettings={() => handleMenuNavigate('/settings')}
-                    onOpenAbout={() => handleMenuNavigate('/about')}
                     onLogout={handleLogout}
                 />
-            )}
             <main className="main">
                 {/* 顶栏: 汉堡钮 (移动端抽屉唯一入口, 常驻 DOM, 桌面端 CSS display:none) + 天气胶囊 (仅登录后挂载,
                     访客不占位; 胶囊失败/数据缺席时 fail-silent 隐藏). */}
@@ -254,8 +253,9 @@ export default function AppShell(): ReactElement
                 onClose={handleCancelDelete}
                 onConfirm={handleConfirmDelete}
             />
-            {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用. */}
-            {gate.open && <LoginSheet onAuthed={(d) => gate.confirm(d)} onCancel={gate.cancel} />}
+            {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用.
+                常驻挂载 + open 短路 (退场动画簿记在组件内). */}
+            <LoginSheet open={gate.open} onAuthed={(d) => gate.confirm(d)} onCancel={gate.cancel} />
             {/* RED 预警弹窗挂在路由内容之外 (Task 13 brief): 路由切换不卸载, z-index 置顶盖过登录浮层;
                 关闭只经显式"我知道了"/上抛查看全部求助资源 (壳关 RED 并开危机 Flyout), 弹窗自身不响应 Escape. */}
             {red != null && <RedAlertModal alert={red} onClose={dismissRed} onOpenResources={handleOpenResources} />}

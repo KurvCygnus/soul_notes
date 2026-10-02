@@ -4,7 +4,7 @@
 //* Task 8 增补: connectAlertSocket 整体 mock (RED 注入走 AlertContext.test 同款 onRed 回调, 不真开 WebSocket);
 //* getCachedHotline 局部 mock 落回 DEFAULT (与真实降级语义一致, 换取时序确定性).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { persistAuth } from './api/auth'
@@ -82,14 +82,14 @@ describe('App (壳与路由 v2)', () =>
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
 
-    it('访客菜单 (红线闭合): 危机支持无门直达热线占位, 门保护项触发登录门, 登出隐藏', async () =>
+    it('访客菜单 (红线闭合): 危机支持无门直达热线占位, 门保护项触发登录门, 个人资料/登出隐藏', async () =>
     {
         const user = userEvent.setup()
         render(<App />)
         await settle()
         await user.click(screen.getByRole('button', { name: '打开菜单' }))
         expect(screen.getAllByRole('menuitem').map(el => el.textContent)).
-            toEqual(['危机支持', '个人资料', '设置', '关于'])  //* 登出对访客无意义, 隐藏.
+            toEqual(['危机支持', '设置'])  //* 个人资料对访客隐藏 (无账号), 登出对访客无意义, 关于项已退场 (走查裁决 2026-10-03).
 
         //* 公开能力: 危机支持直开热线占位, 登录浮层不得在场 (对访客无门).
         await user.click(screen.getByRole('menuitem', { name: '危机支持' }))
@@ -98,7 +98,7 @@ describe('App (壳与路由 v2)', () =>
 
         //* 门保护项: 上抛壳过登录门 (不导航不渲染受保护页), 菜单收起; 取消复位后逐项验证.
         await user.click(screen.getByRole('button', { name: '我知道了' }))
-        for(const item of ['个人资料', '设置', '关于'])
+        for(const item of ['设置'])
         {
             await user.click(screen.getByRole('button', { name: '打开菜单' }))
             await user.click(screen.getByRole('menuitem', { name: item }))
@@ -112,7 +112,7 @@ describe('App (壳与路由 v2)', () =>
 
     it('访客进入受保护路由: 不渲染页面内容并触发登录门 (gate.open -> 登录浮层在场)', async () =>
     {
-        for(const path of ['/extensions', '/extensions/mock-timetable', '/profile', '/settings', '/about'])
+        for(const path of ['/extensions', '/extensions/mock-timetable', '/profile', '/settings'])
         {
             cleanup()
             openAt(path)
@@ -196,24 +196,20 @@ describe('App (壳与路由 v2)', () =>
         await settle()
     })
 
-    it('/profile 与 /about: 页头 + 建设中占位', async () =>
+    it('/profile: 页头 + 建设中占位 (/about 已随菜单项退场)', async () =>
     {
         loginLocally()
-        for(const [path, title] of [['/profile', '个人资料'], ['/about', '关于']] as const)
-        {
-            cleanup()
-            openAt(path)
-            render(<App />)
-            expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
-            await settle()
-            expect(screen.getByText('建设中')).toBeInTheDocument()
-        }
+        openAt('/profile')
+        render(<App />)
+        expect(await screen.findByRole('heading', { name: '个人资料' })).toBeInTheDocument()
+        await settle()
+        expect(screen.getByText('建设中')).toBeInTheDocument()
     })
 
-    it('/crisis 与未知路由: 一律重定向回首页聊天位 (危机页不再作为路由存在)', async () =>
+    it('/about /crisis 与未知路由: 一律重定向回首页聊天位 (关于/危机页不再作为路由存在)', async () =>
     {
         loginLocally()
-        for(const path of ['/crisis', '/nowhere'])
+        for(const path of ['/about', '/crisis', '/nowhere'])
         {
             cleanup()
             openAt(path)
@@ -237,7 +233,7 @@ describe('App (壳与路由 v2)', () =>
         expect(await screen.findByRole('heading', { name: '你好, 今天想聊点什么?' })).toBeInTheDocument()
     })
 
-    it('UserMenu: 汉堡开合, 五项按序 (危机支持/个人资料/设置/登出/关于), Escape 与遮罩点击关闭', async () =>
+    it('UserMenu: 汉堡开合, 四项按序 (危机支持/个人资料/设置/登出), Escape 与遮罩点击关闭', async () =>
     {
         loginLocally()
         const user = userEvent.setup()
@@ -247,14 +243,14 @@ describe('App (壳与路由 v2)', () =>
         await user.click(screen.getByRole('button', { name: '打开菜单' }))
         expect(screen.getByRole('menu', { name: '用户菜单' })).toBeInTheDocument()
         expect(screen.getAllByRole('menuitem').map(el => el.textContent)).
-            toEqual(['危机支持', '个人资料', '设置', '登出', '关于'])
+            toEqual(['危机支持', '个人资料', '设置', '登出'])
 
         await user.keyboard('{Escape}')
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())  //* 退场动画簿记: 淡出完才真卸载.
 
         await user.click(screen.getByRole('button', { name: '打开菜单' }))
         fireEvent.click(document.querySelector('.user-menu-mask')!)  //* 遮罩 aria-hidden 不在可访问性树, 走 fireEvent 直派.
-        expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+        await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
     })
 
     it('UserMenu 危机支持: 上抛壳 crisisOpen -> 占位浮层在场 (热线号码可达), 菜单收起, 可关闭', async () =>
@@ -292,7 +288,7 @@ describe('App (壳与路由 v2)', () =>
         expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()//* 红线: RED 不被 Flyout 遮挡, 两者不同时在场
     })
 
-    it('UserMenu 菜单项: 个人资料/设置/关于 各自导航并收起菜单', async () =>
+    it('UserMenu 菜单项: 个人资料/设置 各自导航并收起菜单 (关于项已退场)', async () =>
     {
         loginLocally()
         const user = userEvent.setup()
@@ -306,10 +302,7 @@ describe('App (壳与路由 v2)', () =>
         await user.click(screen.getByRole('button', { name: '打开菜单' }))
         await user.click(screen.getByRole('menuitem', { name: '个人资料' }))
         expect(await screen.findByRole('heading', { name: '个人资料' })).toBeInTheDocument()
-
-        await user.click(screen.getByRole('button', { name: '打开菜单' }))
-        await user.click(screen.getByRole('menuitem', { name: '关于' }))
-        expect(await screen.findByRole('heading', { name: '关于' })).toBeInTheDocument()
+        expect(screen.queryByRole('menuitem', { name: '关于' })).not.toBeInTheDocument()
     })
 
     it('登出: 回访客态 (登录入口在场), 落回首页聊天位, 菜单收起', async () =>

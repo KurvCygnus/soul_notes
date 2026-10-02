@@ -116,7 +116,7 @@ export default function Sidebar({
                             <Icon name="chat" size={17} />
                         </button>
                         <button type="button" className="sidebar-mini" aria-label="新建会话" title="新建会话" onClick={() => onNewChat?.()}>
-                            <Icon name="chat-plus" size={17} />
+                            <Icon name="plus" size={17} />  //* 纯加号: 收起态与 chat 气泡拉开区分度 (走查裁决, 展开态有文字仍用 chat-plus).
                         </button>
                     </nav>
                 ) : (
