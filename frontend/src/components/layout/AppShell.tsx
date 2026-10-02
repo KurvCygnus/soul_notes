@@ -91,9 +91,12 @@ export default function AppShell(): ReactElement
     {
         //* 抽屉内点会话: 先收抽屉 (否则移动端抽屉继续盖住聊天区), 再 nonce 单调递增下发 —
         //* 同一会话重复点击也重新下发, 由 ChatView 的 openSession 幂等短路. 桌面端 drawerOpen 恒 false, 无副作用.
+        //* 非聊天路由 (设置/扩展页等) 上点条目: 必须先导航回聊天位, 否则 openRequest 派给未挂载的 ChatView 无人消费 (走查实测).
         setDrawerOpen(false)
+        if(pathname !== '/')
+            navigate('/')
         setOpenRequest(prev => ({ sessionId: id, nonce: (prev?.nonce ?? 0) + 1 }))
-    }, [])
+    }, [pathname, navigate])
 
     //* 手风琴节标题: 状态翻转 + 主区导航到该节路由 (映射归 utils/sidebarSections, 主区即路由区).
     const handleSectionChange = useCallback((next: SidebarSection) =>
@@ -111,10 +114,14 @@ export default function AppShell(): ReactElement
         if(user == null)
         {
             gate.requireAuth(() => {})
+            if(pathname !== '/')
+                navigate('/')  //* 访客过门后落回聊天位 (pending 为空动作, 留在原地无意义).
             return
         }
+        if(pathname !== '/')
+            navigate('/')  //* 同 openSession: 新建请求的消费方在聊天位, 非聊天路由上必须先导航.
         setNewChatRequest(prev => ({ nonce: (prev?.nonce ?? 0) + 1 }))
-    }, [gate, user])
+    }, [user, gate, pathname, navigate])
 
     //* 菜单项统一收口: 先收菜单再执行动作, 保证菜单不跨路由/浮层残留. onClose 引用稳定 (UserMenu effect 依赖).
     const handleMenuClose = useCallback(() => { setMenuOpen(false) }, [])
