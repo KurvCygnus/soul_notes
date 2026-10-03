@@ -56,7 +56,6 @@ class ClinicalSchemaNormalizerTest
         return new PromptProvider(
             Optional.empty(),
             Optional.empty(),
-            Optional.empty(),
             Optional.ofNullable(schemaOverride)
         );
     }

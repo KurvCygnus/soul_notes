@@ -46,13 +46,13 @@ public final class PgGateway implements IDatabaseGateway
 
     //* SCHEMA_MISSING 判定的期望表集: 三张业务表 + 版本表, 与 db/schema 脚本一一对应.
     private static final @NotNull List<String> EXPECTED_TABLES =
-        List.of("users", "mood_diaries", "ai_chat_sessions", "platform_schema_version");
+        List.of("users", "ai_chat_sessions", "platform_schema_version");
 
     //* 脚本清单显式排序而非 classpath 目录枚举: jar/fast-jar/native 内目录 URL 不可枚举, 显式清单在所有打包形态下行为一致;
     //* 新增脚本 = 追加清单项 + 资源文件, 漏配在 readScript 处快速失败.
     private static final @NotNull String SCHEMA_DIR = "db/schema/";
     private static final @NotNull List<String> SCHEMA_SCRIPTS =
-        List.of("01_users.sql", "02_mood_diaries.sql", "03_ai_chat_sessions.sql", "04_platform_schema_version.sql");
+        List.of("01_users.sql", "03_ai_chat_sessions.sql", "04_platform_schema_version.sql");
 
     //region IDatabaseGateway
 

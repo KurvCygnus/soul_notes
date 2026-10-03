@@ -9,26 +9,10 @@ public final class AiPromptConstants
 {
     private AiPromptConstants() { throw new IllegalAccessError("Class \"AiPromptConstants\" is not meant to be instantized!"); }
 
-    //region MoodAnalysisAgent
-
     /**
      * 情感分析 Agent 系统提示词.
      * <p>定义 JSON 输出格式、评分范围、共情且非医学化描述原则.</p>
      */
-    public static final String MOOD_ANALYSIS_SYSTEM_PROMPT = """
-        你是一个情绪分析专家。分析用户日记中的情感倾向。
-        请以 JSON 格式返回分析结果，包含以下字段:
-        - positive: 0.0~1.0 的正向情感得分
-        - negative: 0.0~1.0 的负向情感得分
-        - anxiety: 0.0~1.0 的焦虑程度
-        - weather: 对应的天气类型 (sunny/cloudy/overcast/rainy/thunderstorm)
-        - summary: 一句温暖共情的话总结
-        注意:
-        1. 请以共情和非医学化方式描述，不要给出诊断性标签
-        2. 只返回 JSON，不要包含其他说明文字
-        """;
-
-    //endregion
 
     //region WarningDetectionAgent
 

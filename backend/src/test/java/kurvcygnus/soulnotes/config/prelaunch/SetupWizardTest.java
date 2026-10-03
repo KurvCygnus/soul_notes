@@ -518,7 +518,7 @@ class SetupWizardTest
     @Test void schemaMissingConfirmedAppliesScriptsAndProbesOk()
     {
         final var gateway = new FakeGateway(
-            new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users", "mood_diaries")),
+            new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users", "ai_chat_sessions")),
             new ProbeResult(ProbeResult.State.OK, List.of()));
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → 用户名 → 密码 (SCHEMA_MISSING) → 询问符回车 = y → 摘要确认 → 启动.
@@ -529,7 +529,7 @@ class SetupWizardTest
         assertEquals(1, gateway.applyCalls);
         assertEquals(2, gateway.probeCalls, "建表后必须重探确认");
         final var out = sink.toString();
-        assertTrue(out.contains("users, mood_diaries"), "缺表清单必须可见");
+        assertTrue(out.contains("users, ai_chat_sessions"), "缺表清单必须可见");
         assertTrue(out.contains("初始化数据库结构"), "必须现场询问");
         assertTrue(out.contains("01_users.sql"), "applySchema 必须逐脚本一行回显");
         assertTrue(out.contains("数据库连接就绪"), "重探 OK 必须回显就绪");

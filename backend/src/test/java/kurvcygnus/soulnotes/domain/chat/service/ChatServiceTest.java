@@ -100,7 +100,7 @@ class ChatServiceTest
     @SuppressWarnings("ConstantConditions")//! 测试缝: clinicalAssessmentService 置 null — 本组用例不驱动评估落库挂点.
     private static ChatService newService(boolean taggingOn, EmpatheticChatAgent chatAgent)
     {
-        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), noneInjector(), unusedNormalizer(), null, newDispatchStub(), newTitleGeneratorStub(), VERTX, 50, taggingOn);
+        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), noneInjector(), unusedNormalizer(), null, newDispatchStub(), newTitleGeneratorStub(), VERTX, 50, taggingOn);
     }
 
     //* 标题生成器替身: 本组用例只驱动 callAiAndRespond 拆流路径 (不经过标题挂点), 空实现占位即可.
@@ -129,7 +129,7 @@ class ChatServiceTest
     private static ClinicalSchemaNormalizer unusedNormalizer()
     {
         return new ClinicalSchemaNormalizer(
-            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()),
+            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()),
             "", "", "test-model", newCacheFile(),
             prompt ->
             {
@@ -182,12 +182,12 @@ class ChatServiceTest
     //region 结构化输出管线: 契约组装 (三态: 默认 / 自定义已归一 / 自定义未归一)
     @Test void buildSystemPrompt_Off_ReturnsBasePromptOnly() throws Exception
     {
-        assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, invokeBuildSystemPrompt(newService(false, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
+        assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, invokeBuildSystemPrompt(newService(false, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
     }
 
     @Test void buildSystemPrompt_On_DefaultSchema_AppendsShellWithDefaultFields() throws Exception
     {
-        final var prompt = invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer()));
+        final var prompt = invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer()));
         assertTrue(prompt.startsWith(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT), "机构/内置提示词必须在前");
         assertTrue(prompt.contains("[输出契约]"), "契约壳必须随 clinical.tagging 注入");
         assertTrue(prompt.contains(AiPromptConstants.CLINICAL_OUTPUT_SCHEMA_DEFAULT), "默认结构定义字段说明必须随契约下发");
@@ -200,13 +200,13 @@ class ChatServiceTest
             AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT,
             PrintUtils.quickFormat(AiPromptConstants.CLINICAL_OUTPUT_CONTRACT, AiPromptConstants.CLINICAL_OUTPUT_SCHEMA_DEFAULT)
         );
-        assertEquals(expected, invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
+        assertEquals(expected, invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
     }
 
     @Test void buildSystemPrompt_On_InstitutionalPromptStaysFirst() throws Exception
     {
         //* 合并规则: 机构提示词在前, 功能契约段在后 — 契约首行的最高优先级声明兜底机构指令冲突.
-        final var provider = new PromptProvider(Optional.of("机构自定义人设"), Optional.empty(), Optional.empty(), Optional.empty());
+        final var provider = new PromptProvider(Optional.of("机构自定义人设"), Optional.empty(), Optional.empty());
         final var expected = PrintUtils.quickFormat(
             "{}\n\n{}",
             "机构自定义人设",
@@ -217,7 +217,7 @@ class ChatServiceTest
 
     @Test void buildSystemPrompt_On_CustomNormalizedSchema_AppendsNormalizedSchema() throws Exception
     {
-        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
+        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
         //* 预热缓存: 模拟启动期归一化已成功.
         final var normalizer = new ClinicalSchemaNormalizer(provider, "", "", "test-model", newCacheFile(), prompt ->
         {
@@ -235,7 +235,7 @@ class ChatServiceTest
 
     @Test void buildSystemPrompt_On_CustomUnNormalizedSchema_FallsBackToBaseOnly() throws Exception
     {
-        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
+        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
         //* 空缓存替身: cachedFor 必须只查缓存不触发 LLM, 未命中 = 增强暂禁.
         final var normalizer = new ClinicalSchemaNormalizer(provider, "", "", "test-model", newCacheFile(),
             prompt ->
