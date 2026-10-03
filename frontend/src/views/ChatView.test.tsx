@@ -10,7 +10,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom'
 import { AUTH_KEY } from '../api/auth'
 import { TOKEN_KEY } from '../api/http'
-import { uploadVoice } from '../api/diary'
+import { uploadVoice } from '../api/voice'
 import { listMessages, streamMessage } from '../api/chat'
 import { AuthProvider } from '../context/AuthContext'
 import { AlertContext } from '../context/AlertContext'
@@ -21,7 +21,7 @@ import type { IStreamOptions } from '../api/chat'
 import type { IChatViewContext } from './chatContext'
 import type { AuthData, ChatSessionVo } from '../types'
 
-vi.mock('../api/diary', () => ({
+vi.mock('../api/voice', () => ({
     uploadVoice: vi.fn(),  //* Composer 有静态 import, mock 必须给全命名导出 (本文件不触发语音链路).
 }))
 

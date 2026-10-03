@@ -5,7 +5,7 @@
 //* 手输文本可补发是因为它是用户亲手写的, chip 只是候选题面, 登录后不应替用户发出未确认的提问.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent, ReactElement } from 'react'
-import { uploadVoice } from '../../api/diary'
+import { uploadVoice } from '../../api/voice'
 import { toast } from '../../utils/toast'
 import { growTextarea } from '../../utils/autogrow'
 import { MAX_RECORD_BYTES, MAX_RECORD_SECONDS, recordAudio, recordableSecondsLeft } from '../../utils/audio'

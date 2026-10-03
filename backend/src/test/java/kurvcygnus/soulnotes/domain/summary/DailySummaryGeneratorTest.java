@@ -4,7 +4,6 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import kurvcygnus.soulnotes.domain.auth.entity.User;
 import kurvcygnus.soulnotes.domain.chat.entity.AiChatSession;
-import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.support.InfraProbes;
 import kurvcygnus.soulnotes.support.MockLlmProfile;
 import kurvcygnus.soulnotes.utils.PrintUtils;
@@ -33,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * <b>每日总结生成链路集成测试</b> (Mock-LLM 驱动, 真库).
- * <p>覆盖 Spec §8 核心契约: prompt 必须同时携带会话摘录与情绪分析两类输入;
+ * <p>覆盖 Spec §8 核心契约 (日记双输入已随日记域砍除, 走查裁决 2026-10-03, 输入收敛为会话摘录单源): prompt 必须携带会话摘录;
  * 同日重跑覆写不重复落行 (每用户每日一次); 空输入静默跳过 (零 LLM 调用零落库);
  * 活跃窗聚合只收近 7 天活跃用户; 落库内容截断封顶; 调度 cron 契约.</p>
  * <p>LLM 故障的 fail-open 语义在 {@code DailySummaryGeneratorOutageTest} (独立 Profile 指向失联端点) 分置.</p>
@@ -54,9 +53,6 @@ class DailySummaryGeneratorTest
     //* 会话/分析锚为造数标记文本, 经请求体全文匹配验证两类输入确实进入 prompt.
     private static final String PROMPT_ANCHOR   = "睡前留言";
     private static final String SESSION_MARKER  = "图书馆闭馆时还在赶实验报告";
-    private static final String ANALYSIS_MARKER = "整体情绪平稳, 偶有小波动";
-    private static final String ANALYSIS_JSON =
-        "{\"positive\":0.6,\"negative\":0.2,\"anxiety\":0.3,\"weather\":\"cloudy\",\"summary\":\"" + ANALYSIS_MARKER + "\",\"warningLevel\":\"NONE\"}";
 
     //* 类级随机后缀 (UUID 前 8 位): 同一 JVM 运行内共享账号, 跨次运行不撞 users.user_name UNIQUE 约束.
     private static final String SUFFIX = UUID.randomUUID().toString().substring(0, 8);
@@ -73,27 +69,22 @@ class DailySummaryGeneratorTest
         MockLlmProfile.server().reset();
     }
 
-    //region ① prompt 携带双输入 + 落库
+    //region ① prompt 携带会话摘录 + 落库
     @Test
-    void generateFor_PromptContainsSessionAndAnalysis_ShouldPersistTodayRow()
+    void generateFor_PromptContainsSession_ShouldPersistTodayRow()
     {
         final var user = ensureUser("gen-full");
         seedSession(user.id, SESSION_MARKER);
-        seedDiary(user.id, ANALYSIS_JSON);
 
         assertDoesNotThrow(() -> generator.generateFor(user.id, today()).await().atMost(AWAIT));
 
         //* mock 无工具请求恒返回预警 JSON (MockLlmServer 契约), 响应文本无断言价值:
-        //* 请求体必须同时携带会话文本与情绪分析输入, 且以每日总结系统提示词发起 (恰好一轮).
+        //* 请求体必须携带会话文本输入, 且以每日总结系统提示词发起 (恰好一轮).
         final var requests = MockLlmProfile.server().requests().stream().
             filter(r -> r.contains(PROMPT_ANCHOR)).
             toList();
         assertEquals(1, requests.size(), PrintUtils.quickFormat("每日总结应恰好一轮 LLM 请求, 全部请求: {}", MockLlmProfile.server().requests().size()));
         assertTrue(requests.getFirst().contains(SESSION_MARKER), "请求体必须包含最近会话消息摘录");
-        assertTrue(requests.getFirst().contains(ANALYSIS_MARKER), "请求体必须包含最近情绪分析结果");
-        //* 机构侧信息不回流: 预警字段 (warningLevel/warningReason) 属机构侧, 摘记侧有意排除,
-        //* 用户可见的 prompt 不得携带 (digestAnalysis 契约, fix round: review Finding 3).
-        assertFalse(requests.getFirst().contains("warningLevel"), "prompt 严禁携带预警字段 (机构侧信息不回流用户可见文案)");
 
         final var stored = storedSummary(user.id);
         assertNotNull(stored, "当日总结应已落库");
@@ -107,7 +98,6 @@ class DailySummaryGeneratorTest
     {
         final var user = ensureUser("gen-rerun");
         seedSession(user.id, SESSION_MARKER);
-        seedDiary(user.id, ANALYSIS_JSON);
 
         assertDoesNotThrow(() -> generator.generateFor(user.id, today()).await().atMost(AWAIT));
         assertDoesNotThrow(() -> generator.generateFor(user.id, today()).await().atMost(AWAIT));
@@ -128,7 +118,7 @@ class DailySummaryGeneratorTest
         final var summaryRequests = MockLlmProfile.server().requests().stream().
             filter(r -> r.contains(PROMPT_ANCHOR)).
             toList();
-        assertTrue(summaryRequests.isEmpty(), "无会话无分析的空输入必须跳过 LLM 调用");
+        assertTrue(summaryRequests.isEmpty(), "无会话输入必须跳过 LLM 调用");
         assertNull(storedSummary(user.id), "空输入不得落出空内容行");
     }
     //endregion
@@ -219,17 +209,6 @@ class DailySummaryGeneratorTest
         session.warningTriggered = false;
         session.updatedAt        = updatedAt;
         sessionFactory.withTransaction((s, tx) -> session.persist()).await().atMost(AWAIT);
-    }
-
-    //* 真库直插带分析结果的日记 (createdAt = now): 情绪分析输入源, 不经分析链路 (LLM 依赖与本题无关).
-    private void seedDiary(UUID userId, String analysisJson)
-    {
-        final var diary = new MoodDiary();
-        diary.userId         = userId;
-        diary.content        = "今天整体还行";
-        diary.analysisResult = analysisJson;
-        diary.createdAt      = Instant.now();
-        sessionFactory.withTransaction((s, tx) -> diary.persist()).await().atMost(AWAIT);
     }
 
     //* 独立事务新开 session 查询当日总结行 (缺席为 null): 读已提交数据, 不受一级缓存干扰.

@@ -84,8 +84,6 @@ public final class AiPromptConstants
         - 可以调用 CrisisInterventionTool 获取热线信息
 
         工具使用:
-        - 在适当的时候可以调用 UserContextTool 了解用户近期的情绪状态，
-          以便提供更有针对性的回应
         - 如果 WarningDetectionAgent 输出 RED 等级，必须调用 CrisisInterventionTool
 
         直接以回复文本输出，不要包含 JSON 或其他结构化格式。
@@ -107,7 +105,7 @@ public final class AiPromptConstants
     //* 提示词先以常量收敛, 后续如需机构自定义再接入配置键 (接线点: DailySummaryGenerator#generateFor).
     public static final String DAILY_SUMMARY_SYSTEM_PROMPT = """
         你是「心声树洞」的每日絮语撰写者 — 温暖, 不评判的心理倾听伙伴.
-        请根据用户近期的对话摘录与最近的情绪分析结果, 为今天写一段简短的总结留言.
+        请根据用户近期的对话摘录, 为今天写一段简短的总结留言.
 
         要求:
         1. 先用一句话温柔地概括今天的状态, 再给一条具体可行的小行动建议, 合并为一段话.

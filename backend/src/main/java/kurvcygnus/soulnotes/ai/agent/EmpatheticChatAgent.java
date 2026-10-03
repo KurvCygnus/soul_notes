@@ -8,7 +8,6 @@ import dev.langchain4j.service.V;
 import io.quarkiverse.langchain4j.RegisterAiService;
 import kurvcygnus.soulnotes.ai.tool.CrisisInterventionTool;
 import kurvcygnus.soulnotes.ai.tool.DomainDataTool;
-import kurvcygnus.soulnotes.ai.tool.UserContextTool;
 
 /**
  * 共情对话 Agent.
@@ -22,12 +21,13 @@ import kurvcygnus.soulnotes.ai.tool.UserContextTool;
  * <p>所有配置 (model, temperature 等) 由 {@code application.properties} 中的
  * {@code quarkus.langchain4j.openai.*} 统一管理.</p>
  *
- * @implNote 挂载 {@link UserContextTool}, {@link CrisisInterventionTool} 与 {@link DomainDataTool} 三个工具:
+ * @implNote 挂载 {@link CrisisInterventionTool} 与 {@link DomainDataTool} 两个工具
+ *           (UserContextTool 已随日记域砍除退场, 走查裁决 2026-10-03):
  *           第一个按 {@code @MemoryId} 拉取用户上下文, 第二个供 RED 预警场景的危机干预取数,
  *           第三个供按需查询课表/考试 (默认关, {@code ai.domain.tool.enabled}).
  * @since 1.0
  */
-@RegisterAiService(tools = {UserContextTool.class, CrisisInterventionTool.class, DomainDataTool.class})
+@RegisterAiService(tools = {CrisisInterventionTool.class, DomainDataTool.class})
 public interface EmpatheticChatAgent
 {
     /**
@@ -35,8 +35,7 @@ public interface EmpatheticChatAgent
      *
      * @param systemPrompt 系统提示词 (调用方传入 {@code PromptProvider} 解析后的生效提示词, 支持配置覆盖)
      * @param userId       用户 ID ({@code @MemoryId} 仅作为工具身份透传: 本项目未注册 ChatMemoryProvider,
-     *                     不启用记忆累积, 但取值会传入工具执行上下文; 缺失时工具收到非 UUID 的默认值,
-     *                     {@code UserContextTool} 解析用户 ID 必然失败)
+     *                     不启用记忆累积, 但取值会传入工具执行上下文)
      * @param history      对话历史 (JSON 格式的消息列表)
      * @param content      用户最新消息
      * @return AI 回复文本

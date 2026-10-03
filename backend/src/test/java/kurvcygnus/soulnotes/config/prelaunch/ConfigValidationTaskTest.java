@@ -24,12 +24,6 @@ class ConfigValidationTaskTest
         meta("SOULNOTES_DB_URL", "quarkus.datasource.reactive.url", "postgresql://localhost:5432/soulnotes", PropertyMetaParser.InputType.URL, "postgresql://", 0, true);
     private static final PropertyMetaParser.ConfigItemMeta JWT =
         meta("SOULNOTES_JWT_SECRET", "jwt.secret", "", PropertyMetaParser.InputType.GENERATE, "", 32, true);
-    private static final PropertyMetaParser.ConfigItemMeta STORM =
-        meta("SOULNOTES_WEATHER_STORM", "weather.threshold.storm", "0.8", PropertyMetaParser.InputType.NUMBER, "", 0, false);
-    private static final PropertyMetaParser.ConfigItemMeta RAINY =
-        meta("SOULNOTES_WEATHER_RAINY", "weather.threshold.rainy", "0.6", PropertyMetaParser.InputType.NUMBER, "", 0, false);
-    private static final PropertyMetaParser.ConfigItemMeta SUNNY =
-        meta("SOULNOTES_WEATHER_SUNNY", "weather.threshold.sunny", "0.6", PropertyMetaParser.InputType.NUMBER, "", 0, false);
     private static final PropertyMetaParser.ConfigItemMeta AI_KEY =
         meta("SOULNOTES_AI_API_KEY", "ai.openai.api-key", "placeholder", PropertyMetaParser.InputType.SECRET, "", 0, true);
     //* 短信五键夹具与真实 properties 元数据同构 (默认空 = 渠道未配), 完整性规则按 env 显式注入驱动.
@@ -46,7 +40,7 @@ class ConfigValidationTaskTest
 
     @Test void prodMissingJwtSecretBlocks()
     {
-        final var ctx = new PreLaunchContext(view(Map.of()), List.of(DB_URL, JWT, STORM, RAINY, AI_KEY), "prod");
+        final var ctx = new PreLaunchContext(view(Map.of()), List.of(DB_URL, JWT, AI_KEY), "prod");
         final var result = task(true).run(ctx);
         assertTrue(result.hasBlocks());
         assertTrue(result.issues().stream().anyMatch(i -> "SOULNOTES_JWT_SECRET".equals(i.subject()) && i.level() == IPreLaunchTask.Level.BLOCK));
@@ -55,7 +49,7 @@ class ConfigValidationTaskTest
     @Test void devMissingJwtSecretIsSkipped()
     {
         //* AI 密钥已升级为不分 profile 的 BLOCK (无 dev 放宽), 夹具须注入有效密钥才能隔离出 "dev JWT 放宽" 这一本用例语义.
-        final var ctx = new PreLaunchContext(view(Map.of("SOULNOTES_AI_API_KEY", "sk-dev-test")), List.of(DB_URL, JWT, STORM, RAINY, AI_KEY), "dev");
+        final var ctx = new PreLaunchContext(view(Map.of("SOULNOTES_AI_API_KEY", "sk-dev-test")), List.of(DB_URL, JWT, AI_KEY), "dev");
         assertFalse(task(true).run(ctx).hasBlocks());
     }
 
@@ -83,23 +77,6 @@ class ConfigValidationTaskTest
         final var result = task(true).run(ctx);
         assertTrue(result.issues().stream().anyMatch(i -> "SOULNOTES_JWT_SECRET".equals(i.subject()) && i.level() == IPreLaunchTask.Level.WARN));
         assertFalse(result.hasBlocks());
-    }
-
-    @Test void weatherThresholdOrderAndRange()
-    {
-        //* 默认值副本 "0.6" 本身合法 — 越界值由 env 显式注入 (resolved 优先 env), 触发的是区间规则而非次序规则 (无 OVERCAST 条目, 次序检查提前短路).
-        final var stormBad = new PropertyMetaParser.ConfigItemMeta(STORM.key(), STORM.envName(), "0.6", STORM.group(), STORM.humanName(), "", STORM.inputType(), "", 0, false);
-        final var ctx = new PreLaunchContext(view(Map.of("SOULNOTES_WEATHER_STORM", "1.5")), List.of(stormBad, RAINY), "prod");
-        final var issues = task(true).run(ctx).issues();
-        assertTrue(issues.stream().anyMatch(i -> i.message().contains("[0,1]")));
-    }
-
-    //* sunny 基于正向均值, 不参与 storm > rainy > overcast 次序比较, 但四项阈值均 ∈ [0,1] — 越界同样 BLOCK.
-    @Test void sunnyThresholdRangeChecked()
-    {
-        final var ctx = new PreLaunchContext(view(Map.of("SOULNOTES_WEATHER_SUNNY", "1.5")), List.of(STORM, RAINY, SUNNY), "prod");
-        final var issues = task(true).run(ctx).issues();
-        assertTrue(issues.stream().anyMatch(i -> "SOULNOTES_WEATHER_SUNNY".equals(i.subject()) && i.level() == IPreLaunchTask.Level.BLOCK));
     }
 
     //* 用户裁决: AI 为应用必配项, 占位哨兵 placeholder 不得视为已配置 — 不分 profile 一律 BLOCK (有 TTY 引导 Setup, 无 TTY 拒绝启动).

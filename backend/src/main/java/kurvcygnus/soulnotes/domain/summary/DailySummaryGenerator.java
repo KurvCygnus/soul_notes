@@ -10,7 +10,6 @@ import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import kurvcygnus.soulnotes.ai.agent.DailySummaryAgent;
 import kurvcygnus.soulnotes.domain.chat.entity.AiChatSession;
-import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.domain.summary.entity.DailySummaryEntity;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.PrintUtils;
@@ -28,25 +27,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 /**
  * 每日总结生成器: 每日 03:00 (业务时区) 对近 7 天活跃用户批量生成当日情绪总结.
- * <p>链路: 聚合输入 (最近会话消息摘录 + 最近情绪分析摘记) → {@link DailySummaryAgent} 调 LLM →
+ * <p>链路: 聚合输入 (最近会话消息摘录) → {@link DailySummaryAgent} 调 LLM →
  * 归一化截断 → 用户×日期唯一 upsert.</p>
  *
  * @implNote <b>fail-open 语义</b>: 任何环节失败 (输入聚合/LLM 调用/落库) 一律 WARN 留痕后跳过, 绝不向外抛错 —
  *           每日总结是锦上添花内容, 不可用只允许表现为"今日无絮语", 不允许拖垮调度与其他用户的生成.
- *           双输入全空 (无会话且无分析) 静默跳过, 不产生空 LLM 调用与空内容行.
+ *           无会话消息时静默跳过, 不产生空 LLM 调用与空内容行.
  *           <b>线程纪律</b>: 调用方线程 (调度/测试/未来 HTTP 触发) 普遍没有"安全" Vert.x 上下文, Panache
  *           会话操作在该线程直接执行会同步抛 "No current Vertx context" — 故链式执行统一经
  *           {@link #runWithContext} 逐次建立安全 duplicated context 跳板 (ClinicalRetentionCleaner 先例),
  *           阻塞 LLM 调用再经 {@code vertx.executeBlocking} 切 worker 线程 (HR000068/069, ChatService 同款);
  *           外层只暴露非阻塞 Uni, 调度线程/事件循环零阻塞.
+ * @implNote 日记双输入已随日记域砍除 (走查裁决 2026-10-03): 输入收敛为会话摘录单源.
  * @since 1.5.0
  */
 @SuppressWarnings("unused")//! AI Agent 为 Quarkus 运行时生成 Bean, IDE 静态分析误报注入点未满足依赖
-//! (EmotionAnalysisService 同款先例, 该告警为存量口径; 运行时装配由集成测试钉死).
+//! (该告警为存量口径; 运行时装配由集成测试钉死).
 @ApplicationScoped
 public final class DailySummaryGenerator
 {
@@ -58,7 +57,7 @@ public final class DailySummaryGenerator
     static final int EXCERPT_MESSAGE_MAX_CHARS = 120;
     //* 落库内容硬上限 (字): 一句总结 + 行动建议的合理量级, 提示词侧 80 字软约束的兜底.
     static final int CONTENT_MAX_CHARS = 200;
-    //* 调度活跃窗 (天): 近 7 天有过会话或日记的用户才进入生成名单 (计划书契约).
+    //* 调度活跃窗 (天): 近 7 天有过会话的用户才进入生成名单 (计划书契约).
     static final int ACTIVE_WINDOW_DAYS = 7;
     //* 单用户生成链的硬超时: LLM 自身受 quarkus.langchain4j.openai.timeout 约束, 此处兜住 DB 池耗尽等
     //* 无界悬挂, 防止串行调度链被单个用户卡死整晚.
@@ -106,7 +105,7 @@ public final class DailySummaryGenerator
     }
 
     /**
-     * 聚合活跃窗内的用户名单: 近期有会话或日记的用户去重并集.
+     * 聚合活跃窗内的用户名单: 近期有会话的用户去重.
      *
      * @param cutoff 活跃下界时刻 (含)
      * @return 去重后的用户 ID 列表 (可能为空, 恒非 null, 无稳定排序保证)
@@ -114,15 +113,8 @@ public final class DailySummaryGenerator
     Uni<List<UUID>> activeUserIdsSince(@NotNull Instant cutoff)
     {
         return runWithContext(() -> Panache.withSession(() ->
-            //* 两路查询串行而非 Uni.combine 并联: 同一 HR session 上的并发查询会触发
-            //* "Illegal pop() with non-matching JdbcValuesSourceProcessingState", 调度场景串行时延可忽略.
             AiChatSession.findUpdatedSince(cutoff).
-                flatMap(sessions -> MoodDiary.findCreatedSince(cutoff).map(diaries ->
-                    Stream.concat(
-                            sessions.stream().map(s -> s.userId),
-                            diaries.stream().map(d -> d.userId)).
-                        distinct().
-                        toList()))
+                map(sessions -> sessions.stream().map(s -> s.userId).distinct().toList())
         ));
     }
     //endregion
@@ -155,18 +147,18 @@ public final class DailySummaryGenerator
     private @NotNull Uni<Void> generatePipeline(@NotNull UUID userId, @NotNull LocalDate date)
     {
         return Panache.withSession(() -> gatherInputs(userId)).
-            flatMap(inputs ->
+            flatMap(excerpt ->
             {
-                //* 双输入全空: 无话可总结, 静默跳过 (零 LLM 调用零落库), debug 级留痕即可.
-                if(inputs == null)
+                //* 无会话消息: 无话可总结, 静默跳过 (零 LLM 调用零落库), debug 级留痕即可.
+                if(excerpt == null)
                 {
-                    LOG.debug("每日总结跳过 (无会话且无分析输入): userId={}", userId);
+                    LOG.debug("每日总结跳过 (无会话输入): userId={}", userId);
                     return Uni.createFrom().voidItem();
                 }
                 //! HR000068/069: 阻塞 LLM 调用必须经 executeBlocking 在 worker 线程执行,
                 //! 结果回事件循环后再续 Panache 链 — 直接在本上下文调用会阻塞事件循环.
                 return vertx.executeBlocking(
-                        () -> agent.summarize(AiPromptConstants.DAILY_SUMMARY_SYSTEM_PROMPT, inputs.sessionExcerpt(), inputs.analysisDigest()),
+                        () -> agent.summarize(AiPromptConstants.DAILY_SUMMARY_SYSTEM_PROMPT, excerpt),
                         false
                     ).
                     onItem().transform(DailySummaryGenerator::normalizedContent).
@@ -212,23 +204,19 @@ public final class DailySummaryGenerator
     //endregion
 
     //region 输入聚合
-    //* 双输入快照: 两字段均保证非 null (缺席以空串占位), 全空时 gatherInputs 发出 null 项.
-    private record SummaryInputs(@NotNull String sessionExcerpt, @NotNull String analysisDigest) {}
-
     /**
-     * 聚合总结输入: 最近会话消息摘录 + 最近一次情绪分析摘记.
+     * 聚合总结输入: 最近会话消息摘录 (单源, 日记双输入已随日记域砍除).
      *
      * @param userId 用户 ID
-     * @return 输入快照; 双输入全空时以 {@code null} 项完成 (调用方跳过本轮生成)
+     * @return 摘录串; 全空时以 {@code null} 项完成 (调用方跳过本轮生成)
      */
-    private @NotNull Uni<@Nullable SummaryInputs> gatherInputs(@NotNull UUID userId)
+    private @NotNull Uni<@Nullable String> gatherInputs(@NotNull UUID userId)
     {
         return AiChatSession.findByUserId(userId).
-            flatMap(sessions ->
+            map(sessions ->
             {
                 final var excerpt = buildExcerpt(sessions);
-                return latestAnalysisDigest(userId).
-                    map(digest -> excerpt.isBlank() && digest.isBlank() ? null : new SummaryInputs(excerpt, digest));
+                return excerpt.isBlank() ? null : excerpt;  //* 全空以 null 项表达 (调用方跳过本轮), 语义与原双输入版对齐.
             });
     }
 
@@ -273,43 +261,6 @@ public final class DailySummaryGenerator
         {
             LOG.warn("解析会话消息失败, 该会话跳过摘录: {}", e.getMessage());
             return List.of();
-        }
-    }
-
-    /**
-     * 取最近一条带分析结果日记的情绪摘记.
-     *
-     * @param userId 用户 ID
-     * @return 摘记串 (summary/天气/三值分); 无记录或解析失败为空串 (输入侧 fail-open, 不抛错)
-     */
-    private static @NotNull Uni<@NotNull String> latestAnalysisDigest(@NotNull UUID userId)
-    {
-        return MoodDiary.
-            find("userId = ?1 AND analysisResult IS NOT NULL ORDER BY createdAt DESC", userId).
-            <MoodDiary>firstResult().
-            map(diary -> diary == null ? "" : digestAnalysis(diary.analysisResult));
-    }
-
-    //* 情绪分析摘记取 summary + weather + 三值分: summary 是共情文本主体, 数值供模型感知量级,
-    //* warningLevel/warningReason 有意排除 — 每日总结面向用户, 预警字段属机构侧信息, 严禁回流进用户可见文案.
-    private static @NotNull String digestAnalysis(@Nullable String analysisJson)
-    {
-        if(analysisJson == null || analysisJson.isBlank())
-            return "";
-        try
-        {
-            final var map = JsonUtils.parseJson(analysisJson, new TypeReference<Map<String, Object>>() {});
-            return PrintUtils.quickFormat("summary={}, weather={}, positive={}, negative={}, anxiety={}",
-                truncate(String.valueOf(map.getOrDefault("summary", "")), EXCERPT_MESSAGE_MAX_CHARS),
-                map.getOrDefault("weather", ""),
-                map.getOrDefault("positive", ""),
-                map.getOrDefault("negative", ""),
-                map.getOrDefault("anxiety", ""));
-        }
-        catch(Exception e)
-        {
-            LOG.warn("解析情绪分析结果失败, 该条跳过摘录: {}", e.getMessage());
-            return "";
         }
     }
 

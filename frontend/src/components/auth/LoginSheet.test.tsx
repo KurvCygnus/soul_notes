@@ -37,7 +37,7 @@ describe('LoginSheet (登录浮层)', () =>
     it('未勾协议: 填满账号密码提交仍禁用; 勾选解禁; 协议链接浮层内展开且不关浮层', async () =>
     {
         const user = userEvent.setup()
-        render(<LoginSheet onAuthed={vi.fn()} onCancel={vi.fn()} />)
+        render(<LoginSheet open onAuthed={vi.fn()} onCancel={vi.fn()} />)
         await user.type(screen.getByLabelText('用户名'), 'stu')
         await user.type(screen.getByLabelText('密码'), 'pw123456')
         expect(screen.getByRole('button', { name: '登录' })).toBeDisabled()
@@ -54,7 +54,7 @@ describe('LoginSheet (登录浮层)', () =>
         vi.mocked(login).mockResolvedValue(STUDENT)
         const onAuthed = vi.fn()
         const user = userEvent.setup()
-        render(<LoginSheet onAuthed={onAuthed} onCancel={vi.fn()} />)
+        render(<LoginSheet open onAuthed={onAuthed} onCancel={vi.fn()} />)
         await fillAndAgree(user)
         await user.click(screen.getByRole('button', { name: '登录' }))
         expect(login).toHaveBeenCalledWith('stu', 'pw123456')
@@ -67,7 +67,7 @@ describe('LoginSheet (登录浮层)', () =>
         vi.mocked(register).mockResolvedValue(STUDENT)
         const onAuthed = vi.fn()
         const user = userEvent.setup()
-        render(<LoginSheet onAuthed={onAuthed} onCancel={vi.fn()} />)
+        render(<LoginSheet open onAuthed={onAuthed} onCancel={vi.fn()} />)
         await user.click(screen.getByRole('button', { name: '切换注册' }))
         await fillAndAgree(user)
         await user.click(screen.getByRole('button', { name: '注册' }))
@@ -81,7 +81,7 @@ describe('LoginSheet (登录浮层)', () =>
         vi.mocked(login).mockResolvedValue(COUNSELOR)
         const onAuthed = vi.fn()
         const user = userEvent.setup()
-        render(<LoginSheet onAuthed={onAuthed} onCancel={vi.fn()} />)
+        render(<LoginSheet open onAuthed={onAuthed} onCancel={vi.fn()} />)
         await fillAndAgree(user)
         await user.click(screen.getByRole('button', { name: '登录' }))
         expect(toast).toHaveBeenCalledWith('请使用咨询员工作台', 'error')
@@ -94,7 +94,7 @@ describe('LoginSheet (登录浮层)', () =>
     {
         const onCancel = vi.fn()
         const user = userEvent.setup()
-        render(<LoginSheet onAuthed={vi.fn()} onCancel={onCancel} />)
+        render(<LoginSheet open onAuthed={vi.fn()} onCancel={onCancel} />)
         //* 复审修复: 浮层必须是语义对话框 (读屏器可识别模态), Escape 是键盘用户的关闭通道.
         expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true')
         await user.keyboard('{Escape}')

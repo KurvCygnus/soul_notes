@@ -15,7 +15,7 @@ import java.util.UUID;
 
 /**
  * 领域数据工具: AI 按需查询今日课表与近期考试.
- * @implNote 仿 {@link UserContextTool} 的 fail-safe 契约 — 任何失败形态降级固定提示文本, 绝不抛出;
+ * @implNote fail-safe 契约 — 任何失败形态降级固定提示文本, 绝不抛出 (原仿 UserContextTool 先例, 该工具已随日记域砍除):
  *           {@code ai.domain.tool.enabled=false} (默认) 时返回固定未开启提示.
  * @since 1.5.0
  */

@@ -1,5 +1,5 @@
-//* 日记域 API (homepage-v2 Task 9 收敛): 仅余语音上传 — 语音转写结果回填聊天输入, 多模态入口的文本侧起点.
-//* createDiary/getWeather 已移除 (D16 记一笔移除 + D14 天气 UI 废除): 后端端点原样保留, 前端不再消费.
+//* 语音域 API: 语音上传 — 转写结果回填聊天输入, 多模态入口的文本侧起点.
+//* (原日记域 API 收敛于此并随日记域砍除更名 voice.ts, 走查裁决 2026-10-03; createDiary/getWeather 已移除.)
 import { api } from './http'
 import type { VoiceUploadResponse } from '../types'
 
