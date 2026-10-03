@@ -162,8 +162,15 @@ public final class ChatService
                     fireSessionTitle(session, firstExchangeRef.get(), req.content(), outcome.visible());
                 }
             ).
-            map(outcome -> new ChatMessageVo("assistant", outcome.visible(), Instant.now())
-        );
+            map(outcome ->
+                {
+                    final var session = Objects.requireNonNull(
+                        sessionRef.get(),
+                        "Param \"session\" must not be null!"
+                    );
+                    return new ChatMessageVo("assistant", outcome.visible(), Instant.now(), session.id.toString());
+                }
+            );
     }
 
     /**

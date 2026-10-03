@@ -58,7 +58,21 @@ public final class ConfigView
      * @throws IllegalStateException 配置文件存在但读取失败 — 文件损坏属用户可修复错误, 明确报错优于静默
      * @since 1.1.0
      */
-    public static @NotNull ConfigView loadIn(@NotNull Path workDir)
+    public static @NotNull ConfigView loadIn(@NotNull Path workDir) { return loadIn(workDir, Map.copyOf(System.getenv())); }
+
+    /**
+     * 以指定工作目录与环境快照加载配置视图: 读取 {@code workDir/config/application.properties} (存在时),
+     * 环境变量用调用方给定快照而非进程实况.
+     *
+     * @param workDir 工作目录, {@code config/application.properties} 的查找根
+     * @param envSnapshot 环境变量快照 — 测试隔离入口: 向导单测用真实 env 名做夹具 (SOULNOTES_DB_* 等),
+     *                    进程实况 (如集成测试注入的 SOULNOTES_DB_PASSWORD) 会把夹具的 "未配置" 前提打穿,
+     *                    脚本队列错位致断言雪崩 (全量跑实测), 测试侧一律传空快照
+     * @return 配置视图
+     * @throws IllegalStateException 配置文件存在但读取失败 — 文件损坏属用户可修复错误, 明确报错优于静默
+     * @since 1.6.0
+     */
+    public static @NotNull ConfigView loadIn(@NotNull Path workDir, @NotNull Map<String, String> envSnapshot)
     {
         final var props = new Properties();
         final var file = workDir.resolve("config").resolve("application.properties");
@@ -74,7 +88,7 @@ public final class ConfigView
                 //! 文件损坏属用户可修复错误, 明确报错优于静默.
                 throw new IllegalStateException(PrintUtils.quickFormat("读取 {} 失败", file), e);
             }
-        return new ConfigView(snapshotSysProps(), Map.copyOf(System.getenv()), props);
+        return new ConfigView(snapshotSysProps(), Map.copyOf(envSnapshot), props);
     }
 
     //* System.getProperties() 是 Hashtable<Object,Object>, 而 Map.copyOf 需要 Map<String,String>, 必须安全收窄.

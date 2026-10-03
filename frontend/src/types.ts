@@ -36,11 +36,13 @@ export type ChatSessionVo = {
 
 export type ChatRole = 'user' | 'assistant'
 
-//* POST /chat/send 的回复负载, 即后端 ChatMessageVo (timestamp 服务端生成).
+//* POST /chat/send 的回复负载, 即后端 ChatMessageVo (timestamp 服务端生成;
+//* sessionId = 实际写入的会话 ID, 与流式 meta 事件对齐 — 降级路径据此绑定会话).
 export type ChatMessageVo = {
     role: ChatRole
     content: string
     timestamp: string
+    sessionId: string | null
 }
 
 //* 前端统一消息形态: 流式路径无 timestamp, 故可选.
@@ -55,43 +57,6 @@ export type ChatHistoryMessage = {
     role: ChatRole
     content: string
     ts?: string | null
-}
-
-//endregion
-
-//region 日记与情绪天气
-
-//* POST /diaries 响应, 即后端 DiaryResponse (analysisResult 容错解析, 失败时为 null).
-export type DiaryItem = {
-    id: number
-    userId: string
-    content: string | null
-    audioUrl: string | null
-    analysisResult: AnalysisResult | null
-    createdAt: string
-}
-
-//* 情感分析结果, 对应 analysisResult JSONB 的结构化映射.
-export type AnalysisResult = {
-    positive: number
-    negative: number
-    anxiety: number
-    weather: string
-    warningLevel: string
-    summary?: string | null
-}
-
-//* weatherType 线上为枚举名字符串; 容忍对象形态 (如 {name:"SUNNY"}), 由消费方归一化.
-export type WeatherTypeRaw = string | { name?: string }
-
-//* GET /diaries/weather?start&end 条目, 即后端 EmotionWeatherVo.
-export type WeatherDay = {
-    date: string
-    weatherType: WeatherTypeRaw
-    positiveAvg: number
-    negativeAvg: number
-    anxietyAvg: number
-    entryCount: number
 }
 
 //endregion

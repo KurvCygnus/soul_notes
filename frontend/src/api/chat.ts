@@ -2,7 +2,7 @@
 //! 路径均为全量 `/api/v1/...`: [[api]] 不做前缀拼接, 依赖 Vite/网关按 `/api` 前缀转发, 半路径会绕过代理.
 import { ApiError, api, getToken } from './http'
 import { createSseParser } from '../utils/sse'
-import type { ChatHistoryMessage, ChatMessage, ChatSessionVo } from '../types'
+import type { ChatHistoryMessage, ChatMessageVo, ChatSessionVo } from '../types'
 
 //region 流式主路径
 
@@ -111,8 +111,9 @@ function routeEvent(data: string, opts: IStreamOptions): void
 
 //region 非流式降级与会话管理
 
+//* 非流式降级路径: 响应即 ChatMessageVo (含 sessionId — 与流式 meta 事件对齐的会话绑定依据).
 export const sendMessage = (sessionId: string | null, content: string) =>
-    api<ChatMessage>('/api/v1/chat/send', { method: 'POST', body: { sessionId, content } })
+    api<ChatMessageVo>('/api/v1/chat/send', { method: 'POST', body: { sessionId, content } })
 
 export const listSessions = () => api<ChatSessionVo[]>('/api/v1/chat/sessions')
 

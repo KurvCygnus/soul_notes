@@ -234,6 +234,13 @@ export function useChatSend({ sessions, openRequest, reloadSessions }: IUseChatS
                     {
                         if(!aliveRef.current || genRef.current !== gen)
                             return
+                        if(sessionIdRef.current == null && reply.sessionId != null)
+                        {
+                            //* 降级路径的 meta 对齐 (fast-follow 补齐): 新建会话的降级回复携带实际会话 ID,
+                            //* 不绑定则后续发送每条都新建会话 (走查实测同款缺陷在流式路径已由 meta 消除).
+                            sessionIdRef.current = reply.sessionId
+                            setActiveSessionId(reply.sessionId)
+                        }
                         setStreaming(false)
                         setMessages(prev => applyReply(prev, reply))
                         finalizeSend(gen)
