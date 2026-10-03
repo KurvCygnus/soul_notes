@@ -58,7 +58,6 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 - prod 必配项缺席: `SOULNOTES_DB_USER` / `SOULNOTES_DB_PASSWORD` / `SOULNOTES_JWT_SECRET` (dev 由 `application-dev.properties` 放宽)
 - JWT 密钥长度 >= 32 字节: 显式弱值不分 profile 一律 BLOCK
 - AI 密钥未配置 (为空或为占位符 placeholder): 请经 Setup 向导或环境变量提供 (不分 profile, 无 dev 放宽)
-- 情绪天气阈值: 每项处于 [0,1] 且 `storm > rainy > overcast` 严格递减 (否则雨天/阴天分支不可达)
 - 数据库可达性五态: 探测结果为不可达 / 认证失败 / 库不存在 / schema 缺失均 BLOCK (配置向导可自动建库建表, 见 §2)
 
 **WARN 规则 (仅警告, 不阻断)**:
@@ -140,16 +139,10 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 | `SOULNOTES_RATE_LIMIT_VOICE`          | 语音上传限流上限 (次/分钟, 本地转录单请求成本高)       | `10`                                      |
 | `SOULNOTES_VOICE_DIR`                 | 语音文件存储目录, 容器部署建议挂载 PVC                 | `voice_uploads`                           |
 | `SOULNOTES_VOICE_MAX_BYTES`           | 语音单文件大小上限 (字节)                              | `10485760`                                |
-| `SOULNOTES_WEATHER_STORM`             | 风暴阈值 (焦虑或负向均值 >= 阈值)                      | `0.8`                                     |
-| `SOULNOTES_WEATHER_RAINY`             | 雨天阈值 (负向均值 >= 阈值)                            | `0.6`                                     |
-| `SOULNOTES_WEATHER_OVERCAST`          | 阴天阈值 (负向均值 >= 阈值)                            | `0.4`                                     |
-| `SOULNOTES_WEATHER_SUNNY`             | 晴天阈值 (正向均值 >= 阈值)                            | `0.6`                                     |
 | `SOULNOTES_CHAT_HISTORY_MAX`          | 对话历史滚动上限 (条)                                  | `50`                                      |
-| `SOULNOTES_MOOD_RECENT_DAYS`          | 用户上下文工具回溯近期日记/情绪记录的天数              | `7`                                       |
 | `SOULNOTES_AI_DOMAIN_TOOL`            | 领域数据工具开关 (开启后 AI 可按需查询课表/考试; 取数源见下文 `ai.domain.adapter`) | `false`                                   |
 | `SOULNOTES_PROMPT_EMPATHETIC_CHAT`    | 共情倾听系统提示词覆盖, 留空使用内置默认               | 空                                        |
 | `SOULNOTES_PROMPT_WARNING_DETECTION`  | 预警分级提示词覆盖, 留空使用内置默认 (覆盖时机构自担分级标准漂移风险) | 空                         |
-| `SOULNOTES_PROMPT_MOOD_ANALYSIS`      | 情绪分析提示词覆盖, 留空使用内置默认                   | 空                                        |
 
 领域集成取数源无专用 `SOULNOTES_*` 键, 以配置键 `ai.domain.adapter` 直接覆盖 (系统属性 / 自定义配置文件均可): `none` (默认, 情境注入 / 情境端点 / 领域工具取数链路全空集静默) 或 `simulated` (内置模拟校园数据源, 演示与联调用, 已预留真实教务适配器位). 组合语义: 工具关闭 (`ai.domain.tool.enabled=false`, 默认) 时无论 adapter 取值, AI 按需查询仅得 "该功能未开启"; 工具开启 + `adapter=none` 时取数为空, AI 得 "暂无近期安排信息" (无数据提示, 并非未开启); 工具开启 + `adapter=simulated` 时返回课表/考试数据; 学生情境接口 `GET /api/v1/context/summary` 在 `adapter=none` 时恒为三空数组; 取数失败/超时统一 fail-open 降级空集, 绝不影响对话与预警主链路.
 
@@ -277,9 +270,9 @@ Webhook 行为契约:
 - RED 预警时 `POST` JSON 负载: `{type: "RED_ALERT", userId, level: "RED", reason, hotline}`
 - `SOULNOTES_ALERT_WEBHOOK_TOKEN` 非空时请求携带 `Authorization: Bearer <token>`, 空 = 不带鉴权头
 
-五渠道共同安全边界 (fire-and-forget): 3s 超时, 网络失败/非 2xx/业务错误码 (钉钉/企微机器人以 HTTP 200 + `errcode` 非 0 表达加签错/密钥失效/限流) 一律仅记 WARN 日志, 绝不阻塞或影响 WS 主预警链路; 预警分发语义: **聊天与日记两条链路**的 RED 均经 `AlertDispatchService` 统一收口后逐渠道 fan-out (聊天 `ChatService` 检测用户消息, 日记 `EmotionAnalysisService` 检测日记内容), 新增渠道零调用方改动.
+五渠道共同安全边界 (fire-and-forget): 3s 超时, 网络失败/非 2xx/业务错误码 (钉钉/企微机器人以 HTTP 200 + `errcode` 非 0 表达加签错/密钥失效/限流) 一律仅记 WARN 日志, 绝不阻塞或影响 WS 主预警链路; 预警分发语义: 聊天链路的 RED 经 `AlertDispatchService` 统一收口后逐渠道 fan-out (`ChatService` 检测用户消息), 新增渠道零调用方改动.
 
-触达频度运维注意: 全链 (聊天 + 日记) 的 RED 外呼统一过 per-user 冷却窗口 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用): 同一学生窗口期内重复 RED 预警不再重复触达外呼渠道 — 日记链路创建即分析且无请求级限流, 连发 RED 日记对值班手机/群的轰炸面由此收敛, 机构侧仍应据此评估值班短信/群的承载预期. 冷却只抑制外呼触达, 窗口内重复预警仍落库 (`warningTriggered` + 副医生评估) 并在工作台可见, 不会漏记.
+触达频度运维注意: 聊天链路的 RED 外呼统一过 per-user 冷却窗口 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用): 同一学生窗口期内重复 RED 预警不再重复触达外呼渠道, 机构侧仍应据此评估值班短信/群的承载预期. 冷却只抑制外呼触达, 窗口内重复预警仍落库 (`warningTriggered` + 副医生评估) 并在工作台可见, 不会漏记.
 
 短信渠道前置 (阿里云报审指引):
 
