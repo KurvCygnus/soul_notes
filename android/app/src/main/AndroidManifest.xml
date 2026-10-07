@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--* 语音输入 (getUserMedia) 的运行时权限; 授权桥在 MicPermissionBridge (Task 8). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--* 数据面联网 (终审 Critical-1): API/SSE/WS 跨域直连远程后端全走网络 — 缺此权限真机全部请求静默失败. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--* 扩展通知 (P3 Task 2): WS ext-notification 后台态经 NotificationBridge 发系统通知 — opt-in 语义:
+         API 33+ 需运行时授权, 未授权默认零通知; 26-32 无此运行时项 (默认可通知, 可在系统设置关闭). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/AppTheme"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true">
+        <!--* uiMode 在 configChanges 列内与 MainActivity#onConfigurationChanged 成对 (D1 防御修复):
+             夜间态翻转不重建 Activity, 由壳拦截并经 __SoulShell.onSystemModeChange 前推前端. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

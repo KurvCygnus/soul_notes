@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--* release 变体 (D4): 分发面只允许 https. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

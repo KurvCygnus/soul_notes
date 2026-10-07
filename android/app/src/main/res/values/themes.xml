@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--* 全屏 WebView 壳用系统 Theme.Material 最低基座: 视觉全部由前端令牌接管, 原生侧只保证启动瞬间背景色近前端雾杉暗色 bg 底色. -->
+    <!--! XML 注释内禁止出现双连字符, 前端 CSS 变量的字面写法无法保留在注释中. -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#181B18</item>
+        <item name="android:statusBarColor">#181B18</item>
+        <item name="android:navigationBarColor">#181B18</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">心灵札记</string>
+    <!--* 扩展通知渠道名 (P3 Task 2): 系统设置通知页展示用. -->
+    <string name="channel_ext_name">扩展提醒</string>
+</resources>

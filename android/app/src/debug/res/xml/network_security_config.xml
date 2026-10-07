@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--* debug 变体 (D4): 10.0.2.2 模拟器环回与局域网真机调试均为明文 HTTP, 仅此放开. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

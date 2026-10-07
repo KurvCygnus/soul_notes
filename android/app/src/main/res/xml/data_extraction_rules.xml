@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--* 隐私红线 (spec §8): 心理对话缓存/JWT 不进云备份与设备迁移. allowBackup=false 之外再显式排除. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>
