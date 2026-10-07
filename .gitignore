@@ -73,3 +73,14 @@ DEV.md
 /backend/config/
 /backend/asr-model/
 /backend/vosk-*.zip
+
+# Android Studio 生成的 SDK 指针 (任何位置都不入库)
+local.properties
+
+# Android 壳产物
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/*.jks

@@ -4,8 +4,8 @@
 
 Soul Notes 是一个**可插拔, 高度可配置的心理健康咨询基础平台** (能力点接口化 + 环境变量/配置向导组装), 当前以"高校场景预置包"发行 — 即面向大学生的多模态 AI 心理轻干预系统后端, 提供:
 
-- **多模态输入**: 语音 (本地 Vosk 引擎同步转录) 与文字, 统一进入 `Voice -> Text -> LLM 解析 -> 情感分析` 管线
-- **情感分析与可视化**: 实时计算 positive / negative / anxiety 数值, 生成前端"情绪天气预报"数据
+- **多模态输入**: 语音 (本地 Vosk 引擎同步转录) 与文字, 统一进入对话与预警管线
+- **会话体验增强**: 会话标题 AI 自动生成 (首轮交换后); 每日絮语定时生成 (近 7 天会话摘录 → 一句总结 + 行动建议)
 - **共情非医学化对话**: AI 以"心声树洞"倾听者角色回应, 禁止医学诊断标签; 提示词可整体替换
 - **高危预警 (Red Alert)**: 检测到自伤/自杀倾向时, 在线推送弹窗 + 机构 Webhook 冗余 + 离线热线兜底
 - **平台化可插拔点**: ASR 引擎 (`IAsrEngine`) / 预警通知渠道 (`IAlertNotifier`) / 心理知识包 / 提示词 / 身份品牌, 全部经配置替换
@@ -37,6 +37,7 @@ kurvcygnus.soulnotes/
 │   ├── RedisStartupConfig.java        # 启动时初始化 crisis:hotline, 提供响应式热线读取
 │   ├── PromptProvider.java            # 机构提示词覆盖 + 功能契约段合并 (结构化输出管线)
 │   ├── ReactiveJsonStringJdbcType.java# JSONB 真类型 JDBC 映射 (双重编码修复)
+│   ├── BrandResource.java             # /api/v1/brand 品牌与扩展板块显示名下发 (公开只读)
 │   └── prelaunch/                     # Pre-Launch 管线 (CDI 前纯构造运行)
 │       ├── IPreLaunchTask.java        # 任务端口 (Result = Issue 列表)
 │       ├── ConfigValidationTask.java  # 配置规则矩阵 (AI 密钥 BLOCK / ASR WARN / 阈值域与次序 / prod 必配)
@@ -61,7 +62,7 @@ kurvcygnus.soulnotes/
 │   └── PageRequest.java               # 分页参数 (边界 clamp + normalize: @BeanParam 缺席参数收敛默认 第1页/每页20)
 ├── utils/
 │   ├── constants/                     # JwtConstants, ApiEndpointConstants, RedisKeyConstants, AiPromptConstants
-│   ├── enums/                         # UserRole, EmotionWeatherType, WarningLevel, VoiceStatus
+│   ├── enums/                         # UserRole, WarningLevel, VoiceStatus
 │   ├── filter/
 │   │   └── ChatRateLimitFilter.java   # 响应式 Redis 限流 (@ServerRequestFilter)
 │   ├── lint/CallerSensitive.java      # 调用者敏感注解
@@ -70,9 +71,9 @@ kurvcygnus.soulnotes/
 │   └── TimeUtils.java                 # Asia/Shanghai 时区工具
 ├── ai/
 │   ├── agent/                         # @RegisterAiService 声明式接口
-│   │   ├── MoodAnalysisAgent.java     # 情感分析
 │   │   ├── WarningDetectionAgent.java # 预警检测 (NONE/YELLOW/RED)
-│   │   └── EmpatheticChatAgent.java   # 共情对话 (chatSync + TokenStream)
+│   │   ├── EmpatheticChatAgent.java   # 共情对话 (chatSync + TokenStream)
+│   │   └── DailySummaryAgent.java     # 每日絮语生成 (SessionTitleAgent 见 chat 域)
 │   ├── asr/                           # 本地语音识别层 (可插拔引擎 + 运行时管理)
 │   │   ├── IAsrEngine.java            # 引擎端口 (Uni<AsrResult> transcribe)
 │   │   ├── AsrResult.java             # 转录结果 (文本 + 状态机)
@@ -81,14 +82,12 @@ kurvcygnus.soulnotes/
 │   │   ├── AsrRuntimeManager.java     # 运行时目录布局权威 + 模型/动态库自动下载 (IAsrRuntimeControl)
 │   │   └── IAsrRuntimeControl.java    # 向导侧控制端口 (ready/下载, 进度回调)
 │   ├── dto/
-│   │   ├── MoodAnalysisResult.java    # positive/negative/anxiety/weather/summary
 │   │   └── WarningDetectionResult.java# warningLevel/reason/suggestedAction
 │   ├── ClinicalOutputSplitter.java    # <!--soulnotes {...}--> 拆流器 (宽容正则取末块, 优雅降级)
 │   ├── IModelCatalog.java             # AI 模型列表拉取端口 (向导模型选择步)
 │   ├── HttpModelCatalog.java          # /models 拉取实现 (endpoint 规范化 + 扩展字段)
 │   ├── tool/
-│   │   ├── CrisisInterventionTool.java# RED 时返回热线信息
-│   │   └── UserContextTool.java       # 近期情绪摘要 (数据库上下文工具)
+│   │   └── CrisisInterventionTool.java# RED 时返回热线信息
 │   └── retriever/
 │       ├── PsychologyTipsRetriever.java # 心理小知识检索 (知识包消费方)
 │       └── KnowledgePackLoader.java   # knowledge/{pack}/tips.md 块格式加载 + default 回退
@@ -99,16 +98,22 @@ kurvcygnus.soulnotes/
 │   │   ├── resource/AuthResource.java # /auth/register, /login, /logout
 │   │   ├── service/                   # AuthService, TokenService
 │   │   └── security/JwtAuthenticationMechanism.java
-│   ├── diary/
-│   │   ├── entity/MoodDiary.java      # JSONB analysis_result
-│   │   ├── dto/                       # DiaryCreateRequest / DiaryListQuery / DiaryResponse / EmotionWeatherVo
-│   │   ├── resource/DiaryResource.java# CRUD + /weather
-│   │   └── service/                   # DiaryService, EmotionAnalysisService, EmotionWeatherService
 │   ├── chat/
 │   │   ├── entity/AiChatSession.java  # JSONB messages + truncate
 │   │   ├── dto/                       # ChatSendRequest / ChatMessageVo / ChatSessionVo
 │   │   ├── resource/ChatResource.java # /chat/send, /stream (SSE), /sessions, /sessions/{id}/messages, DELETE /sessions/{id}
 │   │   └── service/ChatService.java   # 对话编排 + 预警推送
+│   ├── extension/                     # 数据扩展体系 (SPI 契约 + REST/LLM 双出口, 课表/考试/日程三内置扩展)
+│   │   ├── IDataExtension.java        # 扩展 SPI (name/argsType/query/aiCallCommand, 实现方自持 fail-open)
+│   │   ├── LLMToolSpec.java           # LLM 工具契约 (命令名/描述/参数树, null = 不暴露工具)
+│   │   ├── ISchemaNode.java + Schema  # 参数树节点模型与 JSON Schema 描述 (SPI 零框架依赖)
+│   │   ├── ExtensionRegistry.java     # CDI 收集 + 启动校验 (命名/命令唯一性, 违例经 ExtensionException 拒绝启动)
+│   │   ├── ExtensionToolProvider.java # 扩展 → LLM 工具适配 (langchain4j ToolProvider 动态注册)
+│   │   ├── ExtensionResource.java     # GET /api/v1/ext + POST /{name}/query + PUT /{name}/notify (枚举/查阅/通知开关出口, STUDENT/ADMIN)
+│   │   ├── ExtensionNotificationScheduler.java # 扩展通知调度 (60s tick, Redis SETNX 当日幂等, WS ext-notification 下发, 离线跳过)
+│   │   ├── DomainItems.java           # 三类条目 record (ScheduleItem/ExamItem/AgendaItem)
+│   │   └── builtin/                   # 内置三扩展 timetable/exams/agenda + DemoCampusData 演示数据体
+│   ├── summary/                       # 每日絮语 (03:00 定时批量生成 + 查询端点)
 │   ├── voice/
 │   │   ├── dto/                       # VoiceUploadResponse
 │   │   ├── resource/VoiceResource.java# /upload (同步本地转录), /files/{id}
@@ -182,7 +187,7 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 - 阻塞 AI 调用必须用 `vertx.executeBlocking(() -> blockingCall(), false)` — 在 worker 执行, 结果在事件循环回调
 - **禁止** `Uni.item(supplier).runSubscriptionOn(worker)` 后直接做 DB 操作, 会触发 `HR000068/HR000069` (Session 跨线程)
-- 查询型接口需要 `@WithTransaction` 才会打开 Session (如 `EmotionWeatherService.getWeatherData`)
+- 查询型接口需要 `@WithTransaction` 才会打开 Session (如 `ClinicalAssessmentService` 三视图查询)
 - 流式/后台持久化通过 `Panache.withTransaction` 独立事务完成, 禁止 `await().indefinitely()` 于资源层
 - Redis 操作用响应式 API (`ReactiveRedisDataSource`), 限流过滤器为 `@ServerRequestFilter` 返回 `Uni<Response>`, 全程无阻塞
 
@@ -192,16 +197,28 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 | 场景             | Agent                                         | 模式                                                                     |
 |------------------|-----------------------------------------------|--------------------------------------------------------------------------|
-| 创建日记情感分析 | `MoodAnalysisAgent` + `WarningDetectionAgent` | 后台异步 (AI 失败自动降级)                                               |
 | 对话             | `EmpatheticChatAgent`                         | 同步 `chatSync` + SSE `TokenStream`                                      |
 | 预警检测         | `WarningDetectionAgent`                       | RED 时经 `AlertDispatchService` 冷却闸门分发 + 持久化 `warningTriggered` |
 
-- 系统提示词集中在 `AiPromptConstants` (情感分析 / 预警检测 / 共情对话), 经 `PromptProvider` 支持 `ai.prompt.*` 机构整体覆盖 (留空回退内置)
+- 系统提示词集中在 `AiPromptConstants` (预警检测 / 共情对话 / 每日总结 / 会话标题), 预警与共情经 `PromptProvider` 支持 `ai.prompt.*` 机构整体覆盖 (留空回退内置)
 - 结构化输出管线 ("副医生"预埋): `SOULNOTES_CLINICAL_TAGGING=on` 时共情提示词末尾合并功能契约段 (契约段首行声明优先级最高), 回复末尾的 `<!--soulnotes {...}-->` 块由 `ClinicalOutputSplitter` 拆流 — 落库/返回均为剔除后的正文, 前端仅见文本; 解析失败整条透传 (默认关闭, 控每条消息 token 成本)
-- 工具: `CrisisInterventionTool` (RED 热线), `UserContextTool` (近期情绪摘要)
+- 工具: `CrisisInterventionTool` (RED 热线); 数据扩展工具经 `ExtensionToolProvider` 动态注册 (课表/考试/日程, 见 §6.1)
 - 心理小知识: `PsychologyTipsRetriever` 消费 `KnowledgePackLoader` 加载的知识包 (`knowledge/{pack}/tips.md`, 缺失回退 `default`, 内置 13 条)
 - 模型目录: `HttpModelCatalog` 拉取服务端 `/models` 列表 (向导模型选择步), endpoint 规范化, 扩展字段 (上下文长度/思考能力) 有则显示
-- 配置经 `quarkus.langchain4j.openai.*`; AI 不可用时走兜底 (聊天返回"走神"兜底文案, 日记跳过 analysisResult)
+- 配置经 `quarkus.langchain4j.openai.*`; AI 不可用时走兜底 (聊天返回"走神"兜底文案)
+
+### 6.1 数据扩展体系 (学生情境: 课表/考试/日程)
+
+校园领域数据经数据扩展 SPI (`IDataExtension`) 接入, 设计红线是 **fail-open 边界: 查询任何失败/异常一律降级空集或固定降级文本, 绝不拖垮对话与预警主链路** — 情境是增强项而非必需项, 其缺失不得影响核心体验:
+
+- **SPI 契约** `IDataExtension`: 扩展自述四件套 (`name` / `argsType` / `query` / `aiCallCommand`), 纯值契约零框架依赖; 实现注册为 CDI bean 即同时获得 REST 查阅与 LLM 工具两个出口, 查询失败由实现方自持降级, 绝不向调用方外抛
+- **注册表** `ExtensionRegistry`: 构建期收集全部扩展 bean 并完成启动校验 (命名/命令格式与唯一性, schema 结构不变式), 任一违例经 `ExtensionException` 拒绝启动 (扩展体系唯一硬失败点)
+- **LLM 出口** `ExtensionToolProvider`: 把声明了 `aiCallCommand()` 的扩展动态合成为 langchain4j 工具, 共情 Agent 经 `@RegisterAiService(toolProviderSupplier)` 按调用取用 — userId 由服务端注入 (JWT subject), LLM 参数只承载业务字段; 扩展不声明工具契约即对 Agent 自然缺席
+- **REST 出口** `ExtensionResource`: `GET /api/v1/ext` (枚举形态, 含各扩展的工具契约键) + `POST /api/v1/ext/{name}/query` (按名查阅, STUDENT/ADMIN 角色), 未知名 404, 实现方违约兜底 500 错误外壳
+- **主动通知** `ExtensionNotificationScheduler`: 声明了 `notificationRules()` 的扩展可按用户订阅 (opt-in 默认关) 获得每 60s 一轮的到期调度 — 到期窗口计算在扩展内, 框架只做当日幂等 (Redis SETNX, TTL 86400s, 写失败跳过下发) 与 `/ws/alert` 通道的 `ext-notification` 下发 (离线跳过, 无补偿队列)
+- **内置三扩展** `builtin/`: timetable (今日课表, 按星期) / exams (两周内考试, 锚定取数日 +6/+13/+20, 倒计时恒定不穿帮) / agenda (两周内日程, +2/+4/+9), 演示数据体 `DemoCampusData` 与 userId 无关 (演示场景单账号)
+
+消费端两路: 前端扩展页直查 REST 端点, 共情对话经 LLM 工具按需调用 (提示词仅约束 "与当前话题自然相关时才使用, 像朋友一样自然提及"); 领域数据仅作关怀性增强, 预警判定与分发链路零参与. 扩展体系对第三方的完整接入契约 (SPI 逐方法拆解 / 通知规则 / 前端挂点 / 红线) 见 [EXTENSIONS.md](./EXTENSIONS.md).
 
 ---
 
@@ -211,7 +228,7 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 2. `GET /api/v1/voice/files/{fileId}` 流式返回文件 (fileId 经 UUID 校验防路径穿越)
 3. 仅接受 16kHz 单声道 PCM16 WAV (前端 Web Audio 产出约束), 其他格式 `400 VOICE_FORMAT_UNSUPPORTED`; 转录失败不回 5xx (状态机标记后正常响应); 上传独立限流 (`SOULNOTES_RATE_LIMIT_VOICE`, 默认 10 次/分钟)
 4. `VoskAsrEngine` 经 `VoskFFM` (JDK 25 FFM 直连, 零 JNI/JNA) 驱动 libvosk; 运行时目录布局由 `AsrRuntimeManager` 权威管理 (`<dir>/lib/` + `<dir>/model/`), 未就绪仅 WARN 不阻断启动, 可经向导自动下载或手动放置
-5. 日记语音来源: `DiaryCreateRequest.audioData` (Base64) 解码 -> 落盘 -> 生成 `audioUrl`
+5. 前端录音 (`getUserMedia` → 16kHz 单声道 PCM16 WAV) → 上传转写 → 文本回填聊天输入框, 用户审阅后自行发送
 
 ---
 
@@ -220,15 +237,15 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 - `WebSocketAuthUpgradeCheck`: 升级阶段校验 JWT (header 或 `token` 查询参数) + 黑名单, userId 存入 `UserData`; `/ws/clinical` 前缀端点额外断言 COUNSELOR/ADMIN 角色 (403, 以 `request.path()` 判定), 学生端 `/ws/chat` `/ws/alert` 行为不变
 - `ChatWebSocket` (`/ws/chat`): 接收 JSON 消息, 订阅 `ChatService.streamMessage` 逐 token 推送 (逐消息持久化, WS 专用消息上下文)
 - `ClinicalFeedWebSocket` (`/ws/clinical/feed`): 咨询员工作台实时推送 — `ClinicalFeedHub` 维护 counselorId → 连接映射, register/unregister 均携带连接实例, 注销为条件移除 (防旧连接 close 回调晚于重连 register 到达的竞态); `broadcast(String)` fire-and-forget (无在线咨询员静默跳过, 单连接失败仅 WARN), `ClinicalAssessmentService` 落库后广播 `NEW_ASSESSMENT`
-- RED 预警推送渠道接口化为 `IAlertNotifier` (聊天 `ChatService` 与日记 `EmotionAnalysisService` 经 `AlertDispatchService` 统一收口: per-user RED 冷却闸门 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用) 命中则抑制本次外呼, 放行才逐渠道 fan-out; 冷却只影响外呼触达, 预警落库与工作台可见性不受影响): `WebSocketAlertNotifier` (在线前端, `/ws/alert`, 总是启用) / `WebhookAlertNotifier` (机构服务端, URL 空 = 禁用) / `SmsAlertNotifier` (阿里云短信, 五键齐备才启用, 逐号群发值班咨询员) / `DingTalkAlertNotifier` (钉钉群机器人, webhook 空 = 禁用, 可选加签) / `WeComAlertNotifier` (企业微信群机器人, webhook 空 = 禁用), 渠道互为冗余、同构可扩展; 短信与 IM 渠道同为 fire-and-forget 3s (失败仅 WARN), IM 报文仅含学生标识 / 热线 / 截断 120 字事由, 不含 summary 全文
+- RED 预警推送渠道接口化为 `IAlertNotifier` (聊天 `ChatService` 经 `AlertDispatchService` 统一收口: per-user RED 冷却闸门 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用) 命中则抑制本次外呼, 放行才逐渠道 fan-out; 冷却只影响外呼触达, 预警落库与工作台可见性不受影响): `WebSocketAlertNotifier` (在线前端, `/ws/alert`, 总是启用) / `WebhookAlertNotifier` (机构服务端, URL 空 = 禁用) / `SmsAlertNotifier` (阿里云短信, 五键齐备才启用, 逐号群发值班咨询员) / `DingTalkAlertNotifier` (钉钉群机器人, webhook 空 = 禁用, 可选加签) / `WeComAlertNotifier` (企业微信群机器人, webhook 空 = 禁用), 渠道互为冗余、同构可扩展; 短信与 IM 渠道同为 fire-and-forget 3s (失败仅 WARN), IM 报文仅含学生标识 / 热线 / 截断 120 字事由, 不含 summary 全文
 
 ---
 
 ## 9. 数据流全景
 
 ```text
-前端 (Vue)
-├─ 日记 CRUD / 天气  ->  DiaryResource -> DiaryService / EmotionWeatherService -> PostgreSQL (analysis_result JSONB)
+前端 (React 19 + Vite)
+├─ 扩展页 (课表/考试/日程) -> ExtensionResource -> ExtensionRegistry -> IDataExtension (SPI, fail-open)
 ├─ AI 对话 (SSE/WS)  ->  ChatResource / ChatWebSocket -> ChatService -> EmpatheticChatAgent -> TokenStream (契约开启时经 ClinicalOutputSplitter 拆流)
 ├─ 预警              ->  WarningDetectionAgent (RED) -> AlertDispatchService 冷却闸门 -> IAlertNotifier 五渠道 fan-out (弹窗 + Webhook + 短信 + 钉钉 + 企微)
 ├─ 离线兜底           ->  CrisisResource (/crisis/hotline) <- Redis crisis:hotline <- 静态默认值
@@ -239,12 +256,11 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 ## 10. 关键设计决策
 
-1. **ID 策略**: `users.id` UUID (应用层生成), `mood_diaries.id` BigInt 自增, `ai_chat_sessions.id` UUID
-2. **JSONB**: 存 Java `String`, 经 `JsonUtils` 序列化/反序列化; `analysis_result` 含 positive/negative/anxiety/weather/summary/warningLevel
+1. **ID 策略**: `users.id` / `ai_chat_sessions.id` UUID (应用层生成)
+2. **JSONB**: 存 Java `String`, 经 `JsonUtils` 序列化/反序列化 (会话消息 / 临床评估 tags / 每日总结行)
 3. **会话历史**: `AiChatSession.truncate(50)` 限制 JSONB 无限增长
-4. **天气映射**: 阈值 (`weather.threshold.*`) 外置可配, 边界统一 `>=`
-5. **异常体系**: `IBusinessException.of(ErrorCode, msg, factory, tag)`, tag 用 `WHERE_WHAT_ACTION`, 禁止 `ErrorCode.name()`
-6. **离线安全兜底**: 三级 (离线端点 -> Redis 缓存 -> 静态默认值), 热线不硬编码于业务组件
+4. **异常体系**: `IBusinessException.of(ErrorCode, msg, factory, tag)`, tag 用 `WHERE_WHAT_ACTION`, 禁止 `ErrorCode.name()`
+5. **离线安全兜底**: 三级 (离线端点 -> Redis 缓存 -> 静态默认值), 热线不硬编码于业务组件
 
 ---
 
@@ -270,7 +286,6 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 | `alert.cooldown.minutes` / `SOULNOTES_ALERT_COOLDOWN_MINUTES`    | RED 预警外呼冷却窗口 (分钟, 默认 60, 0 = 禁用; 仅抑制外呼触达, 落库与工作台可见性不受影响)                                                                                                                                                                                                                                         |
 | `crisis.hotline.*`                                               | 热线默认值                                                                                                                                                                                                                                                                                                                         |
 | `voice.storage.directory` / `SOULNOTES_VOICE_DIR`                | 语音文件存储目录                                                                                                                                                                                                                                                                                                                   |
-| `weather.threshold.*`                                            | 天气映射阈值                                                                                                                                                                                                                                                                                                                       |
 | `rate.limit.chat.max-per-minute` / `SOULNOTES_RATE_LIMIT_CHAT`   | 聊天限流上限 (默认 20 次/分钟)                                                                                                                                                                                                                                                                                                     |
 | `rate.limit.login.max-per-minute` / `SOULNOTES_RATE_LIMIT_LOGIN` | 登录限流上限 (默认 10 次/分钟)                                                                                                                                                                                                                                                                                                     |
 | `rate.limit.voice.max-per-minute` / `SOULNOTES_RATE_LIMIT_VOICE` | 语音上传限流上限 (默认 10 次/分钟, 不进向导清单)                                                                                                                                                                                                                                                                                   |
@@ -283,7 +298,7 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 
 ## 12. 测试覆盖
 
-- 单元/集成测试 550 个 (`backend/` 下 `./gradlew :test`), 覆盖: 异常体系 / 工具类 / DTO 边界 / Service 反射逻辑 / Resource 结构 / Agent 签名 / 知识包加载与回退 / 五预警渠道行为 (Webhook 负载与禁用态 / 短信逐号群发与回环验真 / 钉钉企微 markdown 报文与加签 / 阿里云签名纯函数 / 五渠道装配证明) / RED 冷却闸门 (命中抑制全渠道 / 放行 fan-out / 判定失败 fail-open / 0 禁用短路 / per-user 冷却键) / issuer 一致性 / ASR 运行时下载与引擎 (无动态库真机用例 assumeTrue 跳过) / FFM 接口层 / URL 解析 / DB 五态映射 (fake gateway) / 模型列表解析 / zip 下载解压 (本地 fixture) / 配置管线 (Pre-Launch 校验与向导)
+- 单元/集成测试 650+ 个 (`backend/` 下 `./gradlew :test`), 覆盖: 异常体系 / 工具类 / DTO 边界 / Service 反射逻辑 / Resource 结构 / Agent 签名 / 知识包加载与回退 / 五预警渠道行为 (Webhook 负载与禁用态 / 短信逐号群发与回环验真 / 钉钉企微 markdown 报文与加签 / 阿里云签名纯函数 / 五渠道装配证明) / RED 冷却闸门 (命中抑制全渠道 / 放行 fan-out / 判定失败 fail-open / 0 禁用短路 / per-user 冷却键) / issuer 一致性 / ASR 运行时下载与引擎 (无动态库真机用例 assumeTrue 跳过) / FFM 接口层 / URL 解析 / DB 五态映射 (fake gateway) / 模型列表解析 / zip 下载解压 (本地 fixture) / 配置管线 (Pre-Launch 校验与向导) / 数据扩展体系 (Schema 参数树不变式 / 注册表收集与启动校验 / ToolProvider 工具合成与 userId 注入 / 内置三扩展契约与窗口过滤 / REST 枚举与查阅五形态)
 - Mock-LLM 全链路 (OpenAI 兼容零依赖 mock, `src/test/.../support/`): `/chat/send` 与 `/chat/stream` (SSE 分块) / 预警链路 (mock 判 RED → `warning_triggered` 落库) / 工具调用 (`@MemoryId` UUID 透传与工具结果回流) / `/ws/chat` WebSocket 流式 / JSONB 原生查询断言 (`jsonb_typeof`) / 结构化输出契约拆流 (on/off/坏格式三态) / 副医生评估落库全链路 (RED 实名解锁 / YELLOW 掩码脱敏 / NONE 不落库)
 - 咨询员工作台单元层: `RevealPolicy` 解锁矩阵 (RED/YELLOW/NEVER, 非法值回落 RED, 短码跨调用稳定) / `ClinicalAssessmentService` 落库与脱敏视图 / `ClinicalResource` 角色与参数校验 (`@BeanParam` 缺席分页收敛默认 第1页/每页20) / `ClinicalFeedWebSocket` 生命周期与网关角色断言 / `ClinicalRetentionCleaner` (<=0 禁用短路, 正数清理)
 - 语音链路以 `FixedAsrEngine` 固定转录文本注入, 不依赖真实模型与动态库
@@ -295,13 +310,13 @@ Quarkus + Hibernate Reactive 要求所有 DB 操作在**打开 Session 的 Vert.
 - **AI 密钥为硬门槛**: `ai.openai.api-key=placeholder` 或为空时启动校验 BLOCK 拒绝启动 (不分 profile) — 必须经 Setup 向导或环境变量提供有效密钥
 - **密码哈希**: 已落地 PBKDF2WithHmacSHA256 (210k 迭代, OWASP 推荐值, 存储格式 `pbkdf2$<iterations>$<salt>$<hash>`); 原型遗留的 SHA-256 无盐哈希仍可验证, 建议该批用户登录成功后重哈希迁移
 - **ASR 为可插拔能力**: 运行时未就绪仅 WARN 不阻断 (文字链路与离线热线兜底完整可用); `asr.engine` 配置非 `vosk` 值则引擎 Bean 构造即拒绝启动; JVM 模式建议注入 `--enable-native-access=ALL-UNNAMED` 消除 FFM 受限调用告警 (未注入仅告警不影响功能)
-- **`UserContextTool`** 在无 Hibernate 上下文的工具线程执行时降级返回默认文案
 - **结构化输出**: 剥离是主机制, HTML 注释隐形仅是兜底 — 前端若以纯文本渲染, 透传的注释块会以原文可见; 开启时拆流成功且非 NONE 的评估异步落库并推送工作台 (best-effort, 失败仅 WARN 不影响对话)
 - **限流依赖 Redis**: 聊天 (默认 20) / 登录 (默认 10) / 语音上传 (默认 10) 限流均可经 `SOULNOTES_RATE_LIMIT_*` 环境变量覆盖; Redis 不可用时过滤器降级放行 (fail-open)
 - **集成测试依赖本机基础设施**: `@QuarkusTest` 需本机 PostgreSQL (5432) 与 Redis (6379) 在跑, CI 无库环境需后续以 Testcontainers 补齐
+- **扩展查询无超时强制**: `IDataExtension.query` 的 fail-open 降级契约由实现自持, 框架不设时限 — 挂死的第三方扩展将阻塞 LLM 工具循环与 REST worker 线程 (旧 DomainDataGateway 的 2s 超时防线随其退役消失, §6.1 的 "绝不拖垮主链路" 承诺现只覆盖异常不覆盖挂死); 内置三扩展为纯静态数据无此风险, 第三方实现须自行保障非阻塞性
 
 ---
 
 ## 14. 部署与配置
 
-部署形态 (打包运行 / JVM 镜像 / docker-compose / Kubernetes / Native 镜像), 环境变量总表 (53 项 `SOULNOTES_*`), 配置向导与启动前校验, 以及机构集成 (本地 ASR / 预警渠道矩阵 / 知识包 / 结构化输出) 的**单一权威参考是 [CONFIGURATION.md](./CONFIGURATION.md)** — 本文档不再重复维护, 防双源漂移.
+部署形态 (打包运行 / JVM 镜像 / docker-compose / Kubernetes / Native 镜像), 环境变量总表 (48 项 `SOULNOTES_*`), 配置向导与启动前校验, 以及机构集成 (本地 ASR / 预警渠道矩阵 / 知识包 / 结构化输出) 的**单一权威参考是 [CONFIGURATION.md](./CONFIGURATION.md)** — 本文档不再重复维护, 防双源漂移.

@@ -19,6 +19,7 @@ technical requirements of the system:
 ## Universal Principles
 
 * **Dependency Policy**: Use only existing dependencies. Introducing new dependencies or updating existing ones is forbidden. If a new dependency would clearly benefit the project and the developer asks about it, you may explain its value — but **do not add it**. The developer must coordinate with the team before any dependency change.
+* **UI Icon Discipline (SVG-first)**: UI 界面一律 SVG-first — 图标使用手写 stroke SVG (统一经前端 `Icon` 组件渲染, `currentColor` 继承文字色). **禁止使用 Unicode emoji 字符作为 UI 图标** (与界面视觉割裂, 且跨平台渲染不一致); 正文/文案中的标点与符号不受此限.
 * **Comment Conventions**: Use `//*` for critical information, `//!` for potential errors or edge cases, and `//?` for TODOs or build/config explanations. Comments must explain **why**, not **what**. All comments must be written in **Chinese**.
 
    ```java

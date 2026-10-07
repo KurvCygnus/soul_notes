@@ -22,7 +22,7 @@
 
 ## 1. 配置总览
 
-全部配置遵循 12-factor: 每个业务键都是 `application.properties` 中的 `${SOULNOTES_*:default}` 占位 — 环境变量优先, 未配置时回落内置默认, 无需触碰任何文件即可完成覆盖. 53 个 `SOULNOTES_*` 键中 51 项可经 `--setup` 向导交互式配置, 其余 2 项 (品牌名 / 语音限流) 属部署微调, 保持内置默认即可.
+全部配置遵循 12-factor: 每个业务键都是 `application.properties` 中的 `${SOULNOTES_*:default}` 占位 — 环境变量优先, 未配置时回落内置默认, 无需触碰任何文件即可完成覆盖. 48 个 `SOULNOTES_*` 键中 45 项可经 `--setup` 向导交互式配置, 其余 3 项 (品牌名 / 扩展板块显示名 / 语音限流) 属部署微调, 保持内置默认即可.
 
 AI 三项 (`ai.openai.*`) 经 LangChain4j 桥接键 (`quarkus.langchain4j.openai.*`) 引用展开值, 单独配置桥接键不生效. `mp.jwt.verify.issuer` 与 TokenService 签发的 iss claim 共用 `SOULNOTES_JWT_ISSUER` 一个键 (双端天然一致), 中途更换将使全部已发 Token 立即失效.
 
@@ -34,7 +34,7 @@ AI 三项 (`ai.openai.*`) 经 LangChain4j 桥接键 (`quarkus.langchain4j.openai
 java -jar build/quarkus-app/quarkus-run.jar --setup
 ```
 
-- **两种模式**: `1. 简单配置 (仅必填项)` / `2. 全面配置 (全部 51 项)`, 回车默认简单配置
+- **两种模式**: `1. 简单配置 (仅必填项)` / `2. 全面配置 (全部 45 项)`, 回车默认简单配置
 - **键位说明**: 折叠清单按 `序号` 跳转 / `Enter` 顺序遍历 (保存即推进下一项); 展开态输入 `esc` 放弃本次修改; 折叠态输入 `q` 进入配置摘要
 - **就地校验**: 非法输入 (URL scheme / 非数字 / 长度不足) 红字重问; 必填项留空不折叠重问; JWT 密钥留空自动生成 64 字符随机密钥
 - **ASR 运行时交互**: 保存 `SOULNOTES_ASR_ENGINE` / `SOULNOTES_ASR_RUNTIME_DIR` 后自动就绪检查, 未就绪现场询问"是否立即下载", 接受后按 [§7](#7-本地语音识别-asr) 的来源拉取模型 zip 与 libvosk (进度行内回显); 下载失败不中断向导, 可稍后手动放置或重试
@@ -58,7 +58,6 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 - prod 必配项缺席: `SOULNOTES_DB_USER` / `SOULNOTES_DB_PASSWORD` / `SOULNOTES_JWT_SECRET` (dev 由 `application-dev.properties` 放宽)
 - JWT 密钥长度 >= 32 字节: 显式弱值不分 profile 一律 BLOCK
 - AI 密钥未配置 (为空或为占位符 placeholder): 请经 Setup 向导或环境变量提供 (不分 profile, 无 dev 放宽)
-- 情绪天气阈值: 每项处于 [0,1] 且 `storm > rainy > overcast` 严格递减 (否则雨天/阴天分支不可达)
 - 数据库可达性五态: 探测结果为不可达 / 认证失败 / 库不存在 / schema 缺失均 BLOCK (配置向导可自动建库建表, 见 §2)
 
 **WARN 规则 (仅警告, 不阻断)**:
@@ -140,15 +139,11 @@ java -jar build/quarkus-app/quarkus-run.jar --setup
 | `SOULNOTES_RATE_LIMIT_VOICE`          | 语音上传限流上限 (次/分钟, 本地转录单请求成本高)       | `10`                                      |
 | `SOULNOTES_VOICE_DIR`                 | 语音文件存储目录, 容器部署建议挂载 PVC                 | `voice_uploads`                           |
 | `SOULNOTES_VOICE_MAX_BYTES`           | 语音单文件大小上限 (字节)                              | `10485760`                                |
-| `SOULNOTES_WEATHER_STORM`             | 风暴阈值 (焦虑或负向均值 >= 阈值)                      | `0.8`                                     |
-| `SOULNOTES_WEATHER_RAINY`             | 雨天阈值 (负向均值 >= 阈值)                            | `0.6`                                     |
-| `SOULNOTES_WEATHER_OVERCAST`          | 阴天阈值 (负向均值 >= 阈值)                            | `0.4`                                     |
-| `SOULNOTES_WEATHER_SUNNY`             | 晴天阈值 (正向均值 >= 阈值)                            | `0.6`                                     |
 | `SOULNOTES_CHAT_HISTORY_MAX`          | 对话历史滚动上限 (条)                                  | `50`                                      |
-| `SOULNOTES_MOOD_RECENT_DAYS`          | 用户上下文工具回溯近期日记/情绪记录的天数              | `7`                                       |
 | `SOULNOTES_PROMPT_EMPATHETIC_CHAT`    | 共情倾听系统提示词覆盖, 留空使用内置默认               | 空                                        |
 | `SOULNOTES_PROMPT_WARNING_DETECTION`  | 预警分级提示词覆盖, 留空使用内置默认 (覆盖时机构自担分级标准漂移风险) | 空                         |
-| `SOULNOTES_PROMPT_MOOD_ANALYSIS`      | 情绪分析提示词覆盖, 留空使用内置默认                   | 空                                        |
+
+数据扩展 (学生课表/考试/日程等情境数据) 无专用 `SOULNOTES_*` 配置键: 扩展以 CDI bean 接入 (实现 `IDataExtension` SPI 即自动注册生效), REST 查阅经 `GET /api/v1/ext` (枚举) 与 `POST /api/v1/ext/{name}/query` (按名查阅, STUDENT/ADMIN 角色), 扩展主动通知经 `PUT /api/v1/ext/{name}/notify` (按用户×扩展写开关, 默认关), LLM 工具经 ToolProvider (`ExtensionToolProvider`) 自动注册 (声明了工具契约的扩展即对共情 Agent 可见); 查询失败统一 fail-open 降级, 绝不影响对话与预警主链路. 第三方扩展接入的完整契约 (SPI 拆解 / 通知规则 / 前端挂点, 契约数值逐一标注代码出处) 见 [EXTENSIONS.md](./EXTENSIONS.md).
 
 ## 6. 部署
 
@@ -274,9 +269,9 @@ Webhook 行为契约:
 - RED 预警时 `POST` JSON 负载: `{type: "RED_ALERT", userId, level: "RED", reason, hotline}`
 - `SOULNOTES_ALERT_WEBHOOK_TOKEN` 非空时请求携带 `Authorization: Bearer <token>`, 空 = 不带鉴权头
 
-五渠道共同安全边界 (fire-and-forget): 3s 超时, 网络失败/非 2xx/业务错误码 (钉钉/企微机器人以 HTTP 200 + `errcode` 非 0 表达加签错/密钥失效/限流) 一律仅记 WARN 日志, 绝不阻塞或影响 WS 主预警链路; 预警分发语义: **聊天与日记两条链路**的 RED 均经 `AlertDispatchService` 统一收口后逐渠道 fan-out (聊天 `ChatService` 检测用户消息, 日记 `EmotionAnalysisService` 检测日记内容), 新增渠道零调用方改动.
+五渠道共同安全边界 (fire-and-forget): 3s 超时, 网络失败/非 2xx/业务错误码 (钉钉/企微机器人以 HTTP 200 + `errcode` 非 0 表达加签错/密钥失效/限流) 一律仅记 WARN 日志, 绝不阻塞或影响 WS 主预警链路; 预警分发语义: 聊天链路的 RED 经 `AlertDispatchService` 统一收口后逐渠道 fan-out (`ChatService` 检测用户消息), 新增渠道零调用方改动.
 
-触达频度运维注意: 全链 (聊天 + 日记) 的 RED 外呼统一过 per-user 冷却窗口 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用): 同一学生窗口期内重复 RED 预警不再重复触达外呼渠道 — 日记链路创建即分析且无请求级限流, 连发 RED 日记对值班手机/群的轰炸面由此收敛, 机构侧仍应据此评估值班短信/群的承载预期. 冷却只抑制外呼触达, 窗口内重复预警仍落库 (`warningTriggered` + 副医生评估) 并在工作台可见, 不会漏记.
+触达频度运维注意: 聊天链路的 RED 外呼统一过 per-user 冷却窗口 (`SOULNOTES_ALERT_COOLDOWN_MINUTES`, 默认 60 分钟, 0 = 禁用): 同一学生窗口期内重复 RED 预警不再重复触达外呼渠道, 机构侧仍应据此评估值班短信/群的承载预期. 冷却只抑制外呼触达, 窗口内重复预警仍落库 (`warningTriggered` + 副医生评估) 并在工作台可见, 不会漏记.
 
 短信渠道前置 (阿里云报审指引):
 
