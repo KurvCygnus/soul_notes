@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.smallrye.mutiny.Uni;
 import kurvcygnus.soulnotes.domain.chat.entity.AiChatSession;
-import kurvcygnus.soulnotes.domain.diary.entity.MoodDiary;
 import kurvcygnus.soulnotes.support.InfraProbes;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import kurvcygnus.soulnotes.utils.PrintUtils;
@@ -82,7 +81,6 @@ class JsonbPersistenceFormTest
         @SuppressWarnings("resource")//! 工厂生命周期归 JUnit 管理: @AfterAll 统一关闭, 无法纳入 try-with-resources.
         final SessionFactory sessionFactory = new MetadataSources(registry).
             addAnnotatedClass(AiChatSession.class).
-            addAnnotatedClass(MoodDiary.class).
             buildMetadata().
             getSessionFactoryBuilder().
             build();
@@ -142,47 +140,6 @@ class JsonbPersistenceFormTest
         ).await().indefinitely();
     }
 
-    @Test
-    void freshDiary_AnalysisResult_ShouldPersistAsTrueJsonObject()
-    {
-        final var analysisJson = "{\"positive\":0.8,\"negative\":0.2}";
-
-        final var userId = UUID.randomUUID();
-
-        factory.withTransaction((session, transaction) ->
-            {
-                final var diary = new MoodDiary();
-                diary.userId = userId;
-                diary.content = "今天心情不错";
-                diary.analysisResult = analysisJson;
-                diary.createdAt = Instant.now();
-
-                return insertTempUser(session, userId).
-                    chain(_ -> session.persist(diary)).
-                    chain(session::flush).
-                    chain(() -> jsonbTypeOfDiaryAnalysis(session, diary.id)).
-                    invoke(storedType -> assertEquals(
-                        "object", storedType,
-                        PrintUtils.quickFormat("新写入的 analysisResult 应为真 JSON 对象, 实际 jsonb_typeof = {}", storedType)
-                    )).
-                    //* 清除一级缓存后再读: 托管实例会绕过数据库读取器, 读写回路断言将空转.
-                    invoke(_ -> session.clear()).
-                    chain(() -> session.find(MoodDiary.class, diary.id)).
-                    invoke(loaded ->
-                    {
-                        assertNotNull(loaded, "新写入的日记应可读回 (清除一级缓存后须真正走数据库读取器)");
-                        //* jsonb 会把对象键按 "键长优先+字节序" 归一化, 精确文本比对必失败, 断言语义等值.
-                        final var expected = JsonUtils.parseJson(analysisJson, new TypeReference<Map<String, Object>>() { });
-                        final var actual = JsonUtils.parseJson(loaded.analysisResult, new TypeReference<Map<String, Object>>() { });
-                        assertEquals(expected, actual, "读写回路: 对象键序归一化后, 语义应等值");
-                    }).
-                    invoke(_ -> transaction.markForRollback());
-            }
-        ).await().indefinitely();
-    }
-    //endregion
-
-    //region 存量兼容
     @Test
     void legacyStringScalarRow_Messages_ShouldStillReadAsParseableText()
     {
@@ -250,11 +207,5 @@ class JsonbPersistenceFormTest
             getSingleResultOrNull();
     }
 
-    private static Uni<String> jsonbTypeOfDiaryAnalysis(Mutiny.Session session, Long diaryId)
-    {
-        return session.createNativeQuery("select jsonb_typeof(analysis_result) from mood_diaries where id = ?1", String.class).
-            setParameter(1, diaryId).
-            getSingleResultOrNull();
-    }
     //endregion
 }

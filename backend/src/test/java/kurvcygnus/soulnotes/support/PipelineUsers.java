@@ -16,10 +16,11 @@ public final class PipelineUsers
 {
     /**
      * <b>注册账号</b>
+     * @param username 用户名 (重登/直库定位用, 如角色提升测试)
      * @param token 签发的 JWT
      * @param userId 用户 ID (数据库主键, 供查库断言)
      */
-    public record Account(String token, String userId) {}
+    public record Account(String username, String token, String userId) {}
 
     private PipelineUsers() { throw new IllegalAccessError("Class \"PipelineUsers\" is not meant to be instantized!"); }
 
@@ -35,7 +36,7 @@ public final class PipelineUsers
             then().
             statusCode(200).
             extract();
-        return new Account(response.path("data.token"), response.path("data.userId"));
+        return new Account(username, response.path("data.token"), response.path("data.userId"));
     }
 
     public static String bearer(String token) { return PrintUtils.quickFormat("Bearer {}", token); }

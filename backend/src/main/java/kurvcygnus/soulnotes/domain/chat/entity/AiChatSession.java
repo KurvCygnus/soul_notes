@@ -8,6 +8,7 @@ import kurvcygnus.soulnotes.config.ReactiveJsonStringJdbcType;
 import kurvcygnus.soulnotes.utils.JsonUtils;
 import org.hibernate.annotations.JdbcType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,7 +18,8 @@ import java.util.UUID;
 
 /**
  * AI 对话会话实体, 对应 {@code ai_chat_sessions} 表.
- * <p>{@code messages} 字段以 JSONB 存储对话历史 (role/content 数组), 整段历史随会话读写.</p>
+ * <p>{@code messages} 字段以 JSONB 存储对话历史 (role/content/ts 数组, assistant 条目可附带 followups
+ * 候选追问键), 整段历史随会话读写; 存量两键行 (无 ts) 与无追问条目由读取端容错, 不做数据回填.</p>
  *
  * @since 1.0
  */
@@ -28,6 +30,18 @@ import java.util.UUID;
 )
 public final class AiChatSession extends PanacheEntityBase
 {
+    //* 消息条目候选追问键: 值为 List<String> 经 JsonUtils.toJson 整体编码的 JSON 文本,
+    //! 不直接存数组值 — 全部既有读取端 (getMessageList/buildConversationHistory/countMessages/getPreview)
+    //! 以 List<Map<String, String>> 反序列化, 数组值会让该解析直接失败, 二轮对话即 500.
+    private static final String FOLLOWUPS_KEY = "followups";
+
+    //region 常量
+    //* 标题来源判据值: auto = 托管 (自动标题链可写), manual = 人工落定 (标题链永久豁免).
+    //* 两侧消费方: SessionTitleGenerator/SessionTitleBackfiller 以 MANUAL 作写闸门, ChatService 重命名端点落 MANUAL.
+    public static final String TITLE_SOURCE_AUTO   = "auto";
+    public static final String TITLE_SOURCE_MANUAL = "manual";
+    //endregion
+
     //region 字段
     //! 使用 UUID 作为主键, 安全且适合作为会话 ID 直接返回给前端.
     @Id
@@ -45,6 +59,21 @@ public final class AiChatSession extends PanacheEntityBase
     @Column(name = "warning_triggered", nullable = false)
     public boolean warningTriggered;
 
+    //* 会话标题 (首轮交换完成后由 AI 生成, fail-open): 可空 — 存量会话与本轮生成失败前的窗口内为 null,
+    //* null 残留由启动回填器 (SessionTitleBackfiller) 以首条用户消息截断一次性收敛; 运行中窗口读取端以预览兜底.
+    @Column(name = "title")
+    public String title;
+
+    //* 置顶时刻: null = 未置顶, 非空 = 置顶动作的服务端时刻 (列表 VO 透传, 前端据此分组 "置顶" 节).
+    //* 翻转语义收口在 ChatService#togglePin (按当前态取反), 前端不自行推断新状态.
+    @Column(name = "pinned_at")
+    public Instant pinnedAt;
+
+    //* 标题来源 (NOT NULL): 字段初始化 'auto' — 实体所有 new 构造点 (含测试造数) 天然托管, 标题链照常工作;
+    //! 列默认 'manual' 只兜非应用插路径 (存量/SQL 造数): 先于自动化存在的行视为人工语义, 标题链永久豁免.
+    @Column(name = "title_source", nullable = false)
+    public String titleSource = TITLE_SOURCE_AUTO;
+
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt;
     //endregion
@@ -55,13 +84,16 @@ public final class AiChatSession extends PanacheEntityBase
      *
      * @param role    角色: "user" / "assistant"
      * @param content 消息内容
+     * @since 1.5.0 (条目追加 {@code ts} ISO-8601 时间戳; 存量两键行读取端容错为无 ts)
      */
     public void addMessage(@NotNull String role, @NotNull String content)
     {
         final var list = getMessageList();
-        list.add(Map.of("role", role, "content", content));
+        //* ts 与 updatedAt 取同一时刻: 单次捕获保证新条目的消息时间戳与本次落库刷新语义一致.
+        final var now = Instant.now();
+        list.add(Map.of("role", role, "content", content, "ts", now.toString()));
         this.messages = JsonUtils.toJson(list);
-        this.updatedAt = Instant.now();
+        this.updatedAt = now;
     }
 
     /**
@@ -80,6 +112,49 @@ public final class AiChatSession extends PanacheEntityBase
         }
         this.updatedAt = Instant.now();
     }
+
+    /**
+     * 向最近一条 assistant 消息追加候选追问 (消息 JSONB 惯例键 {@code followups}).
+     *
+     * @param followups 追问列表 (恰好 3 条, 由生成器归一化保证)
+     * @return 是否完成追加; 无 assistant 消息 (空会话/历史被截断) 时为 {@code false}, 调用方跳过落库
+     * @implNote 不刷新 {@code updatedAt}: 追问是该轮回复的附属产物, 不参与"最近活跃"排序语义
+     *           (会话标题落库同款先例).
+     * @since 1.8.0
+     */
+    public boolean attachFollowupsToLastAssistant(@NotNull List<String> followups)
+    {
+        final var list = getMessageList();
+        for(var i = list.size() - 1; i >= 0; i--)
+        {
+            final var message = list.get(i);
+            if("assistant".equals(message.get("role")))
+            {
+                message.put(FOLLOWUPS_KEY, JsonUtils.toJson(followups));
+                this.messages = JsonUtils.toJson(list);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 读取单条消息携带的候选追问 (消息 JSONB 惯例键 {@code followups}).
+     *
+     * @param message 消息条目 (可为 {@code null})
+     * @return 追问列表; 未携带/空白/损坏一律为空列表 (存量消息读取端容错, 不做数据回填)
+     * @since 1.8.0
+     */
+    public static @NotNull List<String> followupsOf(@Nullable Map<String, String> message)
+    {
+        if(message == null)
+            return List.of();
+        final var raw = message.get(FOLLOWUPS_KEY);
+        if(raw == null || raw.isBlank())
+            return List.of();
+        try { return JsonUtils.parseJson(raw, new TypeReference<List<String>>() { }); }
+        catch(RuntimeException e) { return List.of(); }//! 损坏键按无追问降级, 绝不让单条消息的历史回放失败.
+    }
     //endregion
 
     //region 静态查询
@@ -90,6 +165,26 @@ public final class AiChatSession extends PanacheEntityBase
      * @return 会话列表 (可能为空, 恒非 null)
      */
     public static @NotNull Uni<List<AiChatSession>> findByUserId(@NotNull UUID userId) { return find("userId = ?1 ORDER BY updatedAt DESC", userId).list(); }
+
+    /**
+     * 查询活跃时间晚于给定时刻的会话, 按更新时间倒序.
+     *
+     * @param cutoff 活跃下界时刻 (含)
+     * @return 会话列表 (可能为空, 恒非 null); 消费方为每日总结的活跃窗聚合, 命中 idx_chat_sessions_user_id 之外的行扫描可接受 (调度低峰路径)
+     * @since 1.5.0
+     */
+    public static @NotNull Uni<List<AiChatSession>> findUpdatedSince(@NotNull Instant cutoff)
+    {
+        return find("updatedAt >= ?1 ORDER BY updatedAt DESC", cutoff).list();
+    }
+
+    /**
+     * 查询无标题会话, 按更新时间倒序.
+     *
+     * @return 会话列表 (可能为空, 恒非 null); 消费方为启动回填 (一次性扫全库, 低频路径可接受)
+     * @since 1.6.0
+     */
+    public static @NotNull Uni<List<AiChatSession>> findTitleless() { return find("title IS NULL ORDER BY updatedAt DESC").list(); }
     //endregion
 
     //region JSON 辅助

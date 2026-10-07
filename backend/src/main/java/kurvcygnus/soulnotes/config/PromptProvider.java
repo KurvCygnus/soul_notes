@@ -20,7 +20,6 @@ public final class PromptProvider
 {
     private final @NotNull Optional<String> empathetic;
     private final @NotNull Optional<String> warning;
-    private final @NotNull Optional<String> mood;
     //* 副医生结构定义 (自然语言): 空白回退 canonical 默认, 非空经 ClinicalSchemaNormalizer 归一化后上线.
     private final @NotNull Optional<String> clinicalSchema;
 
@@ -29,20 +28,17 @@ public final class PromptProvider
      *
      * @param empathetic {@code ai.prompt.empathetic-chat} 覆盖; 缺失时为 empty, 由对应 getter 回退默认
      * @param warning {@code ai.prompt.warning-detection} 覆盖; 缺失时为 empty
-     * @param mood {@code ai.prompt.mood-analysis} 覆盖; 缺失时为 empty
      * @param clinicalSchema {@code ai.prompt.clinical-schema} 覆盖 (副医生结构定义, 自然语言); 缺失时为 empty
      * @since 1.1.0
      */
     public PromptProvider(
         @ConfigProperty(name = "ai.prompt.empathetic-chat") @NotNull Optional<String> empathetic,
         @ConfigProperty(name = "ai.prompt.warning-detection") @NotNull Optional<String> warning,
-        @ConfigProperty(name = "ai.prompt.mood-analysis") @NotNull Optional<String> mood,
         @ConfigProperty(name = "ai.prompt.clinical-schema") @NotNull Optional<String> clinicalSchema
     )
     {
         this.empathetic = empathetic;
         this.warning = warning;
-        this.mood = mood;
         this.clinicalSchema = clinicalSchema;
     }
 
@@ -61,14 +57,6 @@ public final class PromptProvider
      * @since 1.1.0
      */
     public @NotNull String warningDetection() { return effective(warning, AiPromptConstants.WARNING_DETECTION_SYSTEM_PROMPT); }
-
-    /**
-     * 情绪分析系统提示词.
-     *
-     * @return 配置覆盖优先, 空白/缺失回退内置默认; 永不为 null/空白
-     * @since 1.1.0
-     */
-    public @NotNull String moodAnalysis() { return effective(mood, AiPromptConstants.MOOD_ANALYSIS_SYSTEM_PROMPT); }
 
     /**
      * 副医生输出结构定义.

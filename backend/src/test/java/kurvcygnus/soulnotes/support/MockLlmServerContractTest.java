@@ -111,22 +111,45 @@ class MockLlmServerContractTest
         server.respondWithToolCall("getCrisisMessage");
         postChat(chatBody("帮帮我", true, false));
 
-        final var secondRound = postChat(chatBodyWithToolResult("热线 400-161-9995 请立即拨打"));
+        final var secondRound = postChat(chatBodyWithToolResult("热线 400-161-9995 请立即拨打", false));
         final var content = readContent(secondRound.body());
         assertTrue(content.contains("工具结果回显确认"), PrintUtils.quickFormat("次轮应回显工具结果: {}", content));
         assertTrue(content.contains("400-161-9995"), PrintUtils.quickFormat("回显必须包含真实工具输出: {}", content));
         assertEquals(2, server.requests().size(), "工具链路应恰好产生两轮请求");
     }
 
+    //* 流式工具两轮契约 (用户裁定 2026-10-06: 工具调用过程对用户可见): quarkus-langchain4j 的 OpenAI
+    //* 流式客户端对工具轮同样以 stream=true 发送 (OpenAiRestApi 写拦截器按 Accept 头强制 stream=true),
+    //* mock 必须支持 — 首轮 SSE 下发 tool_calls delta, 次轮 (携带 role=tool) SSE 回显文本 chunk.
     @Test
-    void chatCompletion_StreamWithToolRound_ShouldRejectWith500InsteadOfUndefinedBehavior() throws Exception
+    void chatCompletion_ToolMode_StreamRequest_ShouldEmitToolCallDeltaChunksThenDone() throws Exception
     {
-        server.respondWithToolCall("getCrisisMessage");
+        server.respondWithToolCall("query_timetable");
 
-        final var response = postChat(chatBody("帮帮我", true, true));
+        final var payloads = streamChat(chatBody("帮我看看今天有什么课", true, true));
 
-        assertEquals(500, response.statusCode(), PrintUtils.quickFormat("stream=true 与工具轮组合应显式拒绝: {}", response.body()));
-        assertTrue(response.body().contains("不受 mock 支持"), "拒绝消息应说明契约边界");
+        assertFalse(payloads.isEmpty(), "SSE 应至少下发一个事件");
+        assertEquals("[DONE]", payloads.getLast(), PrintUtils.quickFormat("末事件应为完成标记, 实际: {}", payloads));
+        final var toolCalls = readRoot(payloads.getFirst()).path("choices").path(0).path("delta").path("tool_calls");
+        assertTrue(toolCalls.isArray() && !toolCalls.isEmpty(), PrintUtils.quickFormat("首轮应下发 tool_calls delta: {}", payloads));
+        assertEquals("query_timetable", toolCalls.path(0).path("function").path("name").asText(), "tool_calls delta 必须携带编程的函数名");
+    }
+
+    @Test
+    void chatCompletion_ToolMode_StreamSecondRound_ShouldEchoToolResultAsTextChunks() throws Exception
+    {
+        server.respondWithToolCall("query_timetable");
+        streamChat(chatBody("帮我看看今天有什么课", true, true));
+
+        final var payloads = streamChat(chatBodyWithToolResult("[{\"course\":\"线性代数\",\"room\":\"一教 401\"}]", true));
+
+        assertFalse(payloads.isEmpty(), "流式次轮应下发文本 chunk");
+        assertEquals("[DONE]", payloads.getLast(), PrintUtils.quickFormat("末事件应为完成标记, 实际: {}", payloads));
+        final var joined = new StringBuilder();
+        for(final var payload: payloads.subList(0, payloads.size() - 1))
+            joined.append(readRoot(payload).path("choices").path(0).path("delta").path("content").asText());
+        assertTrue(joined.toString().contains("工具结果回显确认"), PrintUtils.quickFormat("流式次轮应回显工具结果: {}", joined));
+        assertTrue(joined.toString().contains("线性代数"), "回显必须包含真实工具输出片段");
     }
     //endregion
 
@@ -154,6 +177,38 @@ class MockLlmServerContractTest
         server.respondWithText("我听到了你的痛苦。");
         final var content = readContent(postChat(chatBody(MockLlmServer.RED_KEYWORD + " 我撑不下去了", true, false)).body());
         assertEquals("我听到了你的痛苦。", content);
+    }
+    //endregion
+
+    //region ⑤ 候选追问 JSON 数组
+    @Test
+    void chatCompletion_FollowupAnchor_ShouldReturnCannedJsonArrayOfThree() throws Exception
+    {
+        //* 锚点词随请求体全文匹配 (真实链路在系统提示词内, 纯契约测试置于 user content 等价).
+        final var response = postChat(chatBody(PrintUtils.quickFormat("{} 帮帮我", MockLlmServer.FOLLOWUP_ANCHOR), false, false));
+        assertEquals(200, response.statusCode());
+        final var content = readContent(response.body());
+        assertEquals(MockLlmServer.FOLLOWUP_REPLY, content,
+            PrintUtils.quickFormat("追问锚点请求应返回 canned JSON 数组: {}", content));
+        assertDoesNotThrow(() -> MAPPER.readTree(content), "canned 追问必须是合法 JSON (生产侧解析容错的对账基准)");
+    }
+
+    @Test
+    void chatCompletion_FollowupErrorArmed_ShouldReturn500() throws Exception
+    {
+        server.failFollowupRequests();
+        final var response = postChat(chatBody(PrintUtils.quickFormat("{} 帮帮我", MockLlmServer.FOLLOWUP_ANCHOR), false, false));
+        assertEquals(500, response.statusCode(), PrintUtils.quickFormat("布防后追问请求应 500: {}", response.body()));
+    }
+
+    @Test
+    void chatCompletion_FollowupAnchorPrecedesTitleAnchor() throws Exception
+    {
+        //* 追问锚点先判: 单锚请求各归各分支, 双锚共存时必须优先路由到追问分支 (路由确定性).
+        final var response = postChat(chatBody(MockLlmServer.TITLE_ANCHOR, false, false));
+        assertEquals(MockLlmServer.TITLE_REPLY, readContent(response.body()), "仅标题锚点命中标题分支");
+        final var both = postChat(chatBody(PrintUtils.quickFormat("{} 与 {}", MockLlmServer.FOLLOWUP_ANCHOR, MockLlmServer.TITLE_ANCHOR), false, false));
+        assertEquals(MockLlmServer.FOLLOWUP_REPLY, readContent(both.body()), "双锚共存时必须优先路由到追问分支");
     }
     //endregion
 
@@ -220,12 +275,13 @@ class MockLlmServerContractTest
         return MAPPER.writeValueAsString(root);
     }
 
-    //* 次轮请求形状: 工具定义仍在 (与真实 LangChain4j 回喂一致) + assistant tool_calls + role=tool 结果消息.
-    private String chatBodyWithToolResult(String toolContent) throws Exception
+    //* 次轮请求形状: 工具定义仍在 (与真实 LangChain4j 回喂一致) + assistant tool_calls + role=tool 结果消息;
+    //* stream 形态供流式工具轮回灌契约用 (真实流式客户端对工具轮同样 stream=true).
+    private String chatBodyWithToolResult(String toolContent, boolean stream) throws Exception
     {
         final var root = MAPPER.createObjectNode();
         root.put("model", "soulnotes-mock-llm");
-        root.put("stream", false);
+        root.put("stream", stream);
         final var tools = root.putArray("tools");
         final var toolDef = tools.addObject();
         toolDef.put("type", "function");

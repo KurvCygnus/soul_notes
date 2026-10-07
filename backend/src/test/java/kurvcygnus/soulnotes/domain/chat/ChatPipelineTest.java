@@ -25,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -71,9 +72,17 @@ class ChatPipelineTest
     @TestHTTPResource(ApiEndpointConstants.CHAT_BASE + "/stream") URI streamUri;
     @TestHTTPResource("/ws/chat") URI wsUri;
 
-    //* 用例隔离: 清空 mock 录制与编程状态, 防止跨用例的请求累积干扰断言.
+    //* 用例隔离: 清空 mock 录制与编程状态, 防止跨用例的请求累积干扰断言;
+    //* 标题列为增量迁移, 测试库可能未应用, 幂等补齐 (SchemaGuards 契约).
     @org.junit.jupiter.api.BeforeEach
-    void rearm() { MockLlmProfile.server().reset(); }
+    void rearm()
+    {
+        kurvcygnus.soulnotes.support.SchemaGuards.ensureChatSessionTitleColumn(sessionFactory);
+        //* 标题列增量之外, 实体映射还消费 pinned_at/title_source 两列 (追问链 PESSIMISTIC_WRITE 读整行):
+        //* 开发库/CI 库可能未应用 08 迁移, 幂等补齐 (Task 8 顺修, SchemaGuards 契约).
+        kurvcygnus.soulnotes.support.SchemaGuards.ensureChatSessionPinRenameColumns(sessionFactory);
+        MockLlmProfile.server().reset();
+    }
 
     //region ① /chat/send 非流式
     @Test
@@ -98,6 +107,22 @@ class ChatPipelineTest
         assertEquals("system", messages.path(0).path("role").asText());
         assertTrue(messages.path(0).path("content").asText().contains("[输出契约]"), "契约段应随 clinical.tagging 注入 systemPrompt");
         assertTrue(messages.path(1).path("content").asText().contains("今天有点累"), "用户消息应出现在 user 消息中");
+    }
+
+    //* 用户裁定 (2026-10-06): AI 的首要任务是帮助用户完成实际需求, 仅当对方主动吐露情绪、寻求情绪支持时
+    //* 才切换「心声树洞」倾听模式 — 声明内嵌于基础提示词 (AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT),
+    //* 经 Mock-LLM 请求录制断言真实下发的 system prompt 携带该声明.
+    @Test
+    void chatSend_SystemPrompt_ShouldDeclareTaskHelpPrimaryAndListenerModeSwitch()
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithText("好, 我帮你看看。");
+
+        chatSend(account.token(), "帮我看看明天有什么安排");
+
+        final var prompt = empatheticSystemPrompt();
+        assertTrue(prompt.contains("首要任务"), PrintUtils.quickFormat("system prompt 必须声明\"首要任务是帮助用户完成实际需求\": {}", prompt));
+        assertTrue(prompt.contains("倾听模式"), PrintUtils.quickFormat("system prompt 必须声明情绪支持时切换倾听模式: {}", prompt));
     }
 
     @Test
@@ -161,6 +186,37 @@ class ChatPipelineTest
         assertFalse(hasToolMessage(firstRound), "首轮不得携带 role=tool 消息");
         assertTrue(hasToolMessage(readTree(toolRequests.getLast(), "次轮请求")), "次轮请求应携带 role=tool 消息 (工具结果回流)");
     }
+
+    //* 用户裁定 (2026-10-06): 工具调用过程必须对用户可见 — 流式链路在工具执行发起时下发
+    //* {"type":"tool-call","name":...,"label":...} 契约事件, label 为扩展自定义文案
+    //* (IDataExtension#toolCallLabel, 课表扩展 = "正在查询课表…"), 工具结果回灌后恢复流式分片.
+    @Test
+    void chatStream_ToolCallRound_ShouldEmitToolCallEventWithExtensionLabel() throws Exception
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithToolCall("query_timetable");
+
+        final var events = streamViaSse(account.token(), "帮我看看今天有什么课");
+
+        final var toolCallPayloads = events.stream().filter(ChatPipelineTest::isToolCallEvent).toList();
+        assertFalse(toolCallPayloads.isEmpty(), PrintUtils.quickFormat("SSE 必须下发 tool-call 契约事件, 实际: {}", events));
+        final var toolCall = readTree(toolCallPayloads.getFirst(), "tool-call 事件");
+        assertEquals("tool-call", toolCall.path("type").asText(), "契约事件 type 必须为 tool-call");
+        assertEquals("query_timetable", toolCall.path("name").asText(), "事件必须携带工具命令名");
+        assertEquals("正在查询课表…", toolCall.path("label").asText(), PrintUtils.quickFormat("label 必须为课表扩展自定义文案: {}", toolCallPayloads.getFirst()));
+
+        //* 工具结果回灌后恢复流式分片: tool-call 事件之后有文本 token, 拼接含工具结果回显 (两轮流式链真实完成).
+        //* mock 的回显前缀跨两个 chunk ("工具结果" + "回显确认: ..."), 以拼接口径断言分片续流.
+        final int toolCallIndex = events.indexOf(toolCallPayloads.getFirst());
+        final var tokensAfter = events.stream().skip(toolCallIndex + 1).filter(p -> !isContractEvent(p)).toList();
+        assertTrue(String.join("", tokensAfter).contains("工具结果回显确认"),
+            PrintUtils.quickFormat("工具结果回灌后应恢复流式分片, 实际: {}", tokensAfter));
+
+        //* 流式客户端工具轮同样走流式请求: 两轮共情请求 (携带 tools) 恰好两轮, 次轮回灌 role=tool.
+        final var toolRequests = MockLlmProfile.server().requests().stream().filter(r -> r.contains("\"tools\"")).toList();
+        assertEquals(2, toolRequests.size(), PrintUtils.quickFormat("流式工具链路应恰好两轮, 实际请求: {}", MockLlmProfile.server().requests().size()));
+        assertTrue(hasToolMessage(readTree(toolRequests.getLast(), "流式次轮请求")), "流式次轮应携带 role=tool 消息 (工具结果回流)");
+    }
     //endregion
 
     //region ④ /chat/stream SSE
@@ -170,21 +226,64 @@ class ChatPipelineTest
         final var account = PipelineUsers.register();
         MockLlmProfile.server().respondWithChunks("夜色", "很温柔", ", 我在这里。");
 
-        final var request = HttpRequest.newBuilder(streamUri).
-            header("Authorization", PipelineUsers.bearer(account.token())).
-            header("Content-Type", "application/json").
-            header("Accept", "text/event-stream").
-            timeout(Duration.ofSeconds(30)).
-            POST(HttpRequest.BodyPublishers.ofString(PrintUtils.quickFormat("{\"content\":\"{}\"}", "给我讲点什么吧"))).
-            build();
+        final var payloads = streamViaSse(account.token(), "给我讲点什么吧");
 
-        final var payloads = new ArrayList<String>();
-        final var response = HTTP.send(request, HttpResponse.BodyHandlers.ofLines());
-        response.body().forEach(line -> { if(line.startsWith("data:")) payloads.add(line.substring("data:".length()).stripLeading()); });
-
-        assertEquals(200, response.statusCode(), "SSE 端点应返回 200");
         assertTrue(payloads.size() >= 2, PrintUtils.quickFormat("应到达多个 SSE chunk, 实际: {}", payloads));
-        assertEquals("夜色很温柔, 我在这里。", String.join("", payloads), "chunk 拼接应等于 mock 文本 (mock 的 [DONE] 由 OpenAI 客户端消费, 不透传前端)");
+        //* @since 1.5.0 流首 meta 事件不计入 token 拼接; @since 1.8.0 流尾 followups 尾随事件同不计数
+        //* (契约信封事件与纯文本 token 的判定见 isContractEvent).
+        final var tokens = payloads.stream().filter(p -> !isContractEvent(p)).toList();
+        assertEquals("夜色很温柔, 我在这里。", String.join("", tokens), "chunk 拼接应等于 mock 文本 (mock 的 [DONE] 由 OpenAI 客户端消费, 不透传前端)");
+    }
+
+    //* @since 1.5.0 meta 契约: SSE 流首事件必须为 meta JSON, 回传本次实际使用的 sessionId,
+    //* 供 chat-first 前端免除"回查会话列表取最新"的启发式竞态直接绑定会话.
+    @Test
+    void chatStream_FirstEventIsMetaWithSessionId() throws Exception
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithChunks("你好", "呀");
+
+        final var events = streamViaSse(account.token(), "最近有点累");
+
+        assertFalse(events.isEmpty(), "SSE 流必须到达事件");
+        final var meta = readTree(events.getFirst(), "流首 meta 事件");
+        assertEquals("meta", meta.path("type").asText(), PrintUtils.quickFormat("流首事件必须为 meta JSON, 实际: {}", events.getFirst()));
+        final var sessionId = assertDoesNotThrow(() -> UUID.fromString(meta.path("sessionId").asText()), "meta 的 sessionId 必须为合法 UUID");
+        assertTrue(events.size() >= 2, PrintUtils.quickFormat("meta 之外还应到达 token 事件, 实际: {}", events));
+
+        //* meta 回传的必须是本次实际使用的会话 (新建会话同样回传): 流收尾即回复已落库, 与最新会话对账.
+        assertEquals(latestSession(account.userId()).id, sessionId, "meta 的 sessionId 必须为实际落库的会话 ID");
+    }
+
+    //* 回归 (线上冒烟): 携既有 sessionId 流式续聊 — SSE 流链 (Multi 返回值) 无环境 Mutiny 会话,
+    //* loadOwnedSession 裸 findById 曾抛 "No current Mutiny.Session found" 500 (error id 237bab41).
+    //* 契约: 200 + 流首 meta 回显该既有 sessionId + meta 之外至少一个 token 事件
+    //* (顺带补齐 B2 meta 契约"既有会话回显"分支的直测, 此前仅新建会话路径有覆盖).
+    @Test
+    void chatStream_ExistingSession_ShouldEchoOwnedSessionIdAndStreamTokens() throws Exception
+    {
+        final var account = PipelineUsers.register();
+        MockLlmProfile.server().respondWithText("第一轮对话已落库。");
+        chatSend(account.token(), "第一轮非流式消息");
+
+        //* 经 /send 真实链路取得归属清晰的既有会话 ID (直插造数不含消息追加语义, 与本题无关).
+        final var sessionId = RestAssured.
+            given().
+            header("Authorization", PipelineUsers.bearer(account.token())).
+            when().
+            get(ApiEndpointConstants.CHAT_BASE + "/sessions").
+            then().
+            statusCode(200).
+            extract().path("data[0].sessionId").toString();
+
+        MockLlmProfile.server().respondWithChunks("第二轮", "也在。");
+        final var events = streamViaSse(account.token(), sessionId, "在同一会话里继续说");
+
+        assertFalse(events.isEmpty(), "SSE 流必须到达事件");
+        final var meta = readTree(events.getFirst(), "流首 meta 事件");
+        assertEquals("meta", meta.path("type").asText(), PrintUtils.quickFormat("流首事件必须为 meta JSON, 实际: {}", events.getFirst()));
+        assertEquals(UUID.fromString(sessionId), UUID.fromString(meta.path("sessionId").asText()), "meta 必须回显续聊的既有 sessionId");
+        assertTrue(events.size() >= 2, PrintUtils.quickFormat("meta 之外还应到达 token 事件, 实际: {}", events));
     }
     //endregion
 
@@ -202,12 +301,21 @@ class ChatPipelineTest
 
         final var received = new StringBuilder();
         final var joined = new CompletableFuture<String>();
+        //* @since 1.5.0 流首为 meta 会话绑定帧, 不计入 token 拼接; 按消息边界 (last) 聚合后再判定,
+        //* 防 WebSocket 分段投递时 meta JSON 被切断而误判为 token 帧.
+        final var message = new StringBuilder();
         final var listener = new WebSocket.Listener()
         {
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last)
             {
-                received.append(data);
+                message.append(data);
+                if(last)
+                {
+                    if(!isContractEvent(message.toString()))
+                        received.append(message);
+                    message.setLength(0);
+                }
                 if(expected.equals(received.toString()))
                     joined.complete(received.toString());
                 return WebSocket.Listener.super.onText(webSocket, data, last);
@@ -246,12 +354,20 @@ class ChatPipelineTest
         final var endpoint = URI.create(PrintUtils.quickFormat("{}://{}:{}/ws/chat?token={}", scheme, wsUri.getHost(), wsUri.getPort(), account.token()));
 
         final var received = new StringBuilder();
+        //* @since 1.5.0 按消息边界 (last) 聚合, meta 会话绑定帧不计入 (两条流各一帧), token 帧照旧累加.
+        final var message = new StringBuilder();
         final var listener = new WebSocket.Listener()
         {
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last)
             {
-                received.append(data);
+                message.append(data);
+                if(last)
+                {
+                    if(!isContractEvent(message.toString()))
+                        received.append(message);
+                    message.setLength(0);
+                }
                 return WebSocket.Listener.super.onText(webSocket, data, last);
             }
         };
@@ -458,6 +574,46 @@ class ChatPipelineTest
         );
     }
 
+    //* SSE 流式读取辅助: 沿用 ④ 用例的 HttpClient 按行读流写法, 聚合全部 data 行 (含流首 meta 事件),
+    //* 供 meta 契约与 token 拼接用例共享同一读取口径.
+    private List<String> streamViaSse(String token, String content) throws Exception { return streamViaSse(token, null, content); }
+
+    //* SSE 流式读取辅助 (带 sessionId): 续聊既有会话回归用例的请求口径, 其余与无参版本共享同一读取逻辑.
+    private List<String> streamViaSse(String token, String sessionId, String content) throws Exception
+    {
+        final var body = sessionId == null ?
+            PrintUtils.quickFormat("{\"content\":\"{}\"}", content) :
+            PrintUtils.quickFormat("{\"sessionId\":\"{}\",\"content\":\"{}\"}", sessionId, content);
+        final var request = HttpRequest.newBuilder(streamUri).
+            header("Authorization", PipelineUsers.bearer(token)).
+            header("Content-Type", "application/json").
+            header("Accept", "text/event-stream").
+            timeout(Duration.ofSeconds(30)).
+            POST(HttpRequest.BodyPublishers.ofString(body)).
+            build();
+
+        final var payloads = new ArrayList<String>();
+        final var response = HTTP.send(request, HttpResponse.BodyHandlers.ofLines());
+        response.body().forEach(line -> { if(line.startsWith("data:")) payloads.add(line.substring("data:".length()).stripLeading()); });
+        assertEquals(200, response.statusCode(), "SSE 端点应返回 200");
+        return payloads;
+    }
+
+    //* 契约事件判定 (JSON 信封, 带 type 字段): meta / followups 等; token 文本恒非 JSON 对象,
+    //* 解析失败一律视为 token. @since 1.8.0 followups 尾随事件并入信封, 原 isMetaEvent 泛化更名.
+    private static boolean isContractEvent(String payload)
+    {
+        try { return !MAPPER.readTree(payload).path("type").isMissingNode(); }
+        catch(Exception e) { return false; }
+    }
+
+    //* tool-call 过程事件判定 (工具调用可见性契约): type 恰为 "tool-call" 才算, 形状不符的 JSON 仍按 token 处理.
+    private static boolean isToolCallEvent(String payload)
+    {
+        try { return "tool-call".equals(MAPPER.readTree(payload).path("type").asText()); }
+        catch(Exception e) { return false; }
+    }
+
     //* 独立事务新开 session 查询该用户最新会话: 读已提交数据, 不受任何一级缓存干扰.
     private AiChatSession latestSession(String userId)
     {
@@ -488,6 +644,17 @@ class ChatPipelineTest
                 return true;
         }
         return false;
+    }
+
+    //* 最近一条共情对话请求的 system prompt: 携带工具定义的请求即共情 Agent (预警检测/标题/追问请求无工具,
+    //* ChatStylePromptTest 同款判据), 断言对象为提示词组装与声明注入用例共享.
+    private static String empatheticSystemPrompt()
+    {
+        final var request = MockLlmProfile.server().requests().stream().
+            filter(r -> r.contains("\"tools\"")).
+            reduce((first, second) -> second).
+            orElseThrow(() -> new AssertionError("mock 应收到共情对话请求"));
+        return readTree(request, "mock 收到的请求").path("messages").path(0).path("content").asText();
     }
 
     private static JsonNode readTree(String json, String what)

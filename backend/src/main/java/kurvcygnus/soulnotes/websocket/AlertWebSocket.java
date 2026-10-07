@@ -13,9 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RED 预警推送 WebSocket 端点 ({@code /ws/alert}), 承担在线用户的强预警弹窗通道.
@@ -40,8 +38,8 @@ public class AlertWebSocket
     //endregion
 
     //region 连接追踪
-    //* userId → [[WebSocketConnection]] 映射.
-    private final @NotNull Map<UUID, WebSocketConnection> connections = new ConcurrentHashMap<>();
+    //* userId → [[WebSocketConnection]] 映射 (注册表独立成类: 双连接竞态语义可被单元测试钉住).
+    private final @NotNull AlertConnectionRegistry connections = new AlertConnectionRegistry();
 
     //! 生命周期回调由框架通过反射调用, IDE 静态分析误报为未使用.
     @OnOpen @SuppressWarnings("unused")
@@ -51,7 +49,7 @@ public class AlertWebSocket
         if(userIdStr == null)
             return;
         final var userId = UUID.fromString(userIdStr);
-        connections.put(userId, connection);
+        connections.register(userId, connection);
         LOG.info("预警连接已建立: userId={}", userId);
     }
 
@@ -61,7 +59,7 @@ public class AlertWebSocket
         final var userIdStr = connection.userData().get(WebSocketAuthUpgradeCheck.USER_ID_KEY);
         if(userIdStr == null)
             return;
-        connections.remove(UUID.fromString(userIdStr));
+        connections.unregister(UUID.fromString(userIdStr), connection);
         LOG.info("预警连接已关闭: userId={}", userIdStr);
     }
     //endregion
@@ -77,7 +75,7 @@ public class AlertWebSocket
      */
     @SuppressWarnings("NullableProblems") public @NotNull Uni<Void> pushAlert(@NotNull UUID userId, @NotNull String message)
     {
-        final var conn = connections.get(userId);
+        final var conn = connections.connectionOf(userId);
         if(conn == null)
         {
             LOG.warn("用户不在线, 预警推送跳过: userId={}", userId);
@@ -106,6 +104,45 @@ public class AlertWebSocket
                 }
             }
         );
+    }
+    //endregion
+
+    //region 扩展通知推送 (P3 Task 1)
+    /**
+     * 向指定用户推送扩展通知 ({@code ext-notification} 事件, 与 RED 预警共用本通道的用户级推送语义).
+     *
+     * @param userId 目标用户 ID
+     * @param title  通知标题
+     * @param body   通知正文
+     * @param tag    通知标签 (规则 ID, 前端/壳桥据此分组与去重)
+     * @return 完成信号, 恒成功完成: 用户不在线时静默跳过 (仅 DEBUG — 扩展通知无离线补偿, 语义上允许错过),
+     *         发送异常也只记日志 — 通知分发绝不拖垮调用方 (调度链)
+     * @since 2.2.0
+     */
+    public @NotNull Uni<Void> pushExtNotification(@NotNull UUID userId, @NotNull String title, @NotNull String body, @NotNull String tag)
+    {
+        final var conn = connections.connectionOf(userId);
+        if(conn == null)
+        {
+            LOG.debug("用户不在线, 扩展通知跳过: userId={}, tag={}", userId, tag);
+            return Uni.createFrom().voidItem();
+        }
+        final var payload = new LinkedHashMap<String, String>();
+        payload.put("type", "ext-notification");
+        payload.put("title", title);
+        payload.put("body", body);
+        payload.put("tag", tag);
+        try { return conn.sendText(JsonUtils.toJson(payload)).
+            //* 链尾收口恒成功: 连接关闭竞态等异步发送失败若以失败信号上抛, 会经调度链的 chain 传播
+            //! 中止本轮剩余绑定 (且本条幂等键已消费 — 下发机会已用掉, 重试无从谈起); Mutiny 3.2 无
+            //! recoverWithVoid, recoverWithNull 即 Uni<Void> 的等价恢复形 (null 项 = 完成信号).
+            onFailure().invoke(e -> LOG.warn("扩展通知异步发送失败: userId={}, tag={}, {}", userId, tag, e.getMessage())).
+            onFailure().recoverWithNull(); }
+        catch(Exception e)
+        {
+            LOG.warn("扩展通知推送失败: userId={}, tag={}, {}", userId, tag, e.getMessage());
+            return Uni.createFrom().voidItem();
+        }
     }
     //endregion
 

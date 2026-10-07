@@ -59,5 +59,15 @@ public final class ApiResponse<T>
      */
     public static <T> @NotNull ApiResponse<T> error(@NotNull ErrorCode errorCode)
         { return new ApiResponse<>(errorCode.getCode(), errorCode.getMessage(), null); }
+
+    /**
+     * 构建失败响应 (携带业务侧自定义描述).
+     * @param errorCode 决定 {@code code} 的错误码; 其默认 message 仅作空白兜底
+     * @param detail    业务侧自定义描述 (如 "密码错误"); 空白时回落错误码默认 message
+     * @param <T>       负载类型
+     * @return {@code data} 缺席的失败响应
+     */
+    public static <T> @NotNull ApiResponse<T> error(@NotNull ErrorCode errorCode, @Nullable String detail)
+        { return new ApiResponse<>(errorCode.getCode(), detail == null || detail.isBlank() ? errorCode.getMessage() : detail, null); }
     //endregion
 }

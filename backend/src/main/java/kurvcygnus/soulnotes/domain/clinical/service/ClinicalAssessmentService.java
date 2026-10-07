@@ -37,6 +37,8 @@ import java.util.stream.Collectors;
  * @implNote recordAsync 的 NONE 跳过与失败仅 WARN 由 {@code ChatService} 挂点的 fire-and-forget
  *           订阅保证 — 对话可用性优先于评估完整性 (Spec §7).
  *           列表查询经 {@code RevealPolicy} 统一脱敏出口, REST 与 WS 共用, 杜绝旁路.
+ *           <b>安全边界</b>: 咨询员标签链 (评估落库/三视图查询/聚合) <b>一律不读用户聊天风格</b>
+ *           (chat-style, P2 Task 1) — 用户措辞偏好仅约束共情回复的措辞与格式, 绝不影响临床结构化产物.
  * @since 1.2.0
  */
 @ApplicationScoped

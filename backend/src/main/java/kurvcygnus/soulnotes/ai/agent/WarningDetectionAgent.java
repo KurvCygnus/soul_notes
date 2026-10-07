@@ -11,9 +11,15 @@ import kurvcygnus.soulnotes.ai.dto.WarningDetectionResult;
  * <p>声明式 {@code @RegisterAiService} 接口, 分析文本中是否存在自我伤害、自杀倾向等高风险信号.</p>
  *
  * <p>当结果为 {@code RED} 时, 系统必须触发危机干预流程 (前端弹窗 + 热线推送).</p>
+ *
+ * @implNote 安全边界: 本 Agent 的 system prompt 恒为预警检测提示词, <b>一律不注入用户聊天风格块</b>
+ *           (chat-style, P2 Task 1) — 用户措辞偏好绝不影响预警判定语义 (消费点 ChatService#detectWarning).
  * @since 1.0
  */
-@RegisterAiService
+//* 工具单一供给裁决: toolProviderSupplier 缺省为 BeanIfExists 策略 — 容器内一旦存在 ToolProvider bean
+//! (ExtensionToolProvider) 就会连本 Agent 一起套用, 预警请求携带工具定义既拖慢安全链路又给真实 LLM 留下
+//! 工具调用分叉面; 本接口按设计零工具, 显式 NoToolProviderSupplier 硬关断 (勿删).
+@RegisterAiService(toolProviderSupplier = RegisterAiService.NoToolProviderSupplier.class)
 public interface WarningDetectionAgent
 {
     /**

@@ -9,6 +9,7 @@ import org.hibernate.annotations.JdbcType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -69,6 +70,18 @@ class AiChatSessionTest
         assertEquals(3, messages.size());
     }
 
+    //* @since 1.5.0 新消息必须携带 ts (ISO-8601); 旧数据无 ts 由读取端容错.
+    @Test
+    void addMessage_ShouldStampIsoInstant()
+    {
+        final var s = new AiChatSession();
+        s.messages = "[]";
+        s.addMessage("user", "你好");
+        assertTrue(s.messages.contains("\"ts\""));
+        final var list = JsonUtils.parseJson(s.messages, new TypeReference<List<Map<String, String>>>() {});
+        assertDoesNotThrow(() -> Instant.parse(list.getFirst().get("ts")));
+    }
+
     @Test
     void truncate_WithMoreThanMax_ShouldTrimToRecent()
     {
@@ -120,6 +133,54 @@ class AiChatSessionTest
         assertNotNull(jdbcType, "messages 字段缺少 @JdbcType 声明");
         assertEquals(ReactiveJsonStringJdbcType.class, jdbcType.value());
     }
+
+    //region 候选追问 (followups) 附加与读取
+    //* @since 1.8.0 追问挂靠最近一条 assistant 消息: 键值为 JSON 数组整体编码的"文本"而非数组值 —
+    //! 全部既有读取端以 List<Map<String, String>> 反序列化, 数组值会让该解析直接失败 (二轮对话即 500).
+    @Test
+    void attachFollowupsToLastAssistant_ShouldWriteEncodedStringOnLastAssistantEntry()
+    {
+        final var session = createTestSession();
+        session.addMessage("user", "睡不着");
+        session.addMessage("assistant", "我在听。");
+        session.addMessage("user", "谢谢");
+
+        assertTrue(session.attachFollowupsToLastAssistant(List.of("甲", "乙", "丙")), "存在 assistant 消息时必须完成追加");
+
+        final var messages = JsonUtils.parseJson(session.messages, new TypeReference<List<Map<String, String>>>() {});
+        assertEquals(3, messages.size(), "追加不得增删消息条目");
+        final var assistantEntry = messages.get(1);
+        assertEquals(JsonUtils.toJson(List.of("甲", "乙", "丙")), assistantEntry.get("followups"), "followups 键必须为 JSON 数组编码文本");
+        assertFalse(messages.get(2).containsKey("followups"), "后置 user 消息不得被写入追问");
+        assertEquals(List.of("甲", "乙", "丙"), AiChatSession.followupsOf(assistantEntry), "读取端应还原为字符串列表");
+    }
+
+    @Test
+    void attachFollowupsToLastAssistant_WithoutAssistantEntry_ShouldSkip()
+    {
+        final var session = createTestSession();
+        session.addMessage("user", "只有用户消息");
+
+        assertFalse(session.attachFollowupsToLastAssistant(List.of("甲", "乙", "丙")), "无 assistant 消息时应返回 false (调用方跳过落库)");
+        assertFalse(session.messages.contains("followups"), "跳过时不得写入 followups 键");
+        assertEquals(1, JsonUtils.parseJson(session.messages, new TypeReference<List<Map<String, String>>>() {}).size(), "跳过时不得增删消息条目");
+    }
+
+    @Test
+    void followupsOf_ShouldTolerateMissingBlankAndCorruptedKeys()
+    {
+        final var session = createTestSession();
+        session.addMessage("user", "存量消息");
+        final var legacyEntry = JsonUtils.parseJson(session.messages, new TypeReference<List<Map<String, String>>>() {}).getFirst();
+
+        assertTrue(AiChatSession.followupsOf(legacyEntry).isEmpty(), "存量无 followups 键应读为空列表");
+        assertTrue(AiChatSession.followupsOf(null).isEmpty(), "null 条目应读为空列表");
+
+        final var corrupted = new java.util.HashMap<String, String>();
+        corrupted.put("followups", "{broken");
+        assertTrue(AiChatSession.followupsOf(corrupted).isEmpty(), "损坏键应读为空列表 (历史回放不得失败)");
+    }
+    //endregion
 
     private static AiChatSession createTestSession()
     {

@@ -46,7 +46,7 @@ public final class VoiceStorageService
      */
     public record StoredVoice(@NotNull String fileId, @NotNull Path path) {}
 
-    //* audioUrl 的单一权威: 资源层 (upload 响应) 与 DiaryService (日记语音附件) 共用, 防路径漂移.
+    //* audioUrl 的单一权威: 资源层 (upload 响应) 唯一消费 (原 DiaryService 日记附件消费方已随日记域砍除), 防路径漂移.
     /**
      * 由 fileId 构造语音文件访问 URL, 是 audioUrl 的单一权威来源.
      *

@@ -24,4 +24,12 @@ public final class ApiEndpointConstants
     public static final @NotNull String CRISIS_BASE = "/api/v1/crisis";
     /** 咨询员工作台基础路径 (临床评估消费端: 队列/学生时间线/聚合统计). */
     public static final @NotNull String CLINICAL_BASE = "/api/v1/clinical";
+    /** 每日总结域基础路径 ({@code /daily} 与 {@code /recent}, 前端"每日絮语"卡数据源). */
+    public static final @NotNull String SUMMARY_BASE = "/api/v1/summary";
+    /** 品牌信息基础路径 (公开只读, 前端标题/浮层文案的数据源, 消费 {@code app.brand-name} 配置). */
+    public static final @NotNull String BRAND_BASE = "/api/v1/brand";
+    /** 数据扩展域基础路径 ({@code /{name}/query}, SPI 数据扩展的 REST 枚举与查阅出口). */
+    public static final @NotNull String EXT_BASE = "/api/v1/ext";
+    /** 用户自我域基础路径 ({@code /chat-style}, 聊天风格五轴读写, P2 Task 1). */
+    public static final @NotNull String ME_BASE = "/api/v1/me";
 }

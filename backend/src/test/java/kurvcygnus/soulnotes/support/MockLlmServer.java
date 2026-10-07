@@ -32,9 +32,15 @@ import java.util.concurrent.Executors;
  *     在正文尾部追加 soulnotes 契约块 (拆流落库全链路测试用)</li>
  *     <li>② 流式 SSE — {@link #respondWithChunks(String...)}, 请求 {@code stream=true} 时按 chunk 序列下发并以 {@code [DONE]} 收尾</li>
  *     <li>③ 工具调用 — {@link #respondWithToolCall(String)}, 首轮返回 {@code tool_calls};
- *     次轮 (请求携带 {@code role=tool} 消息) 回显工具结果文本; {@code stream=true} 的工具轮请求显式 500 拒绝
- *     (真实客户端工具轮恒非流式, 组合不构成合法契约)</li>
+ *     次轮 (请求携带 {@code role=tool} 消息) 回显工具结果文本; 流式客户端的工具两轮同样支持 —
+ *     首轮 SSE 下发 tool_calls delta chunk, 次轮 SSE 回显文本 chunk (quarkus-langchain4j 流式客户端
+ *     对工具轮恒以 stream=true 发送, 旧 "工具轮恒非流式" 假设不成立, 2026-10-06 修订)</li>
  *     <li>④ 预警 JSON — 请求体携带 {@link #RED_KEYWORD} 且不携带工具时, 返回 {@code warningLevel=RED} 的检测结果 JSON</li>
+ *     <li>⑤ 会话标题 — 请求体携带 {@link #TITLE_ANCHOR} 且不携带工具时, 返回 canned 标题文本;
+ *     {@link #failTitleRequests()} 布防后改返 500 (fail-open 兜底用例)</li>
+ *     <li>⑥ 候选追问 — 请求体携带 {@link #FOLLOWUP_ANCHOR} 且不携带工具时, 返回 canned 追问 JSON 数组
+ *     (恰好 3 条字符串); {@link #failFollowupRequests()} 布防后改返 500 (fail-open 兜底用例).
+ *     锚点判定先于标题锚点: 两类提示词文本互不包含, 顺序仅为路由确定性</li>
  * </ul>
  * <p>请求区分契约: 请求体含 {@code tools} 数组视为共情对话 Agent, 否则视为结构化输出 Agent (预警检测).
  * 每个请求体全文按序录制, 供用例断言 systemPrompt 组装与工具轮次.</p>
@@ -49,6 +55,17 @@ public final class MockLlmServer
 {
     //* 预警链路探测关键词: 无工具请求命中即返回 RED JSON, 集成测试以消息内容触发预警分支.
     public static final String RED_KEYWORD = "SOULNOTES-RED-PROBE";
+
+    //* 会话标题链路契约: 标题 Agent 请求不带 tools, 与预警检测请求同形态 — 以标题系统提示词的
+    //* 稳定锚点词区分; 命中即返回 canned 标题 (预警 JSON 对标题链路无断言价值).
+    public static final String TITLE_ANCHOR = "会话标题";
+    public static final String TITLE_REPLY  = "备考夜谈";
+
+    //* 候选追问链路契约: 追问 Agent 请求同样不带 tools — 以追问系统提示词的稳定锚点词区分
+    //* (锚点词落在 [[AiPromptConstants#FOLLOWUP_SYSTEM_PROMPT]] 首句, 改写提示词须同步);
+    //* canned 产物为严格 JSON 字符串数组, 与生产侧解析容错的对账基准一致.
+    public static final String FOLLOWUP_ANCHOR = "候选追问";
+    public static final String FOLLOWUP_REPLY  = "[\"追问甲\",\"追问乙\",\"追问丙\"]";
 
     //* JVM 全局端口仲裁键: System property 跨类加载器域共享, 是本类唯一的跨域同步点.
     private static final String PORT_PROPERTY = "soulnotes.mock-llm.port";
@@ -68,6 +85,10 @@ public final class MockLlmServer
     private volatile String replyText = "";
     private volatile List<String> sseChunks = List.of();
     private volatile String toolFunction = "getCrisisMessage";
+    //* 标题请求故障布防: 置位后标题锚点请求显式 500, 供 fail-open 兜底落库用例驱动 AI 失败分支.
+    private volatile boolean titleError = false;
+    //* 候选追问请求故障布防: 置位后追问锚点请求显式 500, 供 fail-open (聊天不受影响) 用例驱动 AI 失败分支.
+    private volatile boolean followupError = false;
 
     private MockLlmServer(HttpServer server)
     {
@@ -130,6 +151,8 @@ public final class MockLlmServer
         server.createContext("/__mock/state", this::handleStateControl);
         server.createContext("/__mock/reset", this::handleResetControl);
         server.createContext("/__mock/requests", this::handleRequestsControl);
+        server.createContext("/__mock/title-error", this::handleTitleErrorControl);
+        server.createContext("/__mock/followup-error", this::handleFollowupErrorControl);
     }
 
     private static Thread daemonThread(Runnable task)
@@ -185,6 +208,28 @@ public final class MockLlmServer
     }
 
     //* ④ 模式免编程: 请求体携带 RED_KEYWORD 即返回 RED 预警 JSON (关键词契约, 无需预先布防).
+    //* 标题请求故障布防: 置位后标题锚点请求一律 500 (模拟 AI 故障, fail-open 兜底用例); reset() 自动解除.
+    public void failTitleRequests()
+    {
+        if(controlHttp != null)
+        {
+            control("POST", "/__mock/title-error", Map.of("enabled", true));
+            return;
+        }
+        titleError = true;
+    }
+
+    //* 候选追问请求故障布防: 置位后追问锚点请求一律 500 (模拟 AI 故障, fail-open 用例); reset() 自动解除.
+    public void failFollowupRequests()
+    {
+        if(controlHttp != null)
+        {
+            control("POST", "/__mock/followup-error", Map.of("enabled", true));
+            return;
+        }
+        followupError = true;
+    }
+
     //* 清空录制与编程状态, 用例间互不串扰.
     public void reset()
     {
@@ -203,6 +248,8 @@ public final class MockLlmServer
         replyText = "";
         sseChunks = List.of();
         toolFunction = "getCrisisMessage";
+        titleError = false;
+        followupError = false;
     }
 
     //* 已收请求体快照 (按到达顺序), 供断言 systemPrompt 组装与工具轮次.
@@ -287,6 +334,22 @@ public final class MockLlmServer
         exchange.getRequestBody().readAllBytes();
         synchronized(requestBodies) { writeJson(exchange, Map.of("requests", Map.of("bodies", List.copyOf(requestBodies)))); }
     }
+
+    //* 标题故障布防的远程转发端点: 远程域经此置位真实服务器的 titleError 标志.
+    private void handleTitleErrorControl(HttpExchange exchange) throws IOException
+    {
+        final var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        titleError = parse(body).path("enabled").asBoolean(false);
+        writeRawJson(exchange, "{\"ok\":true}");
+    }
+
+    //* 候选追问故障布防的远程转发端点: 远程域经此置位真实服务器的 followupError 标志 (标题端点同款).
+    private void handleFollowupErrorControl(HttpExchange exchange) throws IOException
+    {
+        final var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        followupError = parse(body).path("enabled").asBoolean(false);
+        writeRawJson(exchange, "{\"ok\":true}");
+    }
     //endregion
 
     //region 请求处理
@@ -308,18 +371,23 @@ public final class MockLlmServer
         {
             final var toolResult = firstToolResultContent(root.path("messages"));
             final var streamRequested = root.path("stream").asBoolean(false);
-            //* 流式 + 工具轮组合不在 mock 契约内 (真实客户端工具轮恒非流式): 显式 500 快速暴露,
-            //* 而非让请求落入未定义分支难以理解地失败.
-            if(streamRequested && (mode == Mode.TOOL || toolResult != null))
-            {
-                writeRawJson(exchange, 500, "{\"error\":{\"message\":\"stream=true 与工具轮组合不受 mock 支持\"}}");
-                return;
-            }
             if(toolResult != null)
-                writeJson(exchange, completionPayload(echoToolResult(toolResult)));
+            {
+                //* 次轮 (工具结果回灌): 流式客户端对工具轮同样 stream=true (OpenAiRestApi 按 Accept 头强制),
+                //* SSE 回显文本 chunk; 非流式客户端按 JSON 整体回显.
+                if(streamRequested)
+                    writeSseRaw(exchange, textChunkJsons(echoChunks(echoToolResult(toolResult))));
+                else
+                    writeJson(exchange, completionPayload(echoToolResult(toolResult)));
+            }
             else if(mode == Mode.TOOL)
-                writeJson(exchange, toolCallPayload());
-            else if(mode == Mode.SSE && root.path("stream").asBoolean(false))
+            {
+                if(streamRequested)
+                    writeSseRaw(exchange, List.of(toolCallDeltaJson()));
+                else
+                    writeJson(exchange, toolCallPayload());
+            }
+            else if(mode == Mode.SSE && streamRequested)
                 writeSse(exchange);
             else if(mode == Mode.SSE)
                 writeJson(exchange, completionPayload(String.join("", sseChunks)));
@@ -327,7 +395,29 @@ public final class MockLlmServer
                 writeJson(exchange, completionPayload(replyText));
             return;
         }
-        //* 无工具请求 = 结构化输出 Agent (预警检测): 关键词命中返回 RED, 其余返回可解析的 NONE,
+        //* 无工具请求 = 结构化输出 Agent (预警检测) / 标题 Agent / 追问 Agent: 以各自系统提示词锚点区分,
+        //* 追问锚点先判 (两类提示词文本互不包含, 顺序仅为路由确定性).
+        if(body.contains(FOLLOWUP_ANCHOR))
+        {
+            if(followupError)
+            {
+                writeRawJson(exchange, 500, "{\"error\":{\"message\":\"mock-followup-error\"}}");
+                return;
+            }
+            writeJson(exchange, completionPayload(FOLLOWUP_REPLY));
+            return;
+        }
+        if(body.contains(TITLE_ANCHOR))
+        {
+            if(titleError)
+            {
+                writeRawJson(exchange, 500, "{\"error\":{\"message\":\"mock-title-error\"}}");
+                return;
+            }
+            writeJson(exchange, completionPayload(TITLE_REPLY));
+            return;
+        }
+        //* 其余无工具请求 = 预警检测: 关键词命中返回 RED, 其余返回可解析的 NONE,
         //* 保证生产侧检测结果反序列化始终成功, 降级链路零告警噪音.
         writeJson(exchange, completionPayload(body.contains(RED_KEYWORD) ? RED_DETECTION_JSON : NONE_DETECTION_JSON));
     }
@@ -392,6 +482,42 @@ public final class MockLlmServer
         return completionShell("chat.completion.chunk", List.of(Map.of("index", 0, "delta", Map.of("content", content))));
     }
 
+    //* 流式工具轮首响应: 单个 chunk 携带完整 tool_calls delta (id/type/function 一次给全),
+    //* langchain4j ToolCallBuilder 累积后于流收口产出 ToolExecutionRequest — 无需 finish_reason chunk.
+    private String toolCallDeltaJson()
+    {
+        final var function = new LinkedHashMap<String, Object>();
+        function.put("name", toolFunction);
+        function.put("arguments", "{}");
+        final var call = new LinkedHashMap<String, Object>();
+        call.put("index", 0);
+        call.put("id", "call-soulnotes-mock-1");
+        call.put("type", "function");
+        call.put("function", function);
+        final var delta = Map.of("tool_calls", List.of(call));
+        try { return mapper.writeValueAsString(completionShell("chat.completion.chunk", List.of(Map.of("index", 0, "delta", delta)))); }
+        catch(IOException e) { throw new IllegalStateException("tool_calls delta chunk 序列化失败", e); }
+    }
+
+    //* 文本回显拆两片下发 (先短前缀后余文): 契约测试以 chunk 拼接断言, 拆片证明多 chunk 流式真实到达.
+    private static List<String> echoChunks(String text)
+    {
+        final int split = Math.min(4, text.length());
+        return List.of(text.substring(0, split), text.substring(split));
+    }
+
+    //* 文本 chunk 列表 → chunk JSON 列表 (与 chunkPayload 同形状, 供 writeSseRaw 统一下发).
+    private List<String> textChunkJsons(List<String> contents)
+    {
+        final var jsons = new ArrayList<String>(contents.size());
+        for(final var content: contents)
+        {
+            try { jsons.add(mapper.writeValueAsString(chunkPayload(content))); }
+            catch(IOException e) { throw new IllegalStateException("文本 chunk 序列化失败", e); }
+        }
+        return List.copyOf(jsons);
+    }
+
     private Map<String, Object> completionShell(String object, List<Object> choices)
     {
         return Map.of(
@@ -412,13 +538,22 @@ public final class MockLlmServer
 
     private void writeSse(HttpExchange exchange) throws IOException
     {
+        final var chunkJsons = new ArrayList<String>(sseChunks.size());
+        for(final var chunk: sseChunks)
+            chunkJsons.add(mapper.writeValueAsString(chunkPayload(chunk)));
+        writeSseRaw(exchange, chunkJsons);
+    }
+
+    //* 通用 SSE 下发: 逐 chunk JSON 以 data: 行写出并以 [DONE] 收尾 (chunkPayload/toolCallDelta 共用).
+    private static void writeSseRaw(HttpExchange exchange, List<String> chunkJsons) throws IOException
+    {
         exchange.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
         exchange.sendResponseHeaders(200, 0);
         try(var out = exchange.getResponseBody())
         {
-            for(final var chunk: sseChunks)
+            for(final var chunkJson: chunkJsons)
             {
-                out.write(PrintUtils.quickFormat("data: {}\n\n", mapper.writeValueAsString(chunkPayload(chunk))).getBytes(StandardCharsets.UTF_8));
+                out.write(PrintUtils.quickFormat("data: {}\n\n", chunkJson).getBytes(StandardCharsets.UTF_8));
                 out.flush();
             }
             out.write("data: [DONE]\n\n".getBytes(StandardCharsets.UTF_8));

@@ -51,7 +51,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 模式回车=简单 → URL → TEXT → GENERATE 空输入自动生成 → 摘要回车确认 → 完成屏选启动.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "b-name-v", "", "y", "1"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(Set.of("TEST_A_URL", "TEST_B_NAME", "TEST_E_JWT"), result.values().keySet(), "values 只含显式输入项, 未动的可选项不入表");
@@ -78,7 +78,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → 首项先输坏 URL (原地红字不折叠) → 再输好 URL → 余项正常 → 摘要确认 → 完成屏退出.
         final var io = TerminalIO.fake(List.of("1", "mysql://x", "postgresql://good:5432/db", "b-v", "", "y", "2"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals("postgresql://good:5432/db", result.values().get("TEST_A_URL"), "留在展开态后最终值必须为合法输入");
@@ -93,7 +93,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → esc 折叠首项 → 序号 4 跳到 SECRET 项 → 先短后长 (minLength=8) → esc 折过 GENERATE 项 → q 摘要 → EOF 取消.
         final var io = TerminalIO.fake(List.of("2", "esc", "4", "short", "a-long-secret-99", "esc", "q"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertTrue(result.values().isEmpty(), "取消后不得返回任何值");
@@ -108,7 +108,7 @@ class SetupWizardTest
     {
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of(""), sink);  //* 选完模式即在首项输入处 EOF.
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertTrue(result.values().isEmpty());
@@ -124,7 +124,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → TEXT → GENERATE 生成 → 摘要确认 → 写盘失败.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "b-name-v", "", "y"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.FAILED, result.action());
         assertTrue(result.values().isEmpty(), "FAILED 即未持久化, 必须返回空表 (对齐 \"非空 values ⟺ 已落盘\" 不变量)");
@@ -142,7 +142,7 @@ class SetupWizardTest
         //*       → q 摘要 → n 否决回编辑 → 回车展开首项补填 → esc 折过 TEXT 项 → q 摘要 → 回车确认 → 启动.
         final var io = TerminalIO.fake(List.of(
             "9", "2", "esc", "3", "1.5", "esc", "q", "n", "", "postgresql://x:1/d", "esc", "q", "", "1"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(Set.of("TEST_C_NUM", "TEST_A_URL"), result.values().keySet());
@@ -194,7 +194,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → 首项已预填, 回车保留 (不重新输入) → TEXT → GENERATE → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("", "", "b-v", "", "y", "2"), sink);
-        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir).run(fixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals("postgresql://prefilled:5432/x", result.values().get("TEST_A_URL"), "已配置项回车即保留, 无需重新输入");
         assertTrue(sink.toString().contains("postgresql://prefilled:5432/x"), "预填值须以当前值提示可见");
@@ -264,7 +264,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 选 n → 目录项留空保存 → 再选 n → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("2", "", "n", "", "n", "y", "2"), sink);
-        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action(), "拒绝下载必须继续主流程而非中断");
         assertEquals(0, control.downloadCalls, "拒绝路径不得触发下载");
@@ -282,7 +282,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 回车默认 Y → 目录项留空保存 (已就绪, 无询问) → 摘要确认 → 启动.
         final var io = TerminalIO.fake(List.of("2", "", "", "", "y", "1"), sink);
-        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(1, control.downloadCalls);
@@ -301,7 +301,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 选 y (并发拒绝) → 目录项留空保存 → 选 n → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("2", "", "y", "", "n", "y", "2"), sink);
-        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action(), "并发拒绝不得中断向导");
         final var out = sink.toString();
@@ -317,7 +317,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 选 y (失败) → 目录项留空保存 → 选 n → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("2", "", "y", "", "n", "y", "2"), sink);
-        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action(), "下载失败必须继续主流程");
         final var out = sink.toString();
@@ -332,7 +332,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 处 EOF (队列耗尽).
         final var io = TerminalIO.fake(List.of("2", ""), sink);
-        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, control).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertEquals(0, control.downloadCalls, "EOF 不得触发下载");
@@ -350,7 +350,7 @@ class SetupWizardTest
         final var newDir = "asr-warehouse/session-runtime";
         //* 脚本: 全面模式 → 引擎项留空保存 → [Y/n] 选 n → 目录项输入新目录保存 → [Y/n] 回车 Y (对重建实例下载) → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("2", "", "n", newDir, "", "y", "2"), sink);
-        final var result = new SetupWizard(dir, base, null, null, factory).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, base, null, null, factory).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(List.of(newDir), factory.requestedDirs, "重建点必须以会话 values 中的当前目录请求实例");
@@ -370,7 +370,7 @@ class SetupWizardTest
         final var newDir = "asr-warehouse/broken-runtime";
         //* 脚本: 全面模式 → 引擎项留空保存 (基座端口为 null, 此处无询问) → 目录项输入新目录保存 → [Y/n] 回车 Y → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("2", "", newDir, "", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, null, factory).run(asrFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, null, factory).run(asrFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(1, broken.downloadCalls, "下载应发生在新目录重建实例上");
@@ -434,7 +434,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → 用户名 → 密码 (三项齐备触发探测 OK) → 摘要确认 → 启动.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "y", "1"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(1, gateway.probeCalls);
@@ -451,7 +451,7 @@ class SetupWizardTest
             new ProbeResult(ProbeResult.State.OK, List.of()));
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "y", "1"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(1, gateway.createCalls, "DB_MISSING 必须恰好自动建库一次");
@@ -471,7 +471,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → 用户名 → 密码 (建库失败 ✗) → 密码项重编辑换值 (再次失败 ✗) → EOF 取消.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "db-pass2"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertEquals(2, gateway.createCalls, "失败必须回到编辑态而非中断向导, 改值保存后再次触发");
@@ -491,7 +491,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → 用户名 → 错密码 (AUTH ✗) → 密码项重编辑输对 → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "wrong-pass", "right-pass", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(2, gateway.probeCalls, "改值后必须重新探测");
@@ -507,7 +507,7 @@ class SetupWizardTest
         final var gateway = new FakeGateway(new ProbeResult(ProbeResult.State.UNREACHABLE, List.of()));
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertEquals(0, gateway.createCalls);
@@ -518,18 +518,18 @@ class SetupWizardTest
     @Test void schemaMissingConfirmedAppliesScriptsAndProbesOk()
     {
         final var gateway = new FakeGateway(
-            new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users", "mood_diaries")),
+            new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users", "ai_chat_sessions")),
             new ProbeResult(ProbeResult.State.OK, List.of()));
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → URL → 用户名 → 密码 (SCHEMA_MISSING) → 询问符回车 = y → 摘要确认 → 启动.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "", "y", "1"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action());
         assertEquals(1, gateway.applyCalls);
         assertEquals(2, gateway.probeCalls, "建表后必须重探确认");
         final var out = sink.toString();
-        assertTrue(out.contains("users, mood_diaries"), "缺表清单必须可见");
+        assertTrue(out.contains("users, ai_chat_sessions"), "缺表清单必须可见");
         assertTrue(out.contains("初始化数据库结构"), "必须现场询问");
         assertTrue(out.contains("01_users.sql"), "applySchema 必须逐脚本一行回显");
         assertTrue(out.contains("数据库连接就绪"), "重探 OK 必须回显就绪");
@@ -541,7 +541,7 @@ class SetupWizardTest
         final var gateway = new FakeGateway(new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users")));
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "n", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action(), "拒绝初始化不得中断向导");
         assertEquals(0, gateway.applyCalls);
@@ -554,7 +554,7 @@ class SetupWizardTest
         final var gateway = new FakeGateway(new ProbeResult(ProbeResult.State.SCHEMA_MISSING, List.of("users")));
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertEquals(0, gateway.applyCalls, "EOF 不得触发建表");
@@ -568,7 +568,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         //* 脚本: 简单模式 → 三项填写 (probe#1 OK) → 摘要否决回编辑 → 命令态回车展开 URL → 回车依次保留三项 (指纹未变) → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of("", "postgresql://db:5432/sn", "db-user", "db-pass", "n", "", "", "", "", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, gateway).run(dbFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(1, gateway.probeCalls, "同值重存不得重复探测");
@@ -637,7 +637,7 @@ class SetupWizardTest
         //* 脚本: 简单模式 → endpoint → model 先手动填占位 → key (触发拉取) → 序号 9 越界 → abc 非法 → 0 越界 → 选 1 → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of(
             "", "https://gate.example.com", "manual-typed", "sk-1", "9", "abc", "0", "1", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(1, catalog.calls);
@@ -665,7 +665,7 @@ class SetupWizardTest
         //* 脚本: 简单模式 → endpoint (已带 /v1) → model 占位 → 错 key (401 ✗ 回重编辑) → 对 key → 选 2 → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of(
             "", "https://gate.example.com/v1", "placeholder-m", "bad-key", "good-key", "2", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(2, catalog.calls, "401 后换 key 重存必须重新拉取");
@@ -683,7 +683,7 @@ class SetupWizardTest
         //* 脚本: 简单模式 → endpoint → model 占位 → key (拉取失败) → 手动输入模型名 → 摘要确认 → 启动.
         final var io = TerminalIO.fake(List.of(
             "", "https://gate.example.com", "old-model", "sk-1", "my-manual-model", "y", "1"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.LAUNCH, result.action(), "网络失败必须继续主流程而非中断向导");
         assertEquals("my-manual-model", result.values().get("SOULNOTES_AI_MODEL"), "手动输入的模型名必须生效");
@@ -700,7 +700,7 @@ class SetupWizardTest
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of(
             "", "https://gate.example.com", "old-model", "sk-1", "manual-fallback", "y", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals("manual-fallback", result.values().get("SOULNOTES_AI_MODEL"));
@@ -716,7 +716,7 @@ class SetupWizardTest
         //* 脚本: 简单模式 → 三项填写 (拉取 + 选 1) → 摘要否决回编辑 → 命令态回车展开首项 → 回车依次保留三项 (指纹未变) → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of(
             "", "https://gate.example.com", "manual-typed", "sk-1", "1", "n", "", "", "", "", "", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(1, catalog.calls, "同值重存不得重复拉取 (指纹以规范化后 endpoint 参与计算)");
@@ -732,7 +732,7 @@ class SetupWizardTest
         //* 脚本: 全面模式 → endpoint → model → key (触发一次拉取) → 选 1 → 自动展开他组项填 x (不得再触发) → 摘要确认 → 退出.
         final var io = TerminalIO.fake(List.of(
             "2", "https://gate.example.com", "m", "sk-1", "1", "x", "", "2"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.EXIT, result.action());
         assertEquals(1, catalog.calls, "非 AI 组条目保存不得触发拉取");
@@ -745,7 +745,7 @@ class SetupWizardTest
             List.of(model("m-a", "-", "-")), "https://gate.example.com/v1")));
         final var sink = new StringBuilder();
         final var io = TerminalIO.fake(List.of("", "https://gate.example.com", "m", "sk-1"), sink);
-        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir), io);
+        final var result = new SetupWizard(dir, null, null, catalog).run(aiFixture(), ConfigView.loadIn(dir, Map.of()), io);
 
         assertEquals(SetupWizard.NextAction.CANCELLED, result.action());
         assertTrue(result.values().isEmpty());

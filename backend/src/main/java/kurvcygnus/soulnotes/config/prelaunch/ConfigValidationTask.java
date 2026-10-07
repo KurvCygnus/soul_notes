@@ -18,8 +18,8 @@ import java.util.regex.Pattern;
  * <p>单字段规则由 {@link FieldValidator} 承载; 必配规则 prod 严格 / dev 放宽 (dev 有内置默认);
  * AI 密钥为空或占位哨兵 placeholder 不分 profile 一律 BLOCK (用户裁决: AI 为应用必配项, 无 dev 放宽);
  * 弱 JWT 按规则矩阵分派: 显式弱值不分 profile 一律 BLOCK (格式级), 仅 dev 的内置默认弱密钥降为 WARN 提醒;
- * 天气阈值域与次序为跨字段规则, 依据 EmotionWeatherService#mapWeather 分支可达性: storm &gt; rainy &gt; overcast 严格递减,
- * sunny 仅校验 [0,1] 域不参与次序; 预警外部渠道为健康度警告规则: 短信五键部分配置渠道不生效, 手机号逐号格式校验.</p>
+ * 预警外部渠道为健康度警告规则: 短信五键部分配置渠道不生效, 手机号逐号格式校验.
+ * (天气阈值跨字段规则已随 EmotionWeatherService 砍除退场, 走查裁决 2026-10-03.)</p>
  *
  * <p>Pre-Launch 阶段运行于 CDI 容器启动之前 (Entrance#main 纯构造装配), 无法经容器注入
  * {@link AsrRuntimeManager}, ASR 就绪判定经 {@code BooleanSupplier} 端口传入 (生产传其 ready() 方法引用).</p>
@@ -54,7 +54,8 @@ public final class ConfigValidationTask implements IPreLaunchTask
     @Override public @NotNull String name() { return "配置校验"; }
 
     /**
-     * 执行全部规则: 单字段格式校验 + 必配检查 (prod 严格/dev 放宽) + 天气阈值跨字段次序 + AI 密钥占位检查 + 非 BLOCK 级警告规则.
+     * 执行全部规则: 单字段格式校验 + 必配检查 (prod 严格/dev 放宽) + AI 密钥占位检查 + 非 BLOCK 级警告规则.
+     * (天气阈值跨字段次序校验已随 EmotionWeatherService 砍除退场, 走查裁决 2026-10-03.)
      *
      * @param ctx 执行上下文 (配置视图 + 条目元数据 + 生效 profile)
      * @return 收集到的全部问题; 格式/必配/跨字段违规为 BLOCK, ASR 未就绪与 dev 弱密钥等为 WARN
@@ -79,56 +80,12 @@ public final class ConfigValidationTask implements IPreLaunchTask
                 issues.add(new Issue(Level.BLOCK, item.envName(), "必填项未配置"));
         }
 
-        validateWeather(ctx, byEnv, issues);
         validateAiKey(ctx, issues);
         validateWarnRules(ctx, byEnv, issues);
         return new Result(List.copyOf(issues));
     }
 
-    //region 跨字段与警告规则
-
-    //* 跨字段: 阈值 ∈ [0,1] 且 storm > rainy > overcast (严格递减, 否则 RAINY/OVERCAST 分支不可达);
-    //* sunny 基于正向均值, 与其余三项阈值同受 [0,1] 区间约束, 不进入次序比较.
-    /**
-     * 天气阈值跨字段规则: 四项阈值逐一查 [0,1] 域, 且要求 storm &gt; rainy &gt; overcast 严格递减
-     * (依据 EmotionWeatherService#mapWeather 分支可达性); 任一阈值缺失/非法时跳过次序比较.
-     *
-     * @param ctx 执行上下文
-     * @param byEnv envName 到条目元数据的索引
-     * @param issues 问题收集出口
-     */
-    private static void validateWeather(@NotNull PreLaunchContext ctx, @NotNull Map<String, PropertyMetaParser.ConfigItemMeta> byEnv, @NotNull List<Issue> issues)
-    {
-        final var storm = threshold(ctx, byEnv, "SOULNOTES_WEATHER_STORM", issues);
-        final var rainy = threshold(ctx, byEnv, "SOULNOTES_WEATHER_RAINY", issues);
-        final var overcast = threshold(ctx, byEnv, "SOULNOTES_WEATHER_OVERCAST", issues);
-        threshold(ctx, byEnv, "SOULNOTES_WEATHER_SUNNY", issues);
-        if(storm == null || rainy == null || overcast == null) return;
-        if(!(storm > rainy && rainy > overcast))
-            issues.add(new Issue(Level.BLOCK, "weather.threshold", PrintUtils.quickFormat("阈值次序必须 storm > rainy > overcast (当前 {}/{}/{})", storm, rainy, overcast)));
-    }
-
-    /**
-     * 解析单个阈值并查 [0,1] 域: 越域时上报 BLOCK 且仍返回解析值 (供次序比较).
-     *
-     * @param ctx 执行上下文
-     * @param byEnv envName 到条目元数据的索引
-     * @param env 阈值条目的环境变量名
-     * @param issues 问题收集出口
-     * @return 解析值; 条目元数据缺失或值非数字时为 null (非法性已由 FieldValidator 上报, 此处跳过次序检查)
-     */
-    private static Double threshold(@NotNull PreLaunchContext ctx, @NotNull Map<String, PropertyMetaParser.ConfigItemMeta> byEnv, @NotNull String env, @NotNull List<Issue> issues)
-    {
-        final var item = byEnv.get(env);
-        if(item == null) return null;
-        try
-        {
-            final var v = Double.parseDouble(ctx.view().resolved(item.key(), env, item.defaultValue()));
-            if(v < 0 || v > 1) issues.add(new Issue(Level.BLOCK, env, PrintUtils.quickFormat("阈值必须处于 [0,1], 当前 {}", v)));
-            return v;
-        }
-        catch(NumberFormatException e) { return null; }//! 非法数字已由 FieldValidator 报 BLOCK, 这里吞掉二次异常并跳过次序检查 (首个错误已上报).
-    }
+    //region 警告规则
 
     //* 用户裁决: AI 为应用必配项, 占位哨兵 placeholder 不得视为已配置 —
     //* 不分 profile 一律 BLOCK: 有 TTY 时 Entrance#decide 自动引导 Setup 向导补配, 无 TTY (CI/管道) 直接拒绝启动.

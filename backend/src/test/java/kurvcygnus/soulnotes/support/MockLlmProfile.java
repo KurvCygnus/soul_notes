@@ -29,6 +29,9 @@ public final class MockLlmProfile implements QuarkusTestProfile
         overrides.put("quarkus.langchain4j.openai.base-url", SERVER.baseUrl() + "/v1");
         overrides.put("quarkus.langchain4j.openai.api-key", "mock-llm-key");
         overrides.put("clinical.tagging", "true");
+        //* 扩展通知调度器关闸: 集成测试手动驱动 fireDue 测试缝 (固定日期), 真实周期任务会在测试窗口
+        //* 消费幂等键造成偶发假失败 — 60s 周期在生产默认开启 (defaultValue=60), 测试域一律禁用.
+        overrides.put("ext.notify.tick-seconds", "0");
         overrides.put("quarkus.datasource.active", "true");
         overrides.put("quarkus.hibernate-orm.active", "true");
         overrides.put("quarkus.datasource.reactive.url", "postgresql://localhost:5432/soulnotes");

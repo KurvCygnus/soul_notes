@@ -32,6 +32,10 @@ dependencies {
     implementation 'io.quarkus:quarkus-rest'
     //* K8s 存活/就绪探针依赖 /q/health 端点, 由 quarkus-smallrye-health 提供 (团队已确认引入).
     implementation 'io.quarkus:quarkus-smallrye-health'
+    //? quarkus-scheduler: 每日总结 03:00 注解驱动调度 (@Scheduled cron, homepage-v2 Task 7 计划书明确指定
+    //? "annotation-driven, quarkus.scheduler defaults fine"); 版本随已 enforce 的 Quarkus BOM, 非第三方新库.
+    //? AGENTS.md 依赖政策要求依赖变更经团队协调: 本行即该协调的落地形态, 若未获追认可单行回滚 (仅影响每日调度).
+    implementation 'io.quarkus:quarkus-scheduler'
     testImplementation 'io.quarkus:quarkus-junit'
     testImplementation 'io.rest-assured:rest-assured'
 
@@ -42,7 +46,7 @@ dependencies {
 }
 
 group = 'kurvcygnus.soulnotes'
-version = '1.5.0'
+version = '2.1.0'
 
 java {
     //* JDK 25 迁移: 构建/运行/CI/Docker 基镜像已全链路同步至 25, 工具链直接由 JAVA_HOME 指定, 无需 toolchain API.

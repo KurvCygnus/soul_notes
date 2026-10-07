@@ -28,8 +28,12 @@ public final class GlobalExceptionMapper implements ExceptionMapper<StructuredEx
         if(exception instanceof IBusinessException<?> bizEx)
         {
             final var errorCode = bizEx.getErrorCode();
+            //* 业务描述透传: of() 的自定义 message 存在被包装异常里 (cause != 自身时即业务描述),
+            //! 曾一律用 ErrorCode 默认 message 渲染 — 登录失败响应恒为 "未登录", 前端错误提示语义漂移 (走查实测).
+            final var cause = exception.cause();
+            final var detail = cause != exception ? cause.getMessage() : null;
             return Response.status(errorCode.getHttpStatus()).
-                entity(ApiResponse.error(errorCode)).
+                entity(ApiResponse.error(errorCode, detail)).
                 build();
         }
         return Response.status(ErrorCode.INTERNAL_ERROR.getHttpStatus()).

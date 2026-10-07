@@ -91,13 +91,66 @@ class ChatServiceTest
 
     @SuppressWarnings("ConstantConditions")//! 测试缝: Vertx 为类级共享实例, 其余未用依赖置 null 是纯单测构造服务实例的唯一途径.
     private static ChatService newService(boolean taggingOn, PromptProvider promptProvider, ClinicalSchemaNormalizer normalizer)
-    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, normalizer, null, newDispatchStub(), VERTX, 50, taggingOn); }
+    { return new ChatService(new RecordingChatAgent(""), new StubWarningAgent(), promptProvider, normalizer, null, newDispatchStub(), newTitleGeneratorStub(), newFollowupGeneratorStub(), emptyRegistry(), VERTX, 50, taggingOn); }
 
     //* 主链路替身: buildSystemPrompt 在 executeBlocking 内执行, 必须注入可用的 PromptProvider (空配置 = 内置默认).
     @SuppressWarnings("ConstantConditions")//! 测试缝: clinicalAssessmentService 置 null — 本组用例不驱动评估落库挂点.
     private static ChatService newService(boolean taggingOn, EmpatheticChatAgent chatAgent)
     {
-        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer(), null, newDispatchStub(), VERTX, 50, taggingOn);
+        return new ChatService(chatAgent, new StubWarningAgent(), new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer(), null, newDispatchStub(), newTitleGeneratorStub(), newFollowupGeneratorStub(), emptyRegistry(), VERTX, 50, taggingOn);
+    }
+
+    //* 空扩展注册表: 本组用例不驱动扩展情境注入, 空注册表 = collectExtensionContext 恒空串 (与无注入等价).
+    private static kurvcygnus.soulnotes.domain.extension.ExtensionRegistry emptyRegistry()
+    { return registryOf(java.util.List.of()); }
+
+    //* 扩展注册表替身构造缝: 匿名 Instance 承载任意 bean 集 (仿 ExtensionRegistryTest#fake, 纯单测无 CDI 容器).
+    private static kurvcygnus.soulnotes.domain.extension.ExtensionRegistry registryOf(
+        java.util.List<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> beans
+    )
+    {
+        return new kurvcygnus.soulnotes.domain.extension.ExtensionRegistry(
+            new jakarta.enterprise.inject.Instance<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>>()
+            {
+                @Override public java.util.Iterator<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> iterator() { return java.util.List.<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>>copyOf(beans).iterator(); }
+                @Override public kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?> get() { return beans.getFirst(); }
+                @Override public boolean isUnsatisfied() { return beans.isEmpty(); }
+                @Override public boolean isAmbiguous() { return beans.size() > 1; }
+                @Override public void destroy(kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?> bean) { throw new UnsupportedOperationException(); }
+                @Override public Iterable<jakarta.enterprise.inject.Instance.Handle<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>>> handles() { return java.util.List.of(); }
+                @Override public jakarta.enterprise.inject.Instance.Handle<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> getHandle() { throw new IllegalStateException("测试注册表无 bean 句柄语义"); }
+                @Override public jakarta.enterprise.inject.Instance<kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> select(java.lang.annotation.Annotation... qualifiers) { throw new UnsupportedOperationException(); }
+                @Override public <U extends kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> jakarta.enterprise.inject.Instance<U> select(Class<U> subtype, java.lang.annotation.Annotation... qualifiers) { throw new UnsupportedOperationException(); }
+                @Override public <U extends kurvcygnus.soulnotes.domain.extension.IDataExtension<?, ?>> jakarta.enterprise.inject.Instance<U> select(jakarta.enterprise.util.TypeLiteral<U> typeLiteral, java.lang.annotation.Annotation... qualifiers) { throw new UnsupportedOperationException(); }
+            },
+            new ObjectMapper()
+        );
+    }
+
+    //* 标题生成器替身: 本组用例只驱动 callAiAndRespond 拆流路径 (不经过标题挂点), 空实现占位即可.
+    private static SessionTitleGenerator newTitleGeneratorStub()
+    {
+        return new SessionTitleGenerator(new StubTitleAgent(), VERTX);
+    }
+
+    //* 标题 Agent 替身: 本组用例不触达标题链路, 恒抛错以暴露意外触达.
+    private static final class StubTitleAgent implements kurvcygnus.soulnotes.ai.agent.SessionTitleAgent
+    {
+        @Override public String generateTitle(String systemPrompt, String userContent, String assistantReply)
+        { throw new UnsupportedOperationException("本组测试不驱动标题生成链路"); }
+    }
+
+    //* 候选追问生成器替身: 本组用例不经过追问挂点, 空实现占位即可 (SessionTitleGenerator 同款).
+    private static FollowupGenerator newFollowupGeneratorStub()
+    {
+        return new FollowupGenerator(new StubFollowupAgent(), VERTX);
+    }
+
+    //* 候选追问 Agent 替身: 本组用例不触达追问链路, 恒抛错以暴露意外触达.
+    private static final class StubFollowupAgent implements kurvcygnus.soulnotes.ai.agent.FollowupAgent
+    {
+        @Override public String generateFollowups(String systemPrompt, String userContent, String assistantReply)
+        { throw new UnsupportedOperationException("本组测试不驱动候选追问生成链路"); }
     }
 
     //* dispatch 替身: 空渠道 + 冷却逃生门 (minutes<=0 旁路冷却判定, 不触 Redis → redisDS 置 null 安全);
@@ -109,7 +162,7 @@ class ChatServiceTest
     private static ClinicalSchemaNormalizer unusedNormalizer()
     {
         return new ClinicalSchemaNormalizer(
-            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()),
+            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()),
             "", "", "test-model", newCacheFile(),
             prompt ->
             {
@@ -138,17 +191,25 @@ class ChatServiceTest
 
     private static String invokeBuildSystemPrompt(ChatService service) throws Exception
     {
-        final var method = ChatService.class.getDeclaredMethod("buildSystemPrompt");
+        //* @since 1.7.0 userId 穿参随情境注入链退役移除, buildSystemPrompt 收敛为无参私有方法;
+        //* @since 2.1.0 增风格块穿参, 本组契约用例恒传空串 (不插风格块 = 逐字节一致语义的被测形态);
+        //* @since 2.2.0 再增扩展情境块穿参, 恒传空串 (无扩展贡献 = 不插情境块).
+        final var method = ChatService.class.getDeclaredMethod("buildSystemPrompt", String.class, String.class);
         method.setAccessible(true);
-        return (String) method.invoke(service);
+        return (String) method.invoke(service, "", "");
     }
 
     @SuppressWarnings("unchecked")//! Method.invoke 返回 Object, 泛型擦除下强转回 Uni<String> 不可避免.
     private static Uni<String> invokeCallAiAndRespond(ChatService service, AiChatSession session) throws Exception
+    { return invokeCallAiAndRespond(service, session, ""); }
+
+    //* 带扩展情境块的驱动形态: 供 collectExtensionContext 产物 → 提示词组装的接线断言 (评审 I-3).
+    @SuppressWarnings("unchecked")//! Method.invoke 返回 Object, 泛型擦除下强转回 Uni<String> 不可避免.
+    private static Uni<String> invokeCallAiAndRespond(ChatService service, AiChatSession session, String extContext) throws Exception
     {
-        final var method = ChatService.class.getDeclaredMethod("callAiAndRespond", AiChatSession.class, String.class);
+        final var method = ChatService.class.getDeclaredMethod("callAiAndRespond", AiChatSession.class, String.class, String.class, String.class);
         method.setAccessible(true);
-        return (Uni<String>) method.invoke(service, session, "我睡不着");
+        return (Uni<String>) method.invoke(service, session, "我睡不着", "", extContext);
     }
 
     private static List<String> assistantContents(AiChatSession session)
@@ -161,12 +222,12 @@ class ChatServiceTest
     //region 结构化输出管线: 契约组装 (三态: 默认 / 自定义已归一 / 自定义未归一)
     @Test void buildSystemPrompt_Off_ReturnsBasePromptOnly() throws Exception
     {
-        assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, invokeBuildSystemPrompt(newService(false, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
+        assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, invokeBuildSystemPrompt(newService(false, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
     }
 
     @Test void buildSystemPrompt_On_DefaultSchema_AppendsShellWithDefaultFields() throws Exception
     {
-        final var prompt = invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer()));
+        final var prompt = invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer()));
         assertTrue(prompt.startsWith(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT), "机构/内置提示词必须在前");
         assertTrue(prompt.contains("[输出契约]"), "契约壳必须随 clinical.tagging 注入");
         assertTrue(prompt.contains(AiPromptConstants.CLINICAL_OUTPUT_SCHEMA_DEFAULT), "默认结构定义字段说明必须随契约下发");
@@ -179,13 +240,13 @@ class ChatServiceTest
             AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT,
             PrintUtils.quickFormat(AiPromptConstants.CLINICAL_OUTPUT_CONTRACT, AiPromptConstants.CLINICAL_OUTPUT_SCHEMA_DEFAULT)
         );
-        assertEquals(expected, invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
+        assertEquals(expected, invokeBuildSystemPrompt(newService(true, new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer())));
     }
 
     @Test void buildSystemPrompt_On_InstitutionalPromptStaysFirst() throws Exception
     {
         //* 合并规则: 机构提示词在前, 功能契约段在后 — 契约首行的最高优先级声明兜底机构指令冲突.
-        final var provider = new PromptProvider(Optional.of("机构自定义人设"), Optional.empty(), Optional.empty(), Optional.empty());
+        final var provider = new PromptProvider(Optional.of("机构自定义人设"), Optional.empty(), Optional.empty());
         final var expected = PrintUtils.quickFormat(
             "{}\n\n{}",
             "机构自定义人设",
@@ -196,7 +257,7 @@ class ChatServiceTest
 
     @Test void buildSystemPrompt_On_CustomNormalizedSchema_AppendsNormalizedSchema() throws Exception
     {
-        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
+        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
         //* 预热缓存: 模拟启动期归一化已成功.
         final var normalizer = new ClinicalSchemaNormalizer(provider, "", "", "test-model", newCacheFile(), prompt ->
         {
@@ -214,7 +275,7 @@ class ChatServiceTest
 
     @Test void buildSystemPrompt_On_CustomUnNormalizedSchema_FallsBackToBaseOnly() throws Exception
     {
-        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
+        final var provider = new PromptProvider(Optional.empty(), Optional.empty(), Optional.of("输出 gad7 分数与风险"));
         //* 空缓存替身: cachedFor 必须只查缓存不触发 LLM, 未命中 = 增强暂禁.
         final var normalizer = new ClinicalSchemaNormalizer(provider, "", "", "test-model", newCacheFile(),
             prompt ->
@@ -257,6 +318,61 @@ class ChatServiceTest
 
         assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, agent.systemPrompts.getFirst(), "契约关闭时 systemPrompt 不得附加契约段");
         assertEquals(reply, assistantContents(session).getFirst(), "off 时即使模型异常输出块也原样落库 — 与现状逐字节一致");
+    }
+    //endregion
+    //region 扩展情境收集 fail-open (P3, 评审 I-3)
+    //* SPI 契约虽要求实现方自持失败, 框架侧超时/失败降级是第二道保险: 单扩展故障必须收敛为 "无贡献",
+    //* 绝不允许阻断 send 主链路或污染共情提示词.
+    record ExtArgs() {}
+
+    //* 抛错替身: aiContextContribution 恒失败 (违约实现, 检验框架侧 onFailure 降级).
+    static final class ThrowingExt implements kurvcygnus.soulnotes.domain.extension.IDataExtension<String, ExtArgs>
+    {
+        @Override public String name() { return "boom-ext"; }
+        @Override public Class<ExtArgs> argsType() { return ExtArgs.class; }
+        @Override public String query(UUID userId, ExtArgs args) { return "无关数据"; }
+        @Override public kurvcygnus.soulnotes.domain.extension.LLMToolSpec aiCallCommand() { return null; }
+        @Override public Uni<String> aiContextContribution(UUID userId)
+        { return Uni.createFrom().failure(new IllegalStateException("boom")); }
+    }
+
+    //* 迟滞替身: 600ms 后才产出, 必然撞上 300ms 收集超时窗 (检验框架侧 ifNoItem 降级).
+    static final class LaggardExt implements kurvcygnus.soulnotes.domain.extension.IDataExtension<String, ExtArgs>
+    {
+        @Override public String name() { return "lag-ext"; }
+        @Override public Class<ExtArgs> argsType() { return ExtArgs.class; }
+        @Override public String query(UUID userId, ExtArgs args) { return "无关数据"; }
+        @Override public kurvcygnus.soulnotes.domain.extension.LLMToolSpec aiCallCommand() { return null; }
+        @Override public Uni<String> aiContextContribution(UUID userId)
+        { return Uni.createFrom().item("迟滞贡献").onItem().delayIt().by(Duration.ofMillis(600)); }
+    }
+
+    @Test void collectExtensionContext_ThrowingAndLaggardExtensions_ShouldFailOpenToEmptyContext() throws Exception
+    {
+        final var badRegistry = registryOf(java.util.List.of(new ThrowingExt(), new LaggardExt()));
+        final var service = new ChatService(new RecordingChatAgent(""), new StubWarningAgent(),
+            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer(), null,
+            newDispatchStub(), newTitleGeneratorStub(), newFollowupGeneratorStub(), badRegistry, VERTX, 50, false);
+
+        //* 收集链必须成功完成 (send 仍 200 的服务层等价物) 且归一为空串 — 双缺陷扩展均被框架侧降级吸收.
+        final var method = ChatService.class.getDeclaredMethod("collectExtensionContext", UUID.class);
+        method.setAccessible(true);
+        final var start = System.nanoTime();
+        @SuppressWarnings("unchecked") final var context = (Uni<String>) method.invoke(service, UUID.randomUUID());
+        final var block = context.await().atMost(Duration.ofSeconds(10));
+        assertTrue(Duration.ofNanos(System.nanoTime() - start).toMillis() >= 250,
+            "收集耗时应 >= 迟滞替身真实撞上的 300ms 超时窗 (远小于此说明替身未生效)");
+        assertEquals("", block, PrintUtils.quickFormat("抛错 + 迟滞双缺陷必须降级为无贡献空串, 实际: {}", block));
+
+        //* 收集产物 (空串) 进入组装后, 共情提示词必须无情境块 — 与无注入形态逐字节一致 (send 成功闭环).
+        final var agent = new RecordingChatAgent("ok");
+        final var sending = new ChatService(agent, new StubWarningAgent(),
+            new PromptProvider(Optional.empty(), Optional.empty(), Optional.empty()), unusedNormalizer(), null,
+            newDispatchStub(), newTitleGeneratorStub(), newFollowupGeneratorStub(), badRegistry, VERTX, 50, false);
+        invokeCallAiAndRespond(sending, newSession(), block).
+            onFailure().recoverWithItem(() -> null).await().atMost(Duration.ofSeconds(10));
+        assertEquals(AiPromptConstants.EMPATHETIC_CHAT_SYSTEM_PROMPT, agent.systemPrompts.getFirst(),
+            "双缺陷扩展下共情提示词不得携带情境块 (哨兵句缺席)");
     }
     //endregion
 
