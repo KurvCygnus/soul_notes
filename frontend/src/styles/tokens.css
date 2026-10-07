@@ -1,0 +1,137 @@
+/* 设计令牌单一事实源 (配色定稿 2026-09-30): 雾杉 (sage) + 暮蓝 (dusk) 双主题, 明暗由外观模式 (跟随系统/浅色/深色) 决定.
+   色值唯一来源 = docs/superpowers/plans/2026-09-30-palette-choice.md (已过 WCAG AA 实测), 改色必须先改工件.
+   挂载约定 (外观定稿): <html data-theme="sage"|"dusk" data-mode="light"|"dark">, 双属性由 theme.ts/index.html 早脚本写入;
+   亮色为默认块, 暗色走 [data-theme][data-mode="dark"] 高特异性覆盖 — prefers-color-scheme 媒体查询退场,
+   系统跟随 (mode=system 由 JS 求值落档) 与手动覆盖统一为同一属性管线, 原生控件配色亦按 data-mode 收敛 (见 color-scheme 块).
+   令牌名与旧版一致 (--bg/--sidebar/--card/--ink/--muted/--faint/--line/--line-strong/--brand/--brand-ink/
+   --amber-bg/--amber-line/--amber-ink/--danger/--user-bubble/--ai-bubble/--overlay/--radius/--radius-lg/--shadow),
+   消费方 (base.css 等) 零改动. 注意: 注释文本内禁写 "星号斜杠" 序列, 否则会提前闭合块注释炸掉 minify. */
+
+/* 雾杉 (sage) 亮色: 默认主题 (D24), 灰绿基底的低刺激心理向色板. */
+[data-theme="sage"]
+{
+  --bg: #f6f7f4;
+  --sidebar: #eaede6;
+  --card: #ffffff;
+  --ink: #29322c;
+  --muted: #5f6a62;
+  --faint: #98a29a;
+  --line: #dfe3da;
+  --line-strong: #cdd4c8;
+  --brand: #4e7a5a;
+  --brand-ink: #ffffff;
+  --amber-bg: #fbf3e4;
+  --amber-line: #e7d3ab;
+  --amber-ink: #856a2e;
+  --danger: #a94a42;
+  --user-bubble: #4e7a5a;
+  --ai-bubble: #eef1ea;
+  /* 浮层遮罩: 亮色用同 hue 深底半透明, 保持主题气质 (写死深青 rgba 在暗色下不可见, 走查实测). */
+  --overlay: rgba(31, 39, 34, .42);
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, .05);
+}
+
+/* 暮蓝 (dusk) 亮色: 备选主题 (D24), 冷蓝灰基底, 结构与雾杉逐令牌对齐, 保证双主题下组件形态一致. */
+[data-theme="dusk"]
+{
+  --bg: #f5f6f8;
+  --sidebar: #ebeef3;
+  --card: #ffffff;
+  --ink: #262b33;
+  --muted: #5a6472;
+  --faint: #959eaa;
+  --line: #e0e4ea;
+  --line-strong: #cdd3dc;
+  --brand: #4f6699;
+  --brand-ink: #ffffff;
+  --amber-bg: #fdf3e0;
+  --amber-line: #e8d6ae;
+  --amber-ink: #83682e;
+  --danger: #b0483c;
+  --user-bubble: #4f6699;
+  --ai-bubble: #eef0f4;
+  --overlay: rgba(30, 34, 42, .42);
+  --radius: 10px;
+  --radius-lg: 16px;
+  --shadow: 0 2px 10px rgba(0, 0, 0, .05);
+}
+
+/* 雾杉暗色 (data-mode 挂载): 暗底三层分离 (bg/sidebar/card), 品牌绿提亮为暗底高可读档, brand-ink 反转为深墨保对比. */
+[data-theme="sage"][data-mode="dark"]
+{
+  --bg: #181b18;
+  --sidebar: #1f231f;
+  --card: #262b26;
+  --ink: #e6eae4;
+  --muted: #a8b0a6;
+  --faint: #6d756c;
+  --line: #2c322c;
+  --line-strong: #3c443c;
+  --brand: #93bd9a;
+  --brand-ink: #142016;
+  --amber-bg: #322c1c;
+  --amber-line: #57512e;
+  --amber-ink: #dcc27a;
+  /* 刻意缺口: --danger 沿用亮色 #a94a42 (暗底可读已验证), 不另设暗色档以免双色板语义漂移. */
+  --user-bubble: #47684f;
+  --ai-bubble: #262b26;
+  /* 暗色遮罩加深: 暗底上遮罩若过浅, 浮层与页面几乎无分层 (走查实测 "无遮罩感"). */
+  --overlay: rgba(0, 0, 0, .55);
+  --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+
+/* 暮蓝暗色 (data-mode 挂载): 与雾杉暗色同构, 仅色相换蓝; 缺口语义保持一致. */
+[data-theme="dusk"][data-mode="dark"]
+{
+  --bg: #16181d;
+  --sidebar: #1b1e24;
+  --card: #22252c;
+  --ink: #e4e7ec;
+  --muted: #a5acb8;
+  --faint: #6a7280;
+  --line: #2a2e36;
+  --line-strong: #3a404b;
+  --brand: #93a7db;
+  --brand-ink: #10141c;
+  --amber-bg: #322e1e;
+  --amber-line: #575031;
+  --amber-ink: #dcc27a;
+  /* 刻意缺口: --danger 沿用亮色 #b0483c. */
+  --user-bubble: #46588c;
+  --ai-bubble: #22252c;
+  --overlay: rgba(0, 0, 0, .55);
+  --shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+
+/* color-scheme (外观定稿): 原生控件 (滚动条/表单/输入法) 必须跟随"已解析档位"而非系统 —
+   index.html 的 meta color-scheme 只声明双档支持, 具体档位由此按 data-mode 收敛, 手动深色时原生控件不得残留亮色. */
+:root { color-scheme: light; }
+[data-theme="sage"][data-mode="dark"], [data-theme="dusk"][data-mode="dark"] { color-scheme: dark; }
+
+/* 动效令牌 (D23): 全部过渡/动画只允许引用此处, 组件禁止裸写毫秒/缓动 — 集中调档才能全局统一节奏.
+   --dur-blink 是刻意独立于过渡三档的状态闪烁节拍 (流式光标/录音红点): 1s 半明半灭的"呼吸"节奏,
+   若并入 fast/base/slow 档会变成频闪 (可达性红线), 故单列一档而非塞进交互节奏. */
+:root
+{
+  --dur-fast: 150ms;
+  --dur-base: 220ms;
+  --dur-slow: 320ms;
+  --dur-blink: 1s;
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* 运动令牌底座 (spec §8, Task 2): 语义化节奏四档 + 统一标准缓动, 与上方 D23 过渡三档并行成体系 —
+   press 90ms 按压反馈 / enter 220ms 进场 / exit 150ms 退场 / theme 240ms 主题换肤.
+   参与动画的属性仅限 transform + opacity + color 三类 (合成器友好, 不触发重排),
+   prefers-reduced-motion 下全部动效直切降级 (守卫见 base.css 文件尾与动效总闸). */
+:root
+{
+  --dur-press: 90ms;
+  --dur-enter: 220ms;
+  --dur-exit: 150ms;
+  --dur-theme: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

@@ -1,236 +1,129 @@
-//* 树洞对话页: 会话列表 (历史回放 / 删除) + SSE 流式对话 (失败降级非流式).
+//* 聊天主视图 (homepage-v2 Task 9 重构): hero 空态 (问候 + 居中输入盒) ↔ 消息流双态切换, 由壳经路由挂载 —
+//* 会话节即 `/`, 扩展节展开时本组件随路由整体卸载, 回到会话节重挂走既有 openRequest/meta 绑定链.
+//* 思考中指示 (用户裁定 2026-10-06): 内嵌于 AI 元信息行 .msg-thinking (ChatBubble), 顶栏进度点与底部等待行均已移除.
+//* 状态与发送管线全部收敛在 [[useChatSend]] (会话绑定/竞态守卫/降级/中止/登出复位), 本组件只做视图编排;
+//* chips 插槽 (D25): 注册表摊平的扩展贡献 + 内置文案经 [[selectVisibleChips]] 收敛后注入 Composer;
+//* 访客门全量接线: 文本发送的门在 useChatSend 内 (requireAuth 包 doSend, 登录后补发), chips 走壳式
+//* 空动作开门 (上抛不直发), 登录用户无门直发. 壳下发的两条 nonce 请求通道 (sendRequest 唤起发送 /
+//* newChatRequest 新建会话复位, 终审整改) 在此消费, 判重防重放.
+import { useCallback, useEffect } from 'react'
+import type { ReactElement } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import ChatStream from '../components/chat/ChatStream'
+import Composer from '../components/chat/Composer'
+import { selectVisibleChips } from '../components/chat/homeChips'
+import DailySummaryLine from '../components/summary/DailySummaryLine'
+import { homeChips } from '../extensions/registry'
+import { useAuth } from '../hooks/useAuth'
+import { useChatGate } from '../hooks/useChatGate'
+import { useChatSend } from '../hooks/useChatSend'
+import type { IChatViewContext } from './chatContext'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
-import { deleteSession, listMessages, listSessions, sendMessage, streamMessage } from '../api/chat'
-import { ApiError } from '../api/http'
-import { toast } from '../utils/toast'
-import { formatDateTime } from '../utils/format'
-import type { ChatMessage, ChatSessionVo } from '../types'
-import ChatBubble from '../components/chat/ChatBubble'
+//* nonce 消费台账必须是模块级: ChatView 随壳路由挂卸 (扩展节展开即整体卸载, 回会话节重挂),
+//* mount-scoped ref 重挂后归零, 会把已消费的 nonce 当新请求重放 — sendRequest 重放 = 重复用户消息 +
+//* 未请求的二次 LLM 调用 (登出换号后还会把前账号的提问发出去), newChatRequest 重放 = 重挂后经
+//* openRequest 恢复的会话被误清 (评审均定级 Important). 模块级台账跨挂载存活于整个页面会话:
+//* 同 nonce 只消费一次 (登出不清理也不会跨账号重放), 新 nonce 照常放行.
+let lastConsumedSendNonce = 0
+let lastConsumedNewChatNonce = 0
 
-const GREETING: ChatMessage = {
-  role: 'assistant',
-  content: '你好, 我是心灵札记。这里很安全, 你的每一句话都会被认真倾听。今天想聊点什么?',
-}
+export default function ChatView(): ReactElement
+{
+    const { sessions, reloadSessions, openRequest, sendRequest, newChatRequest } = useOutletContext<IChatViewContext>()
+    const { user } = useAuth()
+    const { requireAuth } = useChatGate()
+    //* followups (Task 8): 发送管线收敛的候选追问状态, 随 messages 下发 ChatStream (仅末条 AI 回复下展示);
+    //* 点击候选行经 handleSend 直发 — 与 Composer/通道发送同一条门 + 流式管线, 访客同样过登录门.
+    //* toolLabel (工具调用可见性): 流中 tool-call 事件的扩展自定义文案, 随流式态下发 ChatStream.
+    const { messages, streaming, streamError, startNewChat, handleSend, activeSessionId, draft, setDraft, followups, toolLabel } = useChatSend({ sessions, openRequest, reloadSessions })
 
-export default function ChatView() {
-  const [sessions, setSessions] = useState<ChatSessionVo[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [sessionNote, setSessionNote] = useState<string | null>(null)
-  const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const abortRef = useRef<AbortController | null>(null)
-  const listRef = useRef<HTMLDivElement | null>(null)
+    //* 会话标题 (主区左上) 兜底链: title -> 首条用户消息截断 20 字 -> preview -> 不渲染.
+    //* 事实源: sessions 列表按绑定会话 ID 取材 (首轮交换后端经 reloadSessions 刷新后 AI 标题随之到位);
+    //* 存量无标题会话以已加载历史的首条用户消息截断兜底 (与后端启动回填同口径: strip 后 20 字封顶),
+    //* 历史尚无用户消息时退 preview, 全缺则不渲染 — hero 空态亦无标题.
+    const openSession = activeSessionId == null ?
+        undefined :
+        (sessions ?? []).find(s => s.sessionId === activeSessionId)
+    const firstUserContent = messages.find(m => m.role === 'user')?.content.trim() ?? ''
+    const openTitle = openSession?.title ||
+        (firstUserContent === '' ? null : firstUserContent.slice(0, 20)) ||
+        openSession?.preview ||
+        null
 
-  const sortedSessions = useMemo(
-    () => [...sessions].sort((a, b) => b.lastUpdateTime.localeCompare(a.lastUpdateTime)),
-    [sessions],
-  )
+    //* chips 插槽 (D25): 注册表是静态装配, 摊平 + 上限收敛为纯函数, 每渲染重算成本可忽略 (个位数条目).
+    //* 门禁 (Task 15 用户报告缺陷): 仅 "新会话且尚未开始对话" 在场 — 已选中历史会话 (activeSessionId 非空,
+    //* 含历史加载竞态窗口: 会话 ID 先于消息到达, 不闪现) 或当前会话已有消息 (含发送后的乐观气泡) 一律隐藏;
+    //! 缺陷原形: chips 原先无条件注入, 会话进行中仍挂在输入框下方, 诱导用户跳出当前上下文重开话题.
+    const chips = activeSessionId == null && messages.length === 0 ? selectVisibleChips(homeChips) : []
 
-  const loadSessions = useCallback(async () => {
-    try {
-      setSessions(await listSessions())
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : '加载会话失败', 'error')
-    }
-  }, [])
+    //* chips 的访客门: 空动作 pending — 登录成功补发一次 no-op (不替用户直发候选题面), cancel 丢弃.
+    const requireLogin = useCallback(() => { requireAuth(() => {}) }, [requireAuth])
 
-  useEffect(() => {
-    void loadSessions()
-  }, [loadSessions])
+    //* 壳下发发送请求通道: nonce 判重 (台账见模块顶注; handleSend 身份因上游重建而变化导致 effect 重跑,
+    //* 也不会重放同一请求), 经聊天发送管线走与 Composer 完全相同的门 + 流式路径.
+    //* 生产者现状: 情境卡已随 homepage-v2 退场, 通道恒 null 无害, 留作未来唤起类入口原地复用.
+    useEffect(() =>
+    {
+        if(sendRequest == null || sendRequest.nonce === lastConsumedSendNonce)
+            return
+        lastConsumedSendNonce = sendRequest.nonce
+        handleSend(sendRequest.content)
+    }, [sendRequest, handleSend])
 
-  //* 卸载时中止进行中的流式请求.
-  useEffect(
-    () => () => {
-      abortRef.current?.abort()
-    },
-    [],
-  )
+    //* 壳下发新建会话通道 (终审整改): nonce 判重, 消费即 startNewChat 复位 — 与会话内工具条 "新对话"
+    //* 同一终点, 侧栏钮对登录用户由此获得与工具条等价的能力.
+    useEffect(() =>
+    {
+        if(newChatRequest == null || newChatRequest.nonce === lastConsumedNewChatNonce)
+            return
+        lastConsumedNewChatNonce = newChatRequest.nonce
+        startNewChat()
+    }, [newChatRequest, startNewChat])
 
-  //* 新消息/流式增量时自动滚动到底部.
-  useEffect(() => {
-    const el = listRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [messages])
-
-  //* 加载序号: 快速连点多个会话时只认最后一次请求, 先发的慢响应直接丢弃.
-  const historySeqRef = useRef(0)
-
-  const openSession = async (s: ChatSessionVo): Promise<void> => {
-    setActiveId(s.sessionId)
-    setMessages([])
-    setSessionNote('正在加载历史消息…')
-    const seq = ++historySeqRef.current
-    try {
-      const history = await listMessages(s.sessionId)
-      if (seq !== historySeqRef.current) return
-      setMessages(history)
-      setSessionNote(null)
-    } catch (err) {
-      if (seq !== historySeqRef.current) return
-      setSessionNote('历史消息加载失败, 可直接继续对话')
-      toast(err instanceof ApiError ? err.message : '历史消息加载失败', 'error')
-    }
-  }
-
-  const startNewChat = (): void => {
-    historySeqRef.current += 1 //* 令在途的历史加载失效.
-    setActiveId(null)
-    setMessages([])
-    setSessionNote(null)
-    setInput('')
-  }
-
-  const handleDeleteSession = async (s: ChatSessionVo): Promise<void> => {
-    if (!window.confirm('确定删除这个会话吗? 删除后无法恢复。')) return
-    try {
-      await deleteSession(s.sessionId)
-      toast('会话已删除', 'success')
-      if (s.sessionId === activeId) startNewChat()
-      await loadSessions()
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : '删除会话失败', 'error')
-    }
-  }
-
-  //! 新会话的后端 SSE 流不返回 sessionId, 首轮回复后经会话列表回查最新会话实现续聊 (启发式).
-  const resolveNewSession = async (): Promise<void> => {
-    try {
-      const list = await listSessions()
-      setSessions(list)
-      const newest = [...list].sort((a, b) => b.lastUpdateTime.localeCompare(a.lastUpdateTime))[0]
-      if (newest) {
-        setActiveId(newest.sessionId)
-        setSessionNote(`已自动续接会话 (${newest.messageCount} 条消息)`)
-      }
-    } catch {
-      //* 回查失败不阻塞对话, 下一条消息将另起新会话.
-    }
-  }
-
-  const handleSend = async (): Promise<void> => {
-    const content = input.trim()
-    if (!content || streaming) return
-    setInput('')
-    setMessages((prev) => [...prev, { role: 'user', content }])
-    setStreaming(true)
-
-    const controller = new AbortController()
-    abortRef.current = controller
-    let partial = ''
-
-    try {
-      await streamMessage({
-        sessionId: activeId,
-        content,
-        signal: controller.signal,
-        onChunk: (chunk) => {
-          partial += chunk
-          setMessages((prev) => {
-            const next = [...prev]
-            const last = next[next.length - 1]
-            if (last && last.role === 'assistant') next[next.length - 1] = { ...last, content: partial }
-            else next.push({ role: 'assistant', content: partial })
-            return next
-          })
-        },
-      })
-      if (!activeId) await resolveNewSession()
-    } catch (err) {
-      if ((err as Error).name === 'AbortError') return
-      //* 流式失败且无任何内容时降级为非流式接口.
-      if (!partial) {
-        try {
-          const reply = await sendMessage(activeId, content)
-          setMessages((prev) => [...prev, reply])
-          if (!activeId) await resolveNewSession()
-        } catch (err2) {
-          toast(err2 instanceof ApiError ? err2.message : '消息发送失败', 'error')
-        }
-      } else {
-        //* 流式中断但有部分内容: 服务端已建会话, 新会话同样要回查 sessionId, 否则下一条消息另起会话.
-        if (!activeId) void resolveNewSession()
-        toast(err instanceof ApiError ? err.message : '流式中断, 已显示部分回复', 'warning')
-      }
-    } finally {
-      setStreaming(false)
-      abortRef.current = null
-    }
-  }
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    //* Enter 发送, Shift+Enter 换行.
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      void handleSend()
-    }
-  }
-
-  const lastIsStreaming = streaming && messages.length > 0 && messages[messages.length - 1].role === 'assistant'
-
-  return (
-    <div className="chat-view">
-      <aside className="chat-sessions card" aria-label="会话列表">
-        <div className="chat-sessions-head">
-          <span className="chat-sessions-title">历史会话</span>
-          <button type="button" className="btn sm" onClick={startNewChat}>
-            + 新对话
-          </button>
-        </div>
-        <div className="chat-sessions-list">
-          {sortedSessions.length === 0 && <p className="chat-sessions-empty">暂无历史会话</p>}
-          {sortedSessions.map((s) => (
-            <div key={s.sessionId} className={`session-item${s.sessionId === activeId ? ' active' : ''}`}>
-              <button type="button" className="session-open" onClick={() => void openSession(s)}>
-                <span className="session-preview line-clamp-2">{s.preview}</span>
-                <span className="session-meta tabular">
-                  {s.messageCount} 条 · {formatDateTime(s.lastUpdateTime)}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="session-del"
-                title="删除会话"
-                aria-label={`删除会话: ${s.preview || '无预览'}`}
-                onClick={() => void handleDeleteSession(s)}
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      </aside>
-
-      <div className="chat-main card">
-        <div className="chat-messages" ref={listRef} aria-live="polite">
-          {sessionNote && <p className="chat-note">{sessionNote}</p>}
-          {messages.length === 0 && !sessionNote && <ChatBubble role="assistant" content={GREETING.content} />}
-          {messages.map((m, i) => (
-            <ChatBubble
-              key={`${m.role}-${i}`}
-              role={m.role}
-              content={m.content}
-              streaming={lastIsStreaming && i === messages.length - 1}
-            />
-          ))}
-        </div>
-        <div className="chat-input-area">
-          <textarea
-            className="textarea chat-input"
-            placeholder="和树洞说点什么… (Enter 发送, Shift+Enter 换行)"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            rows={2}
+    const showHero = messages.length === 0
+    //* 思考中等待视觉 (用户裁定 2026-10-06): 指示器在 AI 元信息行 "心灵伙伴" 右侧 (ChatBubble 内),
+    //* 不再于消息区末尾独立成行 — 原底部 ThinkRow 已删; 顶栏 stream-dot 进度点一并移除.
+    //* 流式期间禁并发 (Composer 侧停用, doSend 的 abort 仅兜底); 两态共用同一实例, 同屏只渲染一处.
+    //* 草稿接线 (R3+): draft/setDraft 来自 useChatSend 的每会话台账 — 切换会话时换发当前键的草稿,
+    //* Composer 回灌恢复; 击键经 onDraftChange 回写台账, 发送清空亦走同一通道.
+    const composer = (
+        <Composer
+            onSend={handleSend}
             disabled={streaming}
-          />
-          <button type="button" className="btn chat-send" onClick={() => void handleSend()} disabled={!input.trim() || streaming}>
-            {streaming ? '回复中…' : '发送'}
-          </button>
+            chips={chips}
+            onRequireLogin={user == null ? requireLogin : undefined}
+            draft={draft}
+            onDraftChange={setDraft}
+        />
+    )
+    //* 每日总结「」行 (Task 10) 随 composer 迁入本组件 (Task 9): 登录态限定 (访客请求必 401, 无谓打点);
+    //* 无总结/失败整件隐身, 组件自包含三态降级. 门禁 (用户报告缺陷, 与 chips 同款条件): 仅 "新会话且
+    //* 尚未开始对话" (hero 空态) 在场 — 格言数据虽是跨会话的今日聚合, 用户明确要求只随空态出现;
+    //! 缺陷原形: 仅登录门禁, 活跃对话中仍渲染在聊天流底部, 暗色文本干扰阅读.
+    const summaryLine = user != null && activeSessionId == null && messages.length === 0 ? <DailySummaryLine /> : null
+
+    return (
+        <div className="chat-view">
+            {streamError != null && <div className="chat-error" role="alert">{streamError}</div>}
+            {showHero ? (
+                <div className="chat-placeholder">
+                    <div className="hero-box">
+                        <h1>你好, 今天想聊点什么?</h1>
+                        <p>我是你的倾听伙伴, 任何想法都可以在这里慢慢说.</p>
+                        {composer}
+                        {summaryLine}
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <div className="chat-toolbar">
+                        {openTitle != null && <div className="chat-title" title={openTitle}>{openTitle}</div>}
+                        <button type="button" className="btn btn-sm" onClick={startNewChat}>新对话</button>
+                    </div>
+                    <ChatStream messages={messages} streaming={streaming} followups={followups} onPickFollowup={handleSend} toolLabel={toolLabel} />
+                    {composer}
+                </>
+            )}
         </div>
-      </div>
-    </div>
-  )
+    )
 }

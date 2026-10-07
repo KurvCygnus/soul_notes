@@ -1,0 +1,574 @@
+/* 全局清默认点按高亮: 真机走查发现 WebView 触按出现蓝色方块, 与主题视觉割裂; 自有按压反馈已覆盖.
+   项目的斜杠斜杠星注释约定在 CSS 语境非法, 本文件注释一律用块注释形式. */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 system-ui, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+button { font: inherit; cursor: pointer; }
+.btn { border: 1px solid var(--line-strong); background: var(--card); color: var(--ink); border-radius: 999px; padding: 6px 14px; }
+.btn:hover { border-color: var(--brand); }
+.btn-primary { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.btn-sm { padding: 3px 10px; font-size: 13px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.input, .textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); padding: 8px 12px; }
+.input:focus, .textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.modal-overlay { position: fixed; inset: 0; background: var(--overlay); display: grid; place-items: center; z-index: 60; }
+.badge { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* 应用壳: 左栏 + 主区 (宽度数值在 Sidebar 内联, 这里只管形态与令牌配色) */
+.shell { display: flex; height: 100dvh; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+/* 主区路由容器 (Task 13, spec §9.1): 壳以 key=pathname 挂 <Outlet/> — 路径变化即重挂本容器并重放入场淡入
+   (CSS animation 不重播已挂载节点, key 换是唯一可靠的重放闸); 布局上原样承接 .main 的纵向伸缩,
+   聊天流滚动仍归 .chat-stream/.main, 本容器不设 overflow. 扩展详情页参数切换随之整体重挂 (只读查询页, 无状态成本). */
+.main-route { flex: 1; min-height: 0; display: flex; flex-direction: column; animation: route-fade-in var(--dur-base) var(--ease-enter); }
+@keyframes route-fade-in { from { opacity: 0; } }
+/* 主区顶栏 (Task 14 常驻汉堡): 移动端抽屉唯一入口, 桌面端 display:none; 天气胶囊已废除 (D14, Task 9). */
+.topbar { flex-shrink: 0; display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 8px 12px 0; }
+/* v2 手风琴侧栏 (v4 视觉定稿): 条目一律无框纯文本行, hover 淡高亮 (仅背景令牌), 选中项淡品牌底
+   (color-mix 低 alpha, 不新造颜色令牌); 宽度过渡与箭头旋转走动效令牌 (D23), 折叠钮单图形旋转 (.icon-rot). */
+/* 主题换肤过渡并入 (Task 2, spec D6): .sidebar 既有 width 过渡, 主题三色按"并入既有 transition 列表"原则追加 —
+   若在文件尾另立 .sidebar 规则会按源序整体覆盖 transition, 连带压掉 width 过渡, 且会压过移动端抽屉
+   媒体查询内的 transform/visibility 过渡 (破坏抽屉动画); 抽屉态的媒体查询规则源序更后仍照旧覆盖此处,
+   抽屉态换肤瞬时, 与既有口径一致, 行为零变化. */
+.sidebar { flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow: hidden; transition: width var(--dur-base) var(--ease-enter), background-color var(--dur-theme) var(--ease-standard), color var(--dur-theme) var(--ease-standard), border-color var(--dur-theme) var(--ease-standard); }
+.sidebar-toggle { align-self: flex-start; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; border: none; background: none; color: var(--muted); padding: 4px; border-radius: var(--radius); }
+.icon-rot { transform: rotate(180deg); }
+.sidebar-toggle:hover { background: var(--card); color: var(--ink); }
+/* 滚动链穿透防护 (overscroll-behavior: contain): 列表滚到边缘后, 默认把剩余滚动量沿滚动链上抛 body —
+   移动端表现为整页橡皮筋回弹, 全屏抽屉里列表触底还会拖着遮罩后的主区一起滚 (抽屉场景尤甚).
+   contain 掐断上抛: 边缘即停, 手势语义只属于本容器. jsdom 不求值 CSS, 无测试 (真机走查口径). */
+.sidebar-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 4px; }
+/* 节标题行: 无框文本行 + 箭头; 箭头朝向随 aria-expanded 旋转 (jsdom 只断状态, 时序归令牌). */
+.sidebar-section { display: flex; flex-direction: column; }
+.sidebar-section-title { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); padding: 6px 8px; border-radius: var(--radius); font-size: 13px; font-weight: 600; text-align: left; }
+.sidebar-section-title:hover { background: var(--card); color: var(--ink); }
+.sidebar-section-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-section-arrow { flex-shrink: 0; transition: transform var(--dur-fast) var(--ease-enter); }
+.sidebar-section-title[aria-expanded="false"] .sidebar-section-arrow { transform: rotate(-90deg); }
+/* 手风琴内容区 (Task 13, spec §9.1): 切节时新区块整体挂载, 淡入走令牌 — 无高度动画 (高度过渡需测量内容,
+   且展开/收起双向簿记复杂度不值得), 淡入已足够传达"此处展开". */
+.sidebar-items { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 4px; animation: sidebar-items-in var(--dur-fast) var(--ease-enter); }
+@keyframes sidebar-items-in { from { opacity: 0; } }
+.sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* 条目行: 无框纯文本行, hover 淡高亮, 选中淡品牌底; li (会话) 与 button (扩展) 共用同一形态. */
+.sidebar-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--radius); font-size: 13px; text-align: left; }
+/* font:inherit 会重置字号为 body 15px, 必须显式压回与节标题一致的 13px (走查修正). */
+button.sidebar-row { border: none; background: none; color: var(--ink); font: inherit; font-size: 13px; }
+.sidebar-row:hover { background: var(--card); }
+.sidebar-row.active { background: color-mix(in srgb, var(--brand) 10%, transparent); }
+.sidebar-row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Mock/占位行尾小字: 非徽标 (无边框无底), 仅弱化小字标注. */
+.sidebar-tag { flex-shrink: 0; font-size: 11px; color: var(--faint); }
+.sidebar-new { display: flex; align-items: center; gap: 8px; width: 100%; border: none; background: none; color: var(--muted); font: inherit; font-size: 13px; padding: 6px 8px; border-radius: var(--radius); text-align: left; }
+.sidebar-new:hover { background: var(--card); color: var(--ink); }
+.sidebar-empty { margin: 0; font-size: 13px; color: var(--faint); padding: 2px 8px 4px; }
+/* 会话行主按钮 (Task 6 重构): 横排 = 标题 (.row-title, ellipsis) + 相对时间 (.row-time), 摘要副行退场 —
+   行结构精简后手势选择器 .sidebar-row-main 保持不变 (行内左滑跟指/停靠继续作用于本钮, 见媒体查询内过渡规则). */
+.sidebar-row-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; border: none; background: none; color: inherit; font: inherit; font-size: 13px; text-align: left; padding: 0; }
+/* 标题槽: 单行省略, 身份名优先 (title 缺席由 preview 兜底, 前端同槽展示). */
+.row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; color: var(--ink); }
+/* 相对时间槽: 弱化小字钉在行尾, 不参与省略 (文案由 utils/relTime 产出, 最长 "MM-DD" 五字符量级). */
+.row-time { flex-shrink: 0; font-size: 11px; color: var(--faint); }
+/* 置顶节标签 (Task 6): 沿用节标题的弱化模式 (13px/600/--muted), 非交互纯标签故无 hover 反馈不设指针. */
+.sidebar-pinned-label { margin: 0; padding: 6px 8px 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
+/* 删除 ×: hover/focus 才显 (CSS 职责, 键盘可达性经 focus-within 同步), 点击上抛壳 = 请求删除 (壳级确认模态后才真删). */
+.sidebar-del { flex-shrink: 0; border: none; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 2px 4px; visibility: hidden; }
+.sidebar-del:hover { color: var(--danger); }
+.sidebar-row:hover .sidebar-del, .sidebar-row:focus-within .sidebar-del { visibility: visible; }
+/* 折叠图标列 (48px): 节图标/新建会话 纯图标钮, 点按展开并切节. */
+.sidebar-rail { display: flex; flex-direction: column; gap: 4px; }
+.sidebar-mini { display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 5px; border-radius: var(--radius); }
+.sidebar-mini:hover { background: var(--card); color: var(--ink); }
+/* 底部头像行: 登录用户 = 头像+用户名+汉堡钮, 访客 = 登录/注册; 折叠态收成仅头像/登录入口. */
+.sidebar-foot { flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 8px 8px 2px; border-top: 1px solid var(--line); }
+.sidebar-avatar { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); font-size: 13px; font-weight: 600; }
+.sidebar-username { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.sidebar-menu { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 4px; border-radius: var(--radius); }
+.sidebar-menu:hover { background: var(--card); color: var(--ink); }
+/* hidden 属性兜底 (冒烟走查改进): 抽屉关闭态汉堡钮随 aside 整体滑出屏外, CSS visibility:hidden 有
+   过渡延迟窗口且 jsdom/无 CSS 宿主不生效 — DOM 层 hidden 由 React 渲染条件下发 (Sidebar#menuHidden);
+   本钮的 inline-flex 会压过 UA 对 [hidden] 的缺省 display:none, 必须显式补回才有兜底效果. */
+.sidebar-menu[hidden] { display: none; }
+.sidebar-login { min-width: 0; border: none; background: none; color: var(--muted); font-size: 13px; padding: 4px 6px; border-radius: var(--radius); text-align: left; }
+.sidebar-login:hover { background: var(--card); color: var(--ink); }
+.sidebar.collapsed .sidebar-foot { justify-content: center; padding-left: 2px; padding-right: 2px; }
+.sidebar.collapsed .sidebar-login { padding: 4px 2px; }
+.sidebar.collapsed .sidebar-username, .sidebar.collapsed .sidebar-menu { display: none; }
+/* 情境卡组样式已随 ContextRail 退场 (homepage-v2 Task 9): 扩展 chips 插槽取代情境卡, 无残留类. */
+/* 天气胶囊 (Task 12): 已废除 (D14 顶栏/天气 UI 退场, Task 9 随 api/diary 收敛移除), 样式块一并清除. */
+.chat-placeholder { height: 100%; display: grid; place-items: center; text-align: center; padding: 24px; }
+.chat-placeholder h1 { margin: 0 0 8px; font-size: 24px; }
+.chat-placeholder p { margin: 0; color: var(--muted); }
+
+/* 每日总结「」行 (homepage-v2 Task 10): 输入区下的质性暗行 + 最近列表 popover, 形态对齐 .weather-pop;
+   暗行取 --faint/--muted 双档 (静默不喧宾, hover 提示可点), 配色/圆角/阴影全部取自 tokens;
+   进场动效 (Task 13) 只做纯透明度淡入 — popover 靠 translateX(-50%) 居中定位, transform 类入场会打架. */
+.summary-line { position: relative; margin: 10px auto 0; max-width: 480px; }
+.summary-line-trigger { border: none; background: none; color: var(--faint); font: inherit; font-size: 13px; padding: 2px 8px; border-radius: var(--radius); cursor: pointer; }
+.summary-line-trigger:hover { color: var(--muted); background: var(--bg); }
+.summary-pop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 50; width: min(320px, 90vw); padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; animation: summary-pop-in var(--dur-fast) var(--ease-enter); }
+@keyframes summary-pop-in { from { opacity: 0; } }
+.summary-pop-title { margin: 0; font-size: 13px; font-weight: 600; }
+.summary-pop-empty { margin: 0; font-size: 12px; color: var(--faint); }
+.summary-pop-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+.summary-pop-item { border-top: 1px solid var(--line); padding: 8px 0; }
+.summary-pop-item:first-child { border-top: none; padding-top: 0; }
+.summary-pop-item:last-child { padding-bottom: 0; }
+.summary-pop-date { font-size: 12px; color: var(--faint); }
+.summary-pop-content { margin: 2px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+
+/* 壳内二级页共用骨架 (Task 6): 页头 + 空态, 占位页与设置页同形态; 容器居中限宽防宽屏拉长行. */
+.view-header h1 { margin: 0; font-size: 20px; }
+.view-empty { margin: 0; font-size: 13px; color: var(--faint); }
+.placeholder-view { max-width: 720px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+
+/* 扩展页容器 (Task 6): 总览/扩展页在主区的统一留白容器, 页面组件自渲染 ExtPageHeader/ExtCard. */
+.ext-page { max-width: 860px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 10px; }
+/* 总览空态 (冒烟走查改进): 无总览提供者时裸空态 <p> 直落 .main-route 顶边 — 撑满路由区纵向居中,
+   内边距沿用 .chat-placeholder 的 24px 惯例, 空态不再贴顶. */
+.ext-page-empty { flex: 1; display: grid; place-items: center; padding: 24px; }
+
+/* 设置页 (Task 6 定稿, Task 15 加宽): 主题+外观分段控件 — aria-pressed 即选中态走品牌令牌, 边框分隔沿用 --line-strong;
+   720px 走查反馈排版太窄, 放宽到 960px (1440 宽屏主区约 1180 可用, 卡片仍居中有呼吸感). */
+.settings-view { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 16px; }
+.settings-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.settings-card-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted); }
+.settings-theme { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.settings-theme-opt { border: none; background: var(--card); color: var(--ink); font: inherit; padding: 7px 18px; transition: background var(--dur-fast) var(--ease-enter); }
+.settings-theme-opt + .settings-theme-opt { border-left: 1px solid var(--line-strong); }
+.settings-theme-opt:hover { background: var(--bg); }
+.settings-theme-opt[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.settings-hint { margin: 0; font-size: 12px; color: var(--faint); }
+
+/* 汉堡用户菜单 (Task 6, spec §7): 侧栏头像行上方向上弹出 (transform-origin 左下), 遮罩透明全屏收点击;
+   层级: 抽屉 80 之上 (移动端抽屉内也能开菜单), 登录浮层 60 与 RED 预警 100 之外互不重叠 (菜单仅登录态存在). */
+.user-menu-mask { position: fixed; inset: 0; z-index: 85; }
+.user-menu { position: fixed; left: 12px; bottom: 56px; z-index: 86; width: 236px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); transform-origin: bottom left; animation: user-menu-in var(--dur-fast) var(--ease-enter); }
+@keyframes user-menu-in { from { opacity: 0; transform: translateY(6px); } }
+.user-menu-item { display: flex; align-items: center; gap: 9px; border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; padding: 8px 12px; border-radius: var(--radius); }
+.user-menu-item-logout { color: var(--danger); }
+.user-menu-item:hover { background: var(--bg); }
+/* 危机支持置顶且 danger 令牌点出安全语义 (菜单五项中唯一的彩色条目). */
+.user-menu-item-crisis { color: var(--danger); }
+
+/* 会话行菜单 (Task 6): 触发行附近固定弹出 (top/left 由 Sidebar 按行位置钳取后内联下发), 透明遮罩收全屏点击;
+   条目行复用 .user-menu-item 的行形态. 层级阶梯: 遮罩 87 / 菜单 88 — 高于汉堡菜单 (86, 侧栏行菜单与其
+   不同触发源不同屏), 低于壳级确认模态 (90, 删除项换场在其后, 见 [[RenameDialog]] 同注). */
+.session-menu-mask { position: fixed; inset: 0; z-index: 87; }
+.session-menu { position: fixed; z-index: 88; width: 148px; display: flex; flex-direction: column; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+/* 破坏性条目 (删除): danger 令牌着色, 与 UserMenu 登出项同法. */
+.session-menu-danger { color: var(--danger); }
+/* 重命名弹层 (Task 6): 复用 .confirm-modal 体系 (遮罩/面板/脚钮全套), 只补校验提示小字 — danger 色
+   与禁用保存钮联动, 合法态整行不渲染不占版面. */
+.rename-dialog-hint { margin: 0; font-size: 12px; color: var(--danger); }
+
+/* 浮层家族统一入场 (Task 13, spec §9.1): 淡入 + 0.97 缩放, 同一 pattern 已在四处复现 (登录浮层/危机 Flyout/
+   删除确认模态/RED 预警弹窗) 才收成工具类; 出场一律即时卸载不走退场动画 — 浮层离场无过渡价值, 退场反需延迟卸载簿记.
+   只动透明度与 transform, 不改布局; reduced-motion 由全局 reduced-motion 守卫 (base.css 两处) 统一掐断. */
+.anim-pop { animation: anim-pop-in var(--dur-base) var(--ease-enter); }
+@keyframes anim-pop-in { from { opacity: 0; transform: scale(.97); } }
+
+/* 浮层退场 (走查裁决 2026-10-03, 取代 "出场即时卸载"): 关闭瞬间根节点挂 .closing — 淡出 (--ease-exit),
+   animationend (hooks/useExitAnimation, --dur-fast 令牌兜底) 后真卸载; 退场期掐 pointer-events 防幽灵点击.
+   RED 预警弹窗刻意不在列: 安全模态离场零延迟 (Task 13 红线). */
+.crisis-flyout.closing, .confirm-modal.closing, .user-menu.closing, .modal-overlay.closing { animation: overlay-exit var(--dur-fast) var(--ease-exit) forwards; pointer-events: none; }
+@keyframes overlay-exit { to { opacity: 0; } }
+
+/* 危机 Flyout (Task 8, D22): 菜单/RED 双入口的居中安全浮层, 访客无门 (红线). 层级阶梯裁决 (数值沿用
+   本文件既有裸值注释惯例, 不设 --z 令牌): 登录 60 < 抽屉 scrim 70 < 抽屉 80 < 危机 Flyout 85 = 菜单遮罩 85
+   (开 Flyout 前菜单必先收起, 二者互斥不同屏, 同值无争) < 菜单 86 < 确认模态 90 (Task 11, 删除会话确认,
+   侧栏 × 触发时汉堡菜单必不在场) < RED 预警 100 — 85 压过移动端抽屉,
+   抽屉在场时 Flyout 仍完整可见, RED 弹窗唤起 Flyout 前先自行关闭, 永远置顶的安全模态不被遮挡.
+   遮罩走 [[--overlay]] 令牌 (2026-10-02 走查裁决, 取代旧 rgba(47,59,58,.35) 裸值): 写死的深青半透明在暗色
+   主题下暗上叠暗不可见, 浮层与页面零分层; 令牌按主题/明暗四档给值 (亮色同 hue 深底, 暗色纯黑加深). */
+.crisis-flyout { position: fixed; inset: 0; z-index: 85; background: var(--overlay); display: grid; place-items: center; padding: 16px; }
+.crisis-flyout-panel { width: min(420px, 92vw); max-height: 90dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.crisis-flyout-panel h2 { margin: 0; font-size: 18px; }
+/* 入场动效: 组件挂 [[.anim-pop]] (浮层家族同款), 此处不再私设 keyframes. */
+
+/* 删除确认模态 (Task 11, D17 无预览契约): 取代原生 window.confirm (暴露 URL 且预览不可控), 内容全由壳传入,
+   组件无 children/预览插槽. 层级 90: 沿上方危机 Flyout 段的阶梯注释 (菜单 86 之上, RED 预警 100 之下) —
+   侧栏 × 触发时汉堡菜单必不在场, 90 是给未来同层浮层留的隔离带, 不与 86 挤同值. */
+.confirm-modal { position: fixed; inset: 0; z-index: 90; background: var(--overlay); display: grid; place-items: center; padding: 16px; }
+.confirm-modal-panel { width: min(360px, 92vw); display: flex; flex-direction: column; gap: 10px; padding: 20px; }
+.confirm-modal-panel h2 { margin: 0; font-size: 17px; }
+.confirm-modal-panel p { margin: 0; color: var(--muted); font-size: 14px; }
+.confirm-modal-foot { display: flex; justify-content: flex-end; gap: 8px; }
+/* 危险确认钮: danger 令牌描边着色, hover 反白实底 — 与 .red-alert-call 的 #fff 前例一致 (danger 底上白字已验证). */
+.confirm-modal-danger { border-color: var(--danger); color: var(--danger); }
+.confirm-modal-danger:hover { background: var(--danger); border-color: var(--danger); color: #fff; }
+.confirm-modal-danger:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+/* 入场动效 (Task 5 接线): 面板挂 [[.pop-origin.enter]] (弹层家族统一原点弹出, 级联压过面板旧 anim-pop 故直接
+   换挂不叠加); 退场沿走查裁决 2026-10-03: 根节点 .closing 淡出 (useExitAnimation 簿记), 并非即时卸载. */
+
+
+/* 聊天视图: hero 空态 + 消息流 (Task 10, 配色/圆角全部取自 tokens; Task 12 起随顶栏在 .main 内纵向伸缩) */
+.chat-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-toolbar { display: flex; align-items: center; gap: 12px; justify-content: flex-end; padding: 10px 16px 0; }
+/* 会话标题 (主区左上): 占据工具条左侧剩余空间, 新对话钮保持右置; 单行省略, 悬停经 title 原生气泡看全文. */
+.chat-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; color: var(--ink); }
+/* 滚动链穿透防护: 同 [[.sidebar-body]] — 聊天流触顶/触底不把滚动量上抛 body, 移动端长会话里
+   橡皮筋会把顶栏/输入区一并拖出视口; contain 令边缘滚动就地消化. */
+.chat-stream { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 10px; }
+.chat-date { align-self: center; font-size: 12px; color: var(--faint); }
+.bubble-row { display: flex; }
+.bubble-row-user { justify-content: flex-end; }
+.bubble { max-width: 72%; padding: 9px 13px; border-radius: var(--radius-lg); overflow-wrap: anywhere; }
+.bubble-user { background: var(--user-bubble); color: var(--brand-ink); border-bottom-right-radius: var(--radius); }
+.bubble-ai { background: var(--ai-bubble); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: var(--radius); }
+.bubble p { margin: 0; }
+.bubble p + p, .bubble ul, .bubble ol, .bubble pre, .bubble table, .bubble blockquote { margin: 6px 0 0; }
+.bubble pre { padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+.bubble a { color: inherit; }
+.bubble-text { white-space: pre-wrap; }
+.bubble-md > :first-child { margin-top: 0; }
+/* AI 气泡尾部工具行 (复制回复): 常显小 ghost 钮 — 独立一行不遮正文 (移动端无 hover, 常显比 hover 显隐可达),
+   流式未完由组件不渲染兜底; 弱化色 + hover 反馈, 不与正文争夺注意力. */
+.bubble-tools { display: flex; justify-content: flex-end; margin-top: 4px; }
+.bubble-copy { display: inline-flex; align-items: center; justify-content: center; padding: 2px; border: none; background: none; border-radius: calc(var(--radius) / 2); color: var(--faint); cursor: pointer; }
+.bubble-copy:hover { color: var(--ink); background: var(--bg); }
+/* R3 顺修: 键盘焦点环 — 既有写法沿 .confirm-modal-danger/.red-alert-call (2px outline + offset 2px),
+   色取 --brand 与 .input:focus 焦点环同源 (ghost 钮无 danger 语义, 不沿用其红). */
+.bubble-copy:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.chat-error { margin: 10px 16px 0; padding: 8px 12px; border: 1px solid var(--danger); border-radius: var(--radius); background: var(--card); color: var(--danger); font-size: 13px; }
+/* 输入区 (Task 11, T9 单态化): 聊天单模式 + chips 插槽 + 语音; 圆角盒配色全部取自设计令牌 (记一笔琥珀态已废). */
+.composer-wrap { margin: 10px 16px 14px; }
+.composer { padding: 12px 14px; background: var(--card); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.composer-textarea { width: 100%; border: none; background: transparent; color: var(--ink); font: inherit; resize: none; padding: 0; min-height: 24px; max-height: 38vh; overflow-y: auto; }
+.composer-textarea:focus { outline: none; }
+.composer-textarea::placeholder { color: var(--faint); }
+.composer-textarea:disabled { opacity: .5; }
+.composer-bar { display: flex; align-items: center; gap: 8px; }
+.composer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.composer-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line-strong); background: var(--card); color: var(--muted); border-radius: 999px; padding: 3px 12px; font-size: 13px; }
+.composer-chip:hover { border-color: var(--brand); color: var(--ink); }
+.composer-chip:disabled, .composer-mic:disabled { opacity: .5; cursor: not-allowed; }
+.composer-mic { display: inline-flex; align-items: center; justify-content: center; border: none; background: none; color: var(--muted); padding: 3px 4px; border-radius: var(--radius); }
+.composer-mic:hover { color: var(--ink); }
+.composer-mic:hover { background: var(--bg); }
+.composer-rec { display: inline-flex; align-items: center; gap: 6px; color: var(--danger); font-size: 13px; }
+.composer-rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); animation: composer-blink var(--dur-blink) steps(2, start) infinite; }
+@keyframes composer-blink { 50% { opacity: 0; } }
+.composer-stop { border: 1px solid var(--danger); background: none; color: var(--danger); border-radius: 999px; padding: 1px 10px; font-size: 13px; }
+.composer-spacer { flex: 1; }
+/* 发送钮 (终审整改, spec D2/D5/§5.4): 圆形 SVG 上箭头无文字 — 专用类替代 btn 胶囊形, 尺寸/配色全取设计令牌. */
+.composer-send { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border: none; border-radius: 50%; background: var(--brand); color: var(--brand-ink); padding: 0; }
+.composer-send:hover { filter: brightness(1.08); }
+.composer-send:disabled { opacity: .5; cursor: not-allowed; }
+/* 走查修正: place-items:center 使 hero 收缩包裹, 必须显式定宽, 否则输入框被 chips 行宽度钳死. */
+.hero-box { width: min(720px, 100%); }
+.hero-box .composer-wrap { margin: 28px auto 0; max-width: none; }
+.crisis-lead { margin: 0; color: var(--muted); }
+.crisis-card { padding: 16px; }
+.crisis-card h3 { margin: 0 0 8px; font-size: 16px; }
+.crisis-card p { margin: 0; }
+.crisis-emergency { margin: 0; color: var(--danger); font-weight: 600; }
+/* 危机浮层数据态: 主号码放大可点拨, 寄语弱化不喧宾 */
+.crisis-phone { display: inline-block; margin: 2px 0 8px; font-size: 24px; font-weight: 700; color: var(--ink); text-decoration: none; }
+.crisis-phone:hover { color: var(--brand); }
+.crisis-message { color: var(--muted); }
+
+/* RED 预警弹窗 (Task 13): 全屏置顶安全模态, 暖底非医疗化文案 + danger 令牌点缀;
+   z-index 100 高于 .modal-overlay (60) — 危机弹窗必须盖过登录浮层等一切常规浮层 */
+.red-alert-overlay { position: fixed; inset: 0; z-index: 100; background: var(--overlay); display: grid; place-items: center; padding: 16px; }
+/* 入场动效: 组件挂 [[.anim-pop]] (Task 13, 浮层家族同款) — 纯视觉淡入, 不延迟可读性 (动画期间内容已在 DOM). */
+.red-alert-panel { width: min(480px, 100%); max-height: 90dvh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--danger); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.red-alert-panel h2 { margin: 0; font-size: 18px; color: var(--danger); }
+.red-alert-reason { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 600; }
+.red-alert-warm { margin: 0; color: var(--muted); font-size: 14px; }
+.red-alert-call { display: block; text-align: center; padding: 14px 16px; border-radius: var(--radius); background: var(--danger); color: #fff; font-size: 20px; font-weight: 700; text-decoration: none; }
+.red-alert-call:hover { filter: brightness(1.08); }
+.red-alert-call:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.red-alert-backup { margin: 0; font-size: 14px; }
+.red-alert-backup a { color: var(--ink); font-weight: 600; }
+.red-alert-book { text-align: center; text-decoration: none; }
+.red-alert-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* Task 8: /crisis 路由已撤, "查看全部求助资源" 由 Link 改按钮上抛壳开 Flyout — 补钮级重置保原链接观感. */
+.red-alert-more { border: none; background: none; padding: 0; color: var(--muted); font-size: 13px; text-align: left; }
+/* 动效总闸 (Task 13 核验): animation 与 transition 双掐 — 浮层家族入场/手风琴淡入/主区路由淡入/抽屉滑入等
+   全部新增动效均被此守卫覆盖, 前庭敏感用户零运动. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* 移动端抽屉 (Task 14, <768px): 左栏变固定定位 overlay 抽屉, 汉堡钮是唯一入口.
+   开合判定纯 CSS 媒体查询驱动 (React 态只切 .drawer-open 类): jsdom 不求值媒体查询也不加载 CSS,
+   既有测试零改动即保持桌面形态, 免去 matchMedia mock. 汉堡钮常驻 DOM, >=768px 时 display:none
+   同时把它移出 Tab 序与读屏树, 桌面端无任何残留. */
+.drawer-hamburger { display: none; margin-right: auto; align-items: center; justify-content: center; border: none; background: none; color: var(--ink); padding: 4px 8px; border-radius: var(--radius); }
+.drawer-hamburger:hover { background: var(--card); }
+/* 抽屉头部显式关闭钮 (R1 走查整改): 全屏化后抽屉盖住壳层顶栏汉堡, 左上角"收起侧栏"只翻 collapsed 不关抽屉 —
+   全屏态必须有显式 X 出路. 显示规则照 [[.drawer-hamburger]] 前例: 桌面端 display:none, React 亦仅抽屉态挂载,
+   双保险兜住"移动端开抽屉后拉宽窗口"的残留态 (既不可见也不进 Tab 序与读屏树). */
+.sidebar-close { display: none; align-items: center; justify-content: center; width: 30px; height: 26px; border: none; background: none; color: var(--muted); padding: 4px; border-radius: var(--radius); }
+.sidebar-close:hover { background: var(--card); color: var(--ink); }
+.drawer-overlay { display: none; }
+@media (max-width: 767px)
+{
+  .drawer-hamburger { display: inline-flex; }
+  .sidebar
+  {
+    /*? React 内联 width (48/260px) 的优先级高于任何选择器, 只有 !important 能在抽屉形态下压过它. */
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 80; width: min(78vw, 300px) !important;
+    transform: translateX(-105%);
+    /*? visibility 隐藏把收起的抽屉移出 Tab 序与读屏树 (纯 CSS 判定, 桌面端不受影响);
+       延迟 --dur-base 等滑出动画播完再隐藏; 0s 是 visibility 的离散跳变时长 (非节奏值, 只为挂延迟). */
+    visibility: hidden;
+    transition: transform var(--dur-base) var(--ease-exit), visibility 0s linear var(--dur-base);
+  }
+  .sidebar.drawer-open { transform: translateX(0); visibility: visible; transition: transform var(--dur-base) var(--ease-enter); }
+  /* 遮罩 scrim 走 [[--overlay]] 令牌 (2026-10-02 走查统一, 原为 .red-alert-overlay 前例裸值 rgba(47,59,58,.5)).
+     //! 遮罩是 aside 的子元素, 其 z-index 只在抽屉自己的层叠上下文内排序 — 曾写 70 压过全部 static 内容,
+     //! 真机视口里抽屉条目永远点不到 (点击全落遮罩 = 只关不开, T14 仅 jsdom 验过节点在位性故未暴露);
+     //! 抽屉三块内容必须显式抬高到遮罩之上 (见下条). 100 的 RED 预警弹窗仍在一切之上. */
+  /* 遮罩已提为 aside 兄弟节点 (脱离 transform 包含块, 避免子级 fixed 退化): 仅抽屉态由 React 挂载. */
+  /* 遮罩淡入 (Task 5, 抽屉三件套之一): 遮罩是条件挂载节点, transition 在挂载帧无起点态可过渡,
+     故走 animation 接线 — 复用 [[route-fade-in]] (from opacity:0) 不新造 keyframes, 时长对齐抽屉滑入的
+     --dur-base. jsdom 不求值 CSS 无测试 (同 overscroll-behavior 口径, 真机走查验证); 关闭即卸载不做淡出
+     (出场即时卸载与浮层家族同语义, 淡出需卸载簿记不值得). */
+  .drawer-overlay { display: block; position: fixed; inset: 0; z-index: 70; background: var(--overlay); animation: route-fade-in var(--dur-base) var(--ease-enter); }
+  /* 抽屉面板抬到遮罩之上 (遮罩现为 aside 的兄弟节点, 固定层70): aside 自建层叠上下文取 71 即可整体压住遮罩,
+     子级的 z80 抬升规则由此冗余但保留无害. */
+  /*! 抽屉打开态必须用 fixed 出流 (2026-10-04 真机实锤): 曾写 relative 在流 + width:100% — 在流 aside 吃满
+     .shell 主轴, 把 .main (flex-basis 0) 挤成 0 宽, 抽屉打开期间主区整体塌缩: 任何此间发生的提交都在
+     塌缩布局里量尺寸 (输入框自增高把 74px 窄盒里折行的 placeholder 量成 86px 写回内联高度), 关抽屉后
+     布局复原但内联高度滞留 = "新会话输入框变大不复位". fixed 同样自建层叠上下文压过遮罩, 出流后 .main
+     布局恒定, 塌缩测量这一类问题连根拔除; top/left/bottom 沿上方收起态规则, width:100% 按视口包含块解析. */
+  .sidebar.drawer-open { position: fixed; z-index: 71; }
+  .drawer-open > .sidebar-toggle, .drawer-open > .sidebar-body, .drawer-open > .sidebar-foot { position: relative; z-index: 80; }
+  /* 抽屉全屏化 (Task 15): 打开态覆盖满整屏. 裁定: 用 width:100% 而非 100vw 覆盖 React 内联 width —
+     打开态 fixed (见上方 z71 规则) 的包含块是视口, 100% 即视口满宽, 而 100vw
+     在出现纵向滚动条的宿主里会把 body 撑出横向溢出; !important 是唯一能压过 React 内联 style 的手段
+     (内联 style 的优先级高于一切普通选择器, 与上方 78vw 抽屉形态同款手法). 收起态保持 78vw 预览宽度,
+     侧滑手势 (Sidebar 内 touch 跟指) 预览抽屉时也按此宽度滑入. */
+  .sidebar.drawer-open { width: 100% !important; }
+  /* 抽屉态关闭钮落位 (R1 走查整改): 右上角显式 X. drawer-open 态 aside 以 fixed 自建包含块
+     (见上方 z71 规则), 绝对定位钉角不参与 aside 列布局; z-index 81 压过下方三块 z80 内容 —
+     列表滚到钮下时不被行覆盖. 背景垫 --sidebar: 滚过的行不与 X 笔画叠印, hover 高亮仍走上方基础规则. */
+  .sidebar-close { display: inline-flex; position: absolute; top: 8px; right: 8px; z-index: 81; background: var(--sidebar); }
+  /* 会话行左滑删除 (R2): 主行内容 (sidebar-row-main) 跟指平移, 行内删除钮原位露出 — 跟指期由手势写
+     内联 transition:none 压过本过渡, 松手回弹/停靠走 --dur-fast/--ease-enter 令牌 (与抽屉级手势同法).
+     停靠态 (.swiped) 保持删除钮可见: 移动端无 hover, 桌面态的 hover/focus-within 显隐规则在此口径不可达,
+     露钮显隐完全由手势停靠类驱动. */
+  .sidebar-row-main { transition: transform var(--dur-fast) var(--ease-enter); }
+  /* 停靠态 (.swiped) 露出的删除钮升 danger 色: 露钮即破坏性操作前置态, 淡灰 × 的视觉重量不足以警示,
+     与 .confirm-modal-danger 同源 --danger 令牌; hover 沿上方基规则已是 danger 无需另写,
+     focus-visible 焦点环同步取 danger (与 .confirm-modal-danger:focus-visible 同法, 键盘可达性一致). */
+  .sidebar-row.swiped .sidebar-del { visibility: visible; color: var(--danger); }
+  .sidebar-row.swiped .sidebar-del:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+  /* 抽屉全屏化后的列表滚动: .sidebar-body 已有 flex:1 + min-height:0 + overflow-y:auto, 全屏态 aside
+     拉满视口高后该链路自然生效 (flex 列布局: body 撑满剩余空间并可滚, foot flex-shrink:0 沉底固定).
+     aside 本体的 overflow:hidden 兜住滑出时 (translateX(-105%)) 的内容外溢, 不参与滚动. */
+}
+
+/* ===== Task 2 追加段: 运动令牌底座消费端 + kv-chat-md 作用域样式, 以下均为本任务新增 ===== */
+
+/* 减动效降级守卫 (可访问性, spec §8): 前庭敏感用户一切动效"直切"完成, 必要动效零时长直达终态.
+   上方动效总闸已用 animation/transition: none 掐断 (Task 13 核验口径), 本块以 duration 0.01ms 再兜一层 —
+   二者叠加等效直切; 刻意用"时长归零"而非"移除", 未来接线的动画类 (Task 5/7) 即便总闸口径调整,
+   也只会瞬间播完停在终态, 不会悬停在中间帧. */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+/* 主题换肤过渡 (spec D6): 切主题/明暗时三色属性平滑过渡, 只动颜色不动布局.
+   冲突核查 (grep 全文件 transition): body/.card/.btn/.main/.input/.textarea 既有规则均无 transition, 直接新立;
+   .sidebar 有既有 width 过渡, 已按"并入既有列表"处理 (见上方 .sidebar 规则注释), 刻意不入本列表. */
+body, .card, .btn, .main, .input, .textarea { transition: background-color var(--dur-theme) var(--ease-standard), color var(--dur-theme) var(--ease-standard), border-color var(--dur-theme) var(--ease-standard); }
+
+/* 按压反馈工具类 (spec §8 press 档): 可点压元素挂本类, :active 缩到 0.97 — 只动 transform (合成器路径,
+   不触发重排); -webkit-tap-highlight 已有全局清默认 (见文件头), 此处随类冗余声明防单独搬运时遗漏.
+   接线注记 (Task 5): 侧栏会话主行 (移动端媒体查询内有跟指 transform 过渡 --dur-fast) 挂本类后, 松手回弹
+   过渡按级联源序归本类的 --dur-press (90ms) — 手感略快于原 150ms, 走查裁决为可接受; 跟指期内联
+   transition:none 仍优先, 手势跟指不受影响. */
+.pressable { transition: transform var(--dur-press) var(--ease-standard); -webkit-tap-highlight-color: transparent; }
+.pressable:active { transform: scale(0.97); }
+
+/* kv-chat-md 作用域排版 (接线于 Task 3): Markdown 渲染容器挂本类 (md-render 的 MD_SCOPE_CLASS),
+   配色全部取设计令牌禁写死色值, 双主题/明暗零适配成本; 标题一律降级到 1.06em — 聊天气泡里出现
+   H1 大字必然破版. 注意容器置于 .bubble 内时, 本段源序更后, 同特异性下压过 .bubble 的 p/pre 旧规则. */
+.kv-chat-md { line-height: 1.72; overflow-wrap: anywhere; font-size: var(--fs-chat, inherit); }
+/* --fs-chat 钩子 (P2 字体设置): 该令牌在字体设置落地前不存在, var 第二参回落 inherit (今日零行为差异),
+   届时注入 --fs-chat 即全链生效, 无需改本文件. */
+.kv-chat-md h1, .kv-chat-md h2, .kv-chat-md h3, .kv-chat-md h4, .kv-chat-md h5, .kv-chat-md h6 { margin: 12px 0 4px; font-size: 1.06em; font-weight: 600; }
+.kv-chat-md p { margin: 6px 0; }
+/* vendor 渲染器自带显式 marker span (kv-chat-md-marker), 关 UA 圆点防双 bullet; li 用 flex 让标记与正文同行. */
+.kv-chat-md ul, .kv-chat-md ol { margin: 4px 0 8px; padding-left: 4px; }
+.kv-chat-md li { margin: 3px 0; list-style: none; display: flex; gap: 6px; align-items: flex-start; }
+.kv-chat-md li > span:first-child { flex-shrink: 0; }
+.kv-chat-md li > div { flex: 1; min-width: 0; }
+.kv-chat-md code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: .92em; }
+.kv-chat-md pre { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; margin: 8px 0; }
+.kv-chat-md pre code { border: none; background: none; padding: 0; }
+.kv-chat-md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--brand); color: var(--muted); }
+.kv-chat-md hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
+.kv-chat-md a { color: var(--brand); }
+.kv-chat-md table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+.kv-chat-md th, .kv-chat-md td { border: 1px solid var(--line); padding: 4px 8px; font-size: .95em; text-align: left; }
+
+/* ===== Task 3 评审修复轮追加段: AI 侧元信息行 (.msg-*), 对应已批 mockup 的 .ameta/.adot, 以下均为本段新增 ===== */
+
+/* AI 消息根容器: 去气泡 A 案下 AI 侧不再套 .bubble, 失去其既有上下边距, 补最小间距防相邻消息行粘连. */
+.msg-ai { margin: 2px 0; }
+
+/* 元信息行 (mockup .ameta 同构): 头像点 + 名字 + 时间 + 复制钮横向排布, 弱化小字 + --muted 让位正文视觉权重. */
+.msg-meta { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; font-size: 11px; color: var(--muted); }
+
+/* 头像点 (mockup .adot 同构): 圆形品牌底色徽标. 前景刻意取 --brand-ink 而非 --bg 兜底 —
+   该令牌即 tokens.css 里"品牌底色上的前景"成对档, 四主题块 (双主题 x 明暗) 全量存在且随 --brand 反转
+   (暗色下 brand 提亮而 brand-ink 转深墨), WCAG AA 对比已实测, 故无需第二参回落, 本段零硬编码色值. */
+.msg-avatar { width: 18px; height: 18px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; }
+
+.msg-name { font-weight: 600; }
+.msg-time { color: var(--muted); }
+
+/* 复制钮推到元信息行行尾: ghost 样式整体沿用 .bubble-copy (hover/焦点环一并继承), 本行内只补推位. */
+.msg-meta .bubble-copy { margin-left: auto; }
+
+/* 流式/会话动效预留类 (本任务只定义不接线): CSS 先行落地, Task 5/7 接线时零 CSS 工作量, 见各类注释. */
+
+/* 弹出原点 (接线于 Task 5): 面板从触发钮方向弹出, 原点定在右上; .enter 由组件挂载帧追加以重放入场. */
+.pop-origin { transform-origin: top right; }
+.pop-origin.enter { animation: pop-in var(--dur-enter) var(--ease-standard); }
+@keyframes pop-in { from { opacity: 0; transform: scale(.9); } }
+
+/* 行折叠退场 (接线于 Task 5): 删除行挂 .gone — 左移淡出 + 高度/上下内边距/上下外边距收零;
+   height 过渡要求组件先把具体像素行高写入内联样式 (auto 不可过渡), !important 保证终态必然收零;
+   JS 侧窗口常量见 AppShell#ROW_COLLAPSE_MS (与本过渡时长令牌对齐, 两侧注释互指, 调档须同步). */
+.row-collapse { transition: height var(--dur-enter) var(--ease-standard), opacity var(--dur-exit) var(--ease-standard), transform var(--dur-enter) var(--ease-standard), margin var(--dur-enter) var(--ease-standard), padding var(--dur-enter) var(--ease-standard); overflow: hidden; }
+.row-collapse.gone { opacity: 0; transform: translateX(-18px); height: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; }
+
+/* 翻牌抬升 (接线于 Task 7): FLIP 手法的位移量由 JS 逐帧写内联 transform, 本类只提供过渡节奏. */
+.flip-lift { transition: transform var(--dur-enter) var(--ease-standard); }
+
+/* 流式分块入场 (接线于 Task 5): 每个到达的文本块左移淡入一次, forwards 停终态; inline 保证行内流不断行. */
+.chunk-in { display: inline; animation: chunk-in 180ms var(--ease-standard) forwards; }
+@keyframes chunk-in { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
+
+/* 流式光标条 (接线于 Task 5): 品牌色竖条, vertical-align 微调贴住文字中腰, 跟随正文行内流. */
+.caret-bar { display: inline-block; width: 2px; height: 0.95em; background: var(--brand); vertical-align: -2px; margin-left: 1px; opacity: .85; }
+
+/* 思考行 (接线于 Task 7): "正在思考"状态行 — 弱化色小字 + 横向 flex 容纳前缀与呼吸点组 (.dotp). */
+.msg-thinking { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+
+/* 呼吸点组 (接线于 Task 7): 三点 180ms 阶梯延迟依次呼吸, 用静默节拍表达"进行中". */
+.dotp { animation: dot-breathe 1.2s ease-in-out infinite; }
+.dotp:nth-child(2) { animation-delay: .18s; }
+.dotp:nth-child(3) { animation-delay: .36s; }
+@keyframes dot-breathe { 0%, 100% { opacity: .25; } 45% { opacity: 1; } }
+
+/* 微光扫过文本 (接线于 Task 7): 弱化灰底 + 墨色高亮带扫过.
+   //! 高危项: background-position 的百分比语义是"图层对齐点"而非位移像素, 方向在 demo 里曾写反 —
+   //! 本实现 220% 宽底图从 210% 扫到 -110% (0-45% 完成一次扫过, 其余时间静止), 真机必须核验扫过方向. */
+.shimmer-text { background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 38%, var(--ink) 50%, var(--muted) 62%, var(--muted) 100%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer-sweep 4.4s linear infinite; }
+@keyframes shimmer-sweep { 0% { background-position: 210% 0; } 45% { background-position: -110% 0; } 100% { background-position: -110% 0; } }
+
+/* ===== Task 4 追加段: 流式分片通道 (chunk-in + caret-bar) 与思考等待行的容器适配 ===== */
+
+/* 流式分片容器: 分片是行内 span (不再有 md 块级子元素), 由本层对齐 .kv-chat-md 的行高与换行策略 —
+   流结束转 md 渲染时行距零漂移, 长 token / 无空格串不撑破容器. */
+.bubble-md { line-height: 1.72; overflow-wrap: anywhere; }
+
+
+/* ===== Task 5 追加段: 抽屉视差 (.main transform), 以下均为本任务新增 ===== */
+
+/* 抽屉开态主区视差 (Task 5): 壳在 drawerOpen 时挂 .drawer-aux (AppShell), 移动端抽屉拉开时主区右移 10%,
+   露出遮罩层叠的纵深关系. 挂壳而非直接切 .main 类: drawerOpen 状态源在壳, 规则本体纯 CSS 承载.
+   //! 位置约束: .main 的 transform 过渡必须与 Task 2 主题过渡三属性并成一条列表同写, 且源序必须在
+   //! 上方 Task 2 段之后 — 若只写 transform 单独成规则且排在其前, 同特异性下会被整体覆盖 (换肤瞬变),
+   //! 故本块置于文件尾而非抽屉媒体查询块内. 出场节奏取舍: 关抽屉回位不另配 --dur-exit (进/出差异需
+   //! 属性切换双规则簿记, 复杂度不值), 统一 --dur-enter; 减动效由全局 reduced-motion 守卫 (base.css 两处) 归零时长直切终态. */
+@media (max-width: 767px)
+{
+  .main { transition: transform var(--dur-enter) var(--ease-standard), background-color var(--dur-theme) var(--ease-standard), color var(--dur-theme) var(--ease-standard), border-color var(--dur-theme) var(--ease-standard); }
+  .shell.drawer-aux .main { transform: translateX(10%); }
+}
+
+/* ===== Task 8 追加段: 候选追问幽灵行 (CandidateRows), 以下均为本任务新增 ===== */
+
+/* 候选行组容器: 挂最新一条 AI 回复 (ChatBubble) 之下, 纵向排布; 左缘缩进与 .msg-body 正文对齐观感,
+   上下留白取 .msg-ai 相邻节奏的量级, 不与消息流 gap (10px) 叠加出大空隙. */
+.cands { display: flex; flex-direction: column; margin: 0 0 2px; }
+
+/* 幽灵行: 无框纯文本行 (侧栏行同款哲学), hover 淡高亮取 --card; 弱化色 --muted 让位 AI 正文,
+   点击语义 (直发) 由行内回车角标 + chevron 表达. font:inherit 会重置回 body 15px, 显式压回 13px (走查惯例). */
+.cand { display: flex; align-items: center; gap: 7px; width: 100%; border: none; background: none; color: var(--muted); font: inherit; font-size: 13px; text-align: left; padding: 7px 10px; border-radius: var(--radius); }
+.cand:hover { background: var(--card); color: var(--ink); }
+/* 键盘焦点环: 沿 .bubble-copy 同法 (2px outline + offset, 色取 --brand). */
+.cand:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 发丝线分隔: 相邻行之间 1px --line 令牌线 (首行无线 — 与上方回复正文以留白分隔即可). */
+.cand + .cand { border-top: 1px solid var(--line); }
+
+/* 文本槽: 单行省略 (追问是引导性短句, 超长场景兜底), 两枚行标 SVG 不参与省略. */
+.cand-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cand-lead, .cand-tail { flex-shrink: 0; opacity: .75; }
+
+/* 50ms 阶梯入场 (chunk-in 同款位移淡入, 专用 keyframes): 延迟由组件内联 animationDelay 下发 (0/50/100ms),
+   fill mode 取 backwards — 延迟等待期保持 from 帧透明, 不闪现首帧; 减动效由全局守卫归零时长直切终态. */
+.cand-in { animation: cand-in 180ms var(--ease-standard) backwards; }
+@keyframes cand-in { from { opacity: 0; transform: translateX(-7px); } to { opacity: 1; transform: none; } }
+
+/* ===== Task 3/4 追加段: 设置页对话风格分区 (7 段风格 chips + 四轴三态 segment) 与显示分区字号步进器 ===== */
+
+/* 轴行: 可见轴名 + 三态 segment 横排; 轴名 5em 定宽让各行 segment 左缘对齐 (读感栅格), 320px 竖屏下
+   5em(13px) + 12px gap + 三段 segment (~201px) 合计 ~278px, 卡片内容区 288px 内恰好放下不溢出. */
+.settings-axis-row { display: flex; align-items: center; gap: 12px; }
+.settings-axis-name { flex: 0 0 5em; font-size: 13px; color: var(--muted); }
+
+/* 基础风格 7 段 (窄屏溢出裁定): 320px 竖屏一行放不下 7 段 (4 字 label x 7 至少 ~460px), 必须换行;
+   连体 segment 的 flex-wrap 会在断行行首残留 border-left 悬空分隔线, 纯 CSS 无法识别"视觉行首",
+   故本组放弃连体形态改 wrap chips — 每段自带全边框 + 圆角, gap 8px 自然换行; 令牌/选中态/悬停与
+   .settings-theme-opt 同源 (对照复用), 仅容器形态不同. */
+.settings-style { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; }
+.settings-style-opt { border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; padding: 6px 14px; transition: background var(--dur-fast) var(--ease-enter); }
+.settings-style-opt:hover { background: var(--bg); }
+.settings-style-opt[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+
+/* 字号步进器 (Task 4): -/值/+ 三格连体 (主题分段同款骨架), 值格 min-width 锁宽防数字翻动抖动;
+   禁用档降透明度表达到界, hover 只亮可用档 (disabled 不吃 :hover 背景). */
+.settings-stepper { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.settings-stepper-opt { border: none; background: var(--card); color: var(--ink); font: inherit; padding: 7px 16px; transition: background var(--dur-fast) var(--ease-enter); }
+.settings-stepper-opt:hover:not(:disabled) { background: var(--bg); }
+.settings-stepper-opt:disabled { opacity: .4; cursor: default; }
+.settings-stepper-value { min-width: 3.5em; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; font-size: 13px; color: var(--muted); border-left: 1px solid var(--line-strong); border-right: 1px solid var(--line-strong); }
+
+/* 咨询员工作台 (CRUD 控制台, 不追求视觉花样): 三视图 tab + 标准表格/事件列表/数字卡, 配色全取令牌;
+   队列行 hover 提示可点 (行点击展开时间线), 徽标以 danger/amber 令牌点出风险语义, 未知等级回落中性描边. */
+.workbench-view { max-width: 960px; margin: 0 auto; padding: 24px 16px; display: flex; flex-direction: column; gap: 14px; }
+.wb-panel { display: flex; flex-direction: column; gap: 10px; }
+.wb-tabs { display: inline-flex; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: var(--radius); overflow: hidden; }
+.wb-tab { border: none; background: var(--card); color: var(--ink); font: inherit; padding: 7px 18px; transition: background var(--dur-fast) var(--ease-enter); }
+.wb-tab + .wb-tab { border-left: 1px solid var(--line-strong); }
+.wb-tab:hover { background: var(--bg); }
+.wb-tab[aria-selected="true"] { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.wb-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; }
+.wb-filter { border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; padding: 5px 14px; }
+.wb-filter[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.wb-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.wb-table th, .wb-table td { text-align: left; padding: 9px 12px; border-top: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; }
+.wb-table thead th { border-top: none; color: var(--muted); font-weight: 600; font-size: 12px; }
+.wb-row { cursor: pointer; }
+.wb-row:hover td { background: var(--bg); }
+.wb-time { white-space: nowrap; color: var(--muted); }
+.wb-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.wb-badge-red { color: var(--danger); border-color: var(--danger); }
+.wb-badge-yellow { color: var(--amber-ink); border-color: var(--amber-line); background: var(--amber-bg); }
+.wb-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.wb-expand td { background: var(--bg); }
+.wb-expand-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.wb-timeline { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wb-event { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.wb-event-time { color: var(--muted); white-space: nowrap; }
+.wb-event-summary { overflow-wrap: anywhere; }
+.wb-query { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wb-query-label { font-size: 13px; color: var(--muted); }
+.wb-input { font: inherit; padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); min-width: 280px; }
+.wb-retry { border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--card); color: var(--ink); font: inherit; padding: 6px 16px; }
+.wb-retry:hover { background: var(--bg); }
+.wb-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.wb-card { display: flex; flex-direction: column; gap: 4px; min-width: 140px; padding: 14px 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); }
+.wb-card-label { font-size: 12px; color: var(--muted); }
+.wb-card-num { font-size: 26px; font-weight: 600; }
+.wb-empty { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.wb-empty-text { margin: 0; font-size: 14px; color: var(--muted); }
+.wb-hint { margin: 0; font-size: 12px; color: var(--faint); }
+.wb-denied { display: flex; flex-direction: column; gap: 6px; padding: 18px 16px; }
+.wb-denied-title { margin: 0; font-weight: 600; color: var(--danger); }

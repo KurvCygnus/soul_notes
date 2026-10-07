@@ -1,99 +1,54 @@
-//* 危机预警与热线全局状态:
-//* 1. 热线信息经 /crisis/hotline 拉取并缓存于 localStorage (离线兜底精神);
-//* 2. 登录后连接 /ws/alert, RED 预警推送 -> 全局弹窗.
-
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+//* RED 预警上下文: 弹窗唯一入口 showRed + 登录态驱动的 WS 预警通道生命周期 (在线推送路径).
+//* 生命周期: user 非 null 即建连, 归 null 即断开; 令牌变更 (登出→换号登录/直接换登) 因 user 引用变化
+//* 触发 effect cleanup 断旧连 + 重建新连. 断线重连与指数退避归 ws.ts 所有, 本层只管建立与撤销.
+//* showRed 单一来源: WS 在线推送 (onRed 直通) — 日记域 RED 兜底已随记一笔移除退场 (homepage-v2 D16),
+//* 离线安全网归热线三级缓存与危机域承接, 前端不再有第二条开弹窗路径.
+//* P3: 同一通道复用消费 ext-notification 事件 — 第三回调直通 [[deliverExtNotification]],
+//* 前台横幅/后台壳桥的分流裁决 (visibilityState) 收敛在 utils/extNotification, 本层不做第二份判定.
+import { createContext, useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { getHotline } from '../api/crisis'
 import { connectAlertSocket } from '../api/ws'
-import type { HotlineInfo } from '../types'
-import { useAuth } from './AuthContext'
+import { deliverExtNotification } from '../utils/extNotification'
+import { useAuth } from '../hooks/useAuth'
+import type { IRedAlertMessage } from '../api/ws'
 
-const HOTLINE_CACHE_KEY = 'soul.hotline'
-
-//* 与后端 RedisStartupConfig 静态默认值保持一致, 作为最终兜底.
-const DEFAULT_HOTLINE: HotlineInfo = {
-  name: '全国心理援助热线',
-  primary: '400-161-9995',
-  backup: '12355',
-  message: '你不需要独自面对一切, 专业的帮助随时可用。',
-  //* 预约入口无静态默认值: 机构未配置即不展示.
-  appointmentUrl: '',
+//* 弹窗状态切片: [[useAlert]] 的返回契约 (唯一消费者 AppShell: red 驱动 RedAlertModal, dismissRed 关闭并桥接危机 Flyout;
+//* showRed 是 WS onRed 之外的契约级入口, 当前无第二调用方 — 日记兜底消费已随 D16 退场, 见文件头单一来源裁决).
+export interface IAlertState
+{
+    red: IRedAlertMessage | null
+    showRed(msg: IRedAlertMessage): void
+    dismissRed(): void
 }
 
-function loadCachedHotline(): HotlineInfo {
-  try {
-    const raw = localStorage.getItem(HOTLINE_CACHE_KEY)
-    //! 展开默认值兜底: 旧版本缓存没有 appointmentUrl 键 (后端 1.4.0 才下发).
-    return raw ? { ...DEFAULT_HOTLINE, ...(JSON.parse(raw) as Partial<HotlineInfo>) } : DEFAULT_HOTLINE
-  } catch {
-    return DEFAULT_HOTLINE
-  }
+//* 单例上下文: null 表示未挂 <AlertProvider>, 读取器据此硬报错.
+const AlertContext = createContext<IAlertState | null>(null)
+
+export function AlertProvider({ children }: { children: ReactNode })
+{
+    const { user } = useAuth()
+    const [red, setRed] = useState<IRedAlertMessage | null>(null)
+
+    //* WS 通道随登录态: 访客 (user == null) 不建连 — 零 WS 连接, 并清空残留 red (red.reason 可能携带上一账号日记摘要,
+    //* 登出/换号瞬间若不归零, 弹窗会把前一账号的预警内容泄露给当前使用者 — 跨账号隐私红线); setRed 直接作 onRed, WS 帧即开弹窗.
+    useEffect(() =>
+    {
+        if(user == null)
+        {
+            // oxlint-disable-next-line react/set-state-in-effect //! 登出清空 RED 态是对认证状态迁移的响应式复位, 与同文件 WS 断开同源同刻; 渲染期复位或 key 重挂会扩大改动面, 登出是低频单次迁移, 规则的级联担忧在此不成立.
+            setRed(null)//* 登出即清空 RED 弹窗态: 与 WS 断开同源同刻, 访客态下不允许任何账号的预警残留.
+            return
+        }
+        const close = connectAlertSocket(user.token, setRed, deliverExtNotification)
+        return () => { close() }
+    }, [user])
+
+    const showRed = useCallback((msg: IRedAlertMessage) => { setRed(msg) }, [])
+    const dismissRed = useCallback(() => { setRed(null) }, [])
+
+    const value: IAlertState = { red, showRed, dismissRed }
+
+    return <AlertContext.Provider value={value}>{children}</AlertContext.Provider>
 }
 
-export interface AlertState {
-  visible: boolean
-  message: string
-  hotline: string
-  /** 弹窗自带的预约入口 (随 RED 推送下发); 空串 = 回落全局 hotline 的配置值 */
-  appointmentUrl: string
-}
-
-interface AlertContextValue {
-  hotline: HotlineInfo
-  alert: AlertState
-  showAlert: (message: string, hotline?: string | null, appointmentUrl?: string | null) => void
-  dismiss: () => void
-}
-
-const AlertContext = createContext<AlertContextValue | null>(null)
-
-export function AlertProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth()
-  const [hotline, setHotline] = useState<HotlineInfo>(loadCachedHotline)
-  const [alert, setAlert] = useState<AlertState>({ visible: false, message: '', hotline: '', appointmentUrl: '' })
-
-  //* 供 WS 回调读取最新热线 (避免闭包过期).
-  const hotlineRef = useRef(hotline)
-  hotlineRef.current = hotline
-
-  //* 启动时刷新热线并写缓存; 失败时保留缓存/默认值 (离线兜底).
-  useEffect(() => {
-    getHotline()
-      .then((h) => {
-        setHotline(h)
-        localStorage.setItem(HOTLINE_CACHE_KEY, JSON.stringify(h))
-      })
-      .catch(() => {
-        //* 后端不可达时静默使用缓存或默认值
-      })
-  }, [])
-
-  const showAlert = useCallback((message: string, hotlineNum?: string | null, appointmentUrl?: string | null) => {
-    setAlert({ visible: true, message, hotline: hotlineNum || hotlineRef.current.primary, appointmentUrl: appointmentUrl || '' })
-  }, [])
-
-  const dismiss = useCallback(() => {
-    setAlert((a) => ({ ...a, visible: false }))
-  }, [])
-
-  //* 登录后建立预警 WebSocket, 登出/组件卸载时断开 (含退避重连).
-  useEffect(() => {
-    if (!token) return
-    const stop = connectAlertSocket({
-      token,
-      onAlert: (payload) => showAlert(payload.message, payload.hotline, payload.appointmentUrl),
-    })
-    return stop
-  }, [token, showAlert])
-
-  const value = useMemo<AlertContextValue>(() => ({ hotline, alert, showAlert, dismiss }), [hotline, alert, showAlert, dismiss])
-
-  return <AlertContext.Provider value={value}>{children}</AlertContext.Provider>
-}
-
-export function useAlert(): AlertContextValue {
-  const ctx = useContext(AlertContext)
-  if (!ctx) throw new Error('useAlert 必须在 AlertProvider 内使用')
-  return ctx
-}
+export { AlertContext }

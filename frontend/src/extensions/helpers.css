@@ -1,0 +1,30 @@
+/* 扩展页面展示原语 (Task 3, D8): 六原语样式, 颜色/圆角/动效全部引用设计令牌, 扩展侧零自造样式值.
+   胶囊圆角 999px 沿用 base.css 既有 pill 惯例 (.badge/.composer-chip), 非新造形状值. */
+
+.ext-page-header { display: flex; align-items: center; gap: 8px; color: var(--brand); }
+.ext-page-title { margin: 0; font-size: 18px; color: var(--ink); }
+.ext-badge { border: 1px solid var(--line-strong); border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+.ext-list-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+.ext-list-main { font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+/* 副行 (右对齐列): 原 flex-shrink:0 令长 token 无法收缩 — 窄屏长日程备注会把行撑出容器; 改为可收缩 +
+   anywhere 换行 (text-align:right 保换行后仍右对齐), 溢出优先换行消化, 兜底交给外层 .ext-rows 滚动. */
+.ext-list-sub { margin-left: auto; text-align: right; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+/* 行列表横向滚动容器 (移动端溢出核查): min-width:0 保 flex 收缩链路畅通, overflow-x:auto 让任何未来宽内容
+   (如扩展侧自绘表格) 在 <768px 横向滚动而非撑破 ext-page 卡片布局.
+   R3 顺修: 包滚动容器后行距塌到 flex 缺省 0 — 补回 6px 行距 (原间距由 .ext-card 的 gap 语义延续). */
+.ext-rows { display: flex; flex-direction: column; gap: 6px; min-width: 0; overflow-x: auto; }
+.ext-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.ext-card-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.ext-empty { margin: 0; font-size: 13px; color: var(--faint); }
+/* 通知开关行 (P3): 标签左 / 开关右 (margin-left:auto 与 .ext-list-sub 同一右靠惯例), 纵向留呼吸. */
+.ext-notify-row { display: flex; align-items: center; gap: 8px; padding: 8px 0 2px; }
+.ext-notify-label { font-size: 14px; color: var(--ink); }
+/* 开关本体: 轨道 40x22 胶囊, 旋钮 16px 圆点 — 开态轨道换品牌色, 旋钮右移 18px (40 - 16 - 2*3 边距内轨).
+   颜色/圆角/时长/缓动全部引用设计令牌 (D8 扩展侧零自造样式值), reduced-motion 由 base.css 全局规则统一掐断. */
+.ext-switch { margin-left: auto; position: relative; width: 40px; height: 22px; padding: 0; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg); transition: background var(--dur-theme) var(--ease-standard), border-color var(--dur-theme) var(--ease-standard); }
+.ext-switch[aria-checked="true"] { border-color: var(--brand); background: var(--brand); }
+.ext-switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); transition: transform var(--dur-theme) var(--ease-standard); }
+.ext-switch[aria-checked="true"] .ext-switch-knob { transform: translateX(18px); }
+/* 呼吸式加载脉冲: 时长/缓动走动效令牌 (D23), reduced-motion 由 base.css 全局规则统一掐断. */
+.ext-loading { margin: 0; font-size: 13px; color: var(--faint); animation: ext-pulse var(--dur-slow) var(--ease-enter) infinite alternate; }
+@keyframes ext-pulse { from { opacity: 1; } to { opacity: .4; } }

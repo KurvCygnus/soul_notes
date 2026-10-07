@@ -1,45 +1,67 @@
-//* 轻量全局提示: 模块级状态 + 订阅, ToastHost 通过 useSyncExternalStore 渲染.
+//? 全局 toast: 模块级 store + useSyncExternalStore 订阅, 根部挂载一次 <ToastHost/> 即全局可用.
+//? 文件按简报保持 .ts, 故以 createElement 代替 JSX; 样式内联并取设计令牌变量, 不外溢 CSS 文件.
+import { createElement, useSyncExternalStore } from 'react'
+import type { CSSProperties, ReactElement } from 'react'
 
-export type ToastType = 'info' | 'success' | 'warning' | 'error'
+export type ToastKind = 'info' | 'success' | 'error'
 
-export interface ToastItem {
-  id: number
-  text: string
-  type: ToastType
-}
+type ToastEntry = { id: number; msg: string; kind: ToastKind }
 
-let items: ToastItem[] = []
-let seq = 0
-let version = 0
+let nextId = 1
+//* entries 整体替换而非原地修改, 保证 useSyncExternalStore 快照引用稳定无撕裂.
+let entries: readonly ToastEntry[] = []
 const listeners = new Set<() => void>()
 
-function emit(): void {
-  version += 1
-  listeners.forEach((fn) => fn())
+const emit = (): void => { for(const notify of listeners) notify() }
+const getSnapshot = (): readonly ToastEntry[] => entries
+
+const subscribe = (notify: () => void): (() => void) =>
+{
+    listeners.add(notify)
+    return () => { listeners.delete(notify) }
 }
 
-/** 弹出一条提示, 3.2s 后自动消失 */
-export function toast(text: string, type: ToastType = 'info'): void {
-  const item: ToastItem = { id: ++seq, text, type }
-  items = [...items, item]
-  emit()
-  window.setTimeout(() => {
-    items = items.filter((t) => t.id !== item.id)
+const dismiss = (id: number): void =>
+{
+    entries = entries.filter(e => e.id !== id)
     emit()
-  }, 3200)
 }
 
-export function subscribeToasts(fn: () => void): () => void {
-  listeners.add(fn)
-  return () => {
-    listeners.delete(fn)
-  }
+//* 全局提示: 默认 3.2s 自动消退 (durationMs 可加长 — 扩展通知前台横幅用更长驻留档), 点击条目可提前关闭.
+export const toast = (msg: string, kind: ToastKind = 'info', durationMs = 3200): void =>
+{
+    const id = nextId++
+    entries = [...entries, { id, msg, kind }]
+    emit()
+    setTimeout(() => dismiss(id), durationMs)
 }
 
-export function getToastVersion(): number {
-  return version
+//region ToastHost
+
+const KIND_STYLE: Record<ToastKind, CSSProperties> = {
+    info:    { background: 'var(--card)', color: 'var(--ink)', border: '1px solid var(--line-strong)' },
+    success: { background: 'var(--brand)', color: 'var(--brand-ink)', border: '1px solid var(--brand)' },
+    error:   { background: 'var(--danger)', color: '#ffffff', border: '1px solid var(--danger)' },
 }
 
-export function getToasts(): ToastItem[] {
-  return items
+const HOST_STYLE: CSSProperties = {
+    position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)',
+    display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 80, pointerEvents: 'none',
 }
+
+const ITEM_STYLE: CSSProperties = {
+    borderRadius: 'var(--radius)', padding: '8px 16px', boxShadow: 'var(--shadow)',
+    fontSize: '14px', pointerEvents: 'auto', cursor: 'pointer',
+}
+
+//* 渲染当前快照; role=status 让读屏器以 polite 级播报.
+export const ToastHost = (): ReactElement =>
+{
+    const snapshot = useSyncExternalStore(subscribe, getSnapshot)
+    return createElement('div', { style: HOST_STYLE },
+        snapshot.map(e => createElement('div',
+            { key: e.id, role: 'status', onClick: () => dismiss(e.id), style: { ...KIND_STYLE[e.kind], ...ITEM_STYLE } },
+            e.msg)))
+}
+
+//endregion

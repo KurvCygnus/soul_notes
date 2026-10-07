@@ -1,35 +1,12 @@
-//* 语音辅助: <audio> 标签无法携带 Authorization 头, 需先 fetch 为 Blob 再播放.
-
-import { api, ApiError, getToken } from './http'
+//* 语音域 API: 语音上传 — 转写结果回填聊天输入, 多模态入口的文本侧起点.
+//* (原日记域 API 收敛于此并随日记域砍除更名 voice.ts, 走查裁决 2026-10-03; createDiary/getWeather 已移除.)
+import { api } from './http'
 import type { VoiceUploadResponse } from '../types'
 
-/** 上传语音文件并同步转录 (multipart, field 名与后端 @RestForm("file") 一致).
- *  转录失败不回 5xx, 而是 status=FAILED + message, 由调用方决定回落策略. */
-export function uploadVoice(file: Blob): Promise<VoiceUploadResponse> {
-  const form = new FormData()
-  form.append('file', file, 'recording.wav')
-  return api<VoiceUploadResponse>('/voice/upload', { method: 'POST', formData: form })
-}
-
-/** 拉取受保护的语音文件并播放, 返回停止函数; onEnded 在播放自然结束时触发 */
-export async function playAudioUrl(audioUrl: string, onEnded?: () => void): Promise<() => void> {
-  const headers: Record<string, string> = {}
-  const token = getToken()
-  if (token) headers.Authorization = `Bearer ${token}`
-
-  const res = await fetch(audioUrl, { headers })
-  if (!res.ok) throw new ApiError(`语音加载失败 (HTTP ${res.status})`, null, res.status)
-
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const audio = new Audio(url)
-  audio.onended = () => {
-    URL.revokeObjectURL(url)
-    onEnded?.()
-  }
-  await audio.play()
-  return () => {
-    audio.pause()
-    URL.revokeObjectURL(url)
-  }
+//* 语音上传 (multipart): 字段名 `file` 由后端 @RestForm("file") 固定; FormData 交由 [[api]] 让浏览器生成 boundary.
+export const uploadVoice = (file: Blob): Promise<VoiceUploadResponse> =>
+{
+    const form = new FormData()
+    form.append('file', file)
+    return api<VoiceUploadResponse>('/api/v1/voice/upload', { method: 'POST', body: form })
 }

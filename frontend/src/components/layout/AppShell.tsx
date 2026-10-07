@@ -1,0 +1,386 @@
+//* 应用壳: 左栏 + 主区插槽 (<Outlet/>), 登录浮层与 RED 预警弹窗的全局挂载点, 壳状态单一持有 (spec §4.2/§5.1):
+//* 手风琴 section (默认会话节, 主区跟随 sectionRoute) / collapsed (soul.sidebar 持久化语义, 存储所有权在 Sidebar) /
+//* menuOpen (汉堡用户菜单) / drawerOpen (移动端抽屉, 刻意不落盘) / crisisOpen (危机 Flyout, Task 8: 菜单 + RED 双入口) /
+//* pendingDeleteId (删除确认模态, Task 11: 侧栏 × 请求删除 -> 壳级 alertdialog 二次确认后才真删).
+//* 门桥接 (分层裁决): LoginSheet 不碰 AuthContext, 壳把它焊在门上 — onAuthed -> gate.confirm (补发 pending),
+//* onCancel -> gate.cancel (丢弃). 受保护路由的访客门在 App.tsx (<RequireAuth>), 与此处共享同一扇门.
+//* 会话状态提升 (Task 10 裁决沿用): 壳拥有 sessions (登录后拉取/登出即清) 与 openRequest 通道, 经 Outlet context 下发;
+//* Task 9: `/` 主区即 ChatView (仅会话节路由可达, 扩展节展开即整体卸载), 通道契约保持不变.
+//* Task 14: <768px 时侧栏经 CSS 媒体查询变 overlay 抽屉, 顶栏汉堡是唯一入口; 开合判定纯 CSS 媒体查询驱动,
+//* jsdom 不求值媒体查询, 测试只断状态与节点在位性 (免 matchMedia mock).
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactElement } from 'react'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { deleteSession, listSessions } from '../../api/chat'
+import { useAuth } from '../../hooks/useAuth'
+import { useAlert } from '../../hooks/useAlert'
+import { useChatGate } from '../../hooks/useChatGate'
+import { toast } from '../../utils/toast'
+import { sectionRoute } from '../../utils/sidebarSections'
+import { onOverlayPopstate, overlayClosed, overlayOpened, overlayResync } from '../../utils/overlayHistory'
+import LoginSheet from '../auth/LoginSheet'
+import RedAlertModal from '../alert/RedAlertModal'
+import CrisisFlyout from '../crisis/CrisisFlyout'
+import ConfirmModal from '../ui/ConfirmModal'
+import Icon from '../ui/Icon'
+import UserMenu from './UserMenu'
+import { useBrandName } from '../../hooks/useBrandName'
+import Sidebar from './Sidebar'
+import { SIDEBAR_PREF_KEY } from './Sidebar'
+import type { SidebarSection } from '../../utils/sidebarSections'
+import type { IChatViewContext, INewChatRequest, ISendRequest, ISessionOpenRequest } from '../../views/chatContext'
+import type { ChatSessionVo } from '../../types'
+
+//* 删除行塌缩窗口 (ms, Task 5): 与 base.css .row-collapse 的高度过渡令牌 --dur-enter (220ms) 对齐, 窗口走完
+//* 才发删除请求卸载行. 提为常量而非运行时现读令牌 (useExitAnimation 同款 getComputedStyle 口径在 jsdom 无 CSS
+//* 宿主回落 0, 会让 "窗口未到不卸载" 的时序断言失真); 令牌调档时此处同步改, 两侧注释互指.
+const ROW_COLLAPSE_MS = 220
+
+//* 侧栏会话行定位 (Task 5, 删除塌缩退场用): 行归 Sidebar 渲染, 壳经 data-session-id 锚定位 (与行内左滑手势
+//* 同款锚) — 塌缩是纯视觉时序, 免为此新增壳->侧栏回调契约. 扁平遍历 dataset 匹配而非选择器拼接:
+//* 会话 id 不经 CSS.escape 也可靠 (jsdom 无 CSS.escape 的老宿主兼容).
+function findSessionRow(id: string): HTMLElement | null
+{
+    const rows = document.querySelectorAll<HTMLElement>('.sidebar-row[data-session-id]')
+    for(const row of rows)
+    {
+        if(row.dataset.sessionId === id)
+            return row
+    }
+    return null
+}
+
+export default function AppShell(): ReactElement
+{
+    const { user, logout } = useAuth()
+    //* 品牌域接线 (评审整改 + D7): 品牌名与扩展板块显示名都来自后端部署配置, 浏览器标题随品牌名更新, 扩展名转交侧栏 (均兜底默认值).
+    const { brand, extensionsLabel } = useBrandName()
+    useEffect(() => { document.title = brand }, [brand])
+    const gate = useChatGate()
+    const { red, dismissRed } = useAlert()
+    const navigate = useNavigate()
+    //* 主区路由切换淡入的 key 闸 (Task 13, spec §9.1): pathname 变化即重挂容器重放入场动画 (见 .main-route 注).
+    const { pathname } = useLocation()
+    //* 惰性还原: 首渲染读偏好, 缺省展开 (存储取值归 Sidebar 所有, 这里只消费 'collapsed' 语义).
+    const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_PREF_KEY) === 'collapsed')
+    //* 手风琴展开节 (默认会话节, spec §5.1): 节即路由 — onSectionChange 翻转状态并导航 sectionRoute.
+    const [section, setSection] = useState<SidebarSection>('sessions')
+    const [menuOpen, setMenuOpen] = useState(false)
+    const [crisisOpen, setCrisisOpen] = useState(false)
+    //* 会话状态带账号标签: 列表只对"拉取它的那个账号"可见 (派生判定, 账号切换瞬间旧列表立即失明,
+    //* 防止 A 登出后 B 登录的取数间隙闪现 A 的会话预览 — 跨账号泄漏); 派生而非 effect 内同步清零.
+    const [sessionState, setSessionState] = useState<{ owner: string | null; list: ChatSessionVo[] | null }>({ owner: null, list: null })
+    const [openRequest, setOpenRequest] = useState<ISessionOpenRequest | null>(null)
+    //* Task 12 通道 (情境卡唤起聊天): ContextRail 已随 homepage-v2 退场 (扩展 chips 插槽取代), 通道本体与
+    //* ChatView 的 nonce 判重消费链保留 — 零生产者时恒 null 无害, 未来唤起类入口可原地复用 (回归测试钉住).
+    const [sendRequest] = useState<ISendRequest | null>(null)
+    //* 新建会话通道 (终审整改): 侧栏 "新建会话" 登录态路径的下发载体 — nonce 单调递增, 重复点击也重新触发,
+    //* ChatView 以模块级台账判重消费 (startNewChat 复位). 会话状态归 ChatView 所有, 壳只发请求不越层操作.
+    const [newChatRequest, setNewChatRequest] = useState<INewChatRequest | null>(null)
+    //* 移动端抽屉开合态: 组件局部, 刻意不持久化 (桌面/移动共享同一状态, 落盘反而会在换端时误开抽屉).
+    const [drawerOpen, setDrawerOpen] = useState(false)
+    //* 侧滑手势开抽屉回调 (Task 15): 与顶栏汉堡共用同一 drawerOpen 状态源, 引用稳定 (Sidebar 手势 effect 依赖).
+    const handleOpenDrawer = useCallback(() => { setDrawerOpen(true) }, [])
+    //* 抽屉关闭回调 (R1 走查整改): 引用稳定 — Sidebar 手势 effect 依赖 [drawer, onCloseDrawer, onOpenDrawer],
+    //! 内联箭头每次渲染换回调身份, 会令该 effect 反复注销/重挂监听并在跟指期 clearInline, 手势中途被打断 (与开手势同因).
+    const handleCloseDrawer = useCallback(() => { setDrawerOpen(false) }, [])
+    //* 删除确认流 (Task 11): pendingDeleteId 非空 = 确认模态在场 — 侧栏 × 只表达"请求删除", 真正删除
+    //* 必须经 [[ConfirmModal]] 二次确认 (原生 window.confirm 已废: 暴露 URL 且预览不可控, D17 无预览契约).
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+    //* 塌缩窗口定时器台账 (Task 5): 逐 id 一把 — 快速连删两条时第一条的窗口不被第二条重置吞掉,
+    //! 走完各自发各自的删除请求; 壳卸载 (登出) 时统一清空, 孤儿定时器不再触发已失效的删除管线.
+    const collapseTimersRef = useRef<Map<string, number>>(new Map())
+    useEffect(() => () => { collapseTimersRef.current.forEach(t => clearTimeout(t)) }, [])
+    const sessions = user != null && sessionState.owner === user.userId ? sessionState.list : null
+
+    //* 会话列表随登录态拉取: 拉取失败降级空列表 (侧栏显示空态文案, 不阻塞聊天); setState 全在异步回调,
+    //* 不在 effect 体内同步触发级联渲染. 访客不拉取, 派生层直接失明.
+    useEffect(() =>
+    {
+        if(user == null)
+            return
+        const owner = user.userId
+        let alive = true
+        listSessions().
+            then(list => { if(alive) setSessionState({ owner, list }) }).
+            catch(() => { if(alive) setSessionState({ owner, list: [] }) })
+        return () => { alive = false }
+    }, [user])
+
+    //* 发送完成后由 ChatView 回调刷新 (新会话/预览变化): 失败保留旧列表不清空 (避免误触发 ChatView 复位);
+    //* owner 沿用上一态 (刷新只发生在已登录的发送流程内).
+    const reloadSessions = useCallback(() =>
+    {
+        listSessions().
+            then(list => setSessionState(prev => ({ owner: prev.owner, list }))).
+            catch(() => {})
+    }, [])
+
+    const handleOpenSession = useCallback((id: string) =>
+    {
+        //* 抽屉内点会话: 先收抽屉 (否则移动端抽屉继续盖住聊天区), 再 nonce 单调递增下发 —
+        //* 同一会话重复点击也重新下发, 由 ChatView 的 openSession 幂等短路. 桌面端 drawerOpen 恒 false, 无副作用.
+        //* 非聊天路由 (设置/扩展页等) 上点条目: 必须先导航回聊天位, 否则 openRequest 派给未挂载的 ChatView 无人消费 (走查实测).
+        setDrawerOpen(false)
+        if(pathname !== '/')
+            navigate('/')
+        setOpenRequest(prev => ({ sessionId: id, nonce: (prev?.nonce ?? 0) + 1 }))
+    }, [pathname, navigate])
+
+    //* 手风琴节标题: 状态翻转 + 主区导航到该节路由 (映射归 utils/sidebarSections, 主区即路由区).
+    const handleSectionChange = useCallback((next: SidebarSection) =>
+    {
+        setSection(next)
+        navigate(sectionRoute(next))
+    }, [navigate])
+
+    //* 新建会话: 访客先过登录门 (红线: 访客任何交互触发登录浮层); 登录态经 nonce 通道下发 ChatView 复位
+    //* (startNewChat, 终审整改 — 此前登录态路径无消费通道, 按钮对登录用户是死的). 先收抽屉: 桌面端无副作用,
+    //* 抽屉内点按不至于盖着聊天区.
+    const handleNewChat = useCallback(() =>
+    {
+        setDrawerOpen(false)
+        if(user == null)
+        {
+            gate.requireAuth(() => {})
+            if(pathname !== '/')
+                navigate('/')  //* 访客过门后落回聊天位 (pending 为空动作, 留在原地无意义).
+            return
+        }
+        if(pathname !== '/')
+            navigate('/')  //* 同 openSession: 新建请求的消费方在聊天位, 非聊天路由上必须先导航.
+        setNewChatRequest(prev => ({ nonce: (prev?.nonce ?? 0) + 1 }))
+    }, [user, gate, pathname, navigate])
+
+    //* 菜单项统一收口: 先收菜单再执行动作, 保证菜单不跨路由/浮层残留. onClose 引用稳定 (UserMenu effect 依赖).
+    const handleMenuClose = useCallback(() => { setMenuOpen(false) }, [])
+    //* 危机入口 (Task 15 台账): 菜单/抽屉双闭环 — 开 Flyout 前菜单与抽屉都收起, 危机浮层独占屏幕 (红线层级).
+    const handleOpenCrisis = useCallback(() =>
+    {
+        setMenuOpen(false)
+        setDrawerOpen(false)
+        setCrisisOpen(true)
+    }, [])
+    const handleCrisisClose = useCallback(() => { setCrisisOpen(false) }, [])
+    //* RED -> Flyout 桥 (Task 8): "查看全部求助资源" 上抛至此 — 先关 RED 再开 Flyout (两浮层互斥,
+    //* 红线: RED 是永远置顶的安全模态, 不允许被 Flyout 盖住或长时间与 Flyout 同屏).
+    const handleOpenResources = useCallback(() =>
+    {
+        dismissRed()
+        setCrisisOpen(true)
+    }, [dismissRed])
+    const handleMenuNavigate = useCallback((to: string) =>
+    {
+        setMenuOpen(false)
+        setDrawerOpen(false)  //* Task 15 台账: 抽屉内 ≡ 菜单导航后必须自动收抽屉, 否则抽屉盖住新页面 (桌面端恒 false 无副作用).
+        if(user == null)
+        {
+            //* 访客点门保护项: 过登录门而非导航 (pending no-op, 登录后原地放行到当前路由); 危机支持不走此路 (公开红线).
+            gate.requireAuth(() => {})
+            return
+        }
+        navigate(to)
+    }, [gate, navigate, user])
+    const handleLogout = useCallback(() =>
+    {
+        setMenuOpen(false)
+        setDrawerOpen(false)  //* Task 15 台账: 登出同导航收口 — 抽屉内登出不得把抽屉留在登出后的访客首页上.
+        logout()
+        navigate('/')  //* 登出后落回公开聊天位: 停在受保护路由上会被 <RequireAuth> 立即再开门.
+    }, [logout, navigate])
+
+    //* 抽屉 Escape 关闭: 仅打开期间挂 document 级监听, 收起/卸载即注销 (与登录浮层同形);
+    //! 有意不与登录浮层抢 Escape: 抽屉内点登录会先收抽屉再开门, 两浮层不会同时在场.
+    useEffect(() =>
+    {
+        if(!drawerOpen)
+            return
+        const onKey = (e: KeyboardEvent): void =>
+        {
+            if(e.key === 'Escape')
+                setDrawerOpen(false)
+        }
+        document.addEventListener('keydown', onKey)
+        return () => document.removeEventListener('keydown', onKey)
+    }, [drawerOpen])
+
+    //* 删除两段式 (Task 11): 第一段 × 点击只记下待删 id 开模态 (侧栏 onDeleteSession 契约语义 = 请求删除,
+    //* 侧栏本体不动); 第二段模态确认才真删. 先收模态再发请求: 删除成败都不让确认框滞留, 失败经 toast 提示,
+    //! 失败保留原会话可重试, 不静默吞错.
+    const handleRequestDeleteSession = useCallback((id: string) => { setPendingDeleteId(id) }, [])
+    const handleCancelDelete = useCallback(() => { setPendingDeleteId(null) }, [])
+    //* 删除行塌缩残留清理 (Task 5): 删除失败可重试, 行还在列表里就必须摘净塌缩类与内联行高, 否则行永久隐形.
+    const restoreCollapsedRow = (id: string): void =>
+    {
+        const row = findSessionRow(id)
+        if(row == null)
+            return
+        row.classList.remove('row-collapse', 'gone')
+        row.style.height = ''
+    }
+    const handleConfirmDelete = useCallback(() =>
+    {
+        if(pendingDeleteId == null)
+            return
+        const id = pendingDeleteId
+        setPendingDeleteId(null)
+        //* 真删除管线 (Task 11 既有语义, 塌缩窗口前后共用): 成功本地滤除驱动行卸载, 失败 toast 可重试.
+        const runDelete = (): void =>
+        {
+            deleteSession(id).
+                then(() => setSessionState(prev => (prev.list == null ? prev : { owner: prev.owner, list: prev.list.filter(s => s.sessionId !== id) }))).
+                catch(() =>
+                {
+                    restoreCollapsedRow(id)  //* 失败回滚塌缩残留, 行原样可重试 (管线语义: 不静默吞错).
+                    toast('会话删除失败, 请稍后再试.', 'error')
+                })
+        }
+        //* 塌缩退场 (Task 5): 行在场时先挂 .row-collapse.gone (左移淡出 + 高度收零), ROW_COLLAPSE_MS 窗口走完
+        //* 才调删除管线 — 行的卸载仍由既有列表滤除驱动, 塌缩只是给卸载前补一段可见退场 (直接卸载则退场无窗口可播).
+        const row = findSessionRow(id)
+        if(row == null)
+        {
+            runDelete()  //* 行不在场 (节已切到扩展/侧栏已收起渲染分支等): 无可塌缩, 直接走管线.
+            return
+        }
+        //! 先清行内手势的停靠残留再加塌缩类: 确认时行可能仍在左滑停靠态 — 内联 translateX(-64px) 会盖过
+        //! .gone 的塌缩位移, swiped 类不摘则露钮样式残留; 清理口径与 Sidebar#resetRowSwipe 一致.
+        row.classList.remove('swiped')
+        const main = row.querySelector<HTMLElement>('.sidebar-row-main')
+        if(main != null)
+        {
+            main.style.transition = ''
+            main.style.transform = ''
+        }
+        row.style.height = `${row.offsetHeight}px`  //* height 过渡起点: auto 不可过渡, 先钉当前像素行高 (.gone 内 !important 收零).
+        row.classList.add('row-collapse', 'gone')
+        const timers = collapseTimersRef.current
+        if(timers.has(id))
+            clearTimeout(timers.get(id))  //* 同 id 重复确认 (理论不可达, 防御性重置): 旧窗口作废, 下面重排新窗口.
+        timers.set(id, window.setTimeout(() =>
+        {
+            timers.delete(id)
+            runDelete()
+        }, ROW_COLLAPSE_MS))
+    }, [pendingDeleteId])
+
+    //* 浮层返回哨兵 (spec §5.2): 五浮层 + RED 在场计数驱动哨兵压栈/收栈; popstate 关"最上层"浮层
+    //* (z 阶梯: confirm 90 > menu 86 > crisis 85 > drawer 80 > login 60); RED 计入计数 (评审闭环
+    //* Important-2): SSE 在无浮层时弹 RED 也立即压哨兵挡返回, RED 展示期返回永不退路由/退 app.
+    const overlayCount =
+        (menuOpen ? 1 : 0) + (crisisOpen ? 1 : 0) + (drawerOpen ? 1 : 0) +
+        (pendingDeleteId != null ? 1 : 0) + (gate.open ? 1 : 0) + (red != null ? 1 : 0)
+    useEffect(() =>
+    {
+        if(overlayCount > 0)
+            overlayOpened()
+        else
+            overlayClosed()  //* RED 已计入计数: 走到 else 即真无浮层才收栈 (RED 在场时计数恒 > 0, 哨兵恒保留).
+    }, [overlayCount])
+
+    useEffect(() =>
+    {
+        const off = onOverlayPopstate(() =>
+        {
+            //* RED 在屏红线 (R2 评审闭环): 任何一次返回 (无论关浮层还是被吞) 都不得净消耗历史栈 —
+            //* 先补回这次遍历消费的 entry 再照常关最上层浮层. 变量仍为 1, overlayOpened() 会 no-op,
+            //! 须 overlayResync() 直推; 否则消费浮层后的 desync 窗口内再一记返回落在栈底即触壳退出 (RED 在屏).
+            if(red != null)
+                overlayResync()
+            if(pendingDeleteId != null) { setPendingDeleteId(null); return }
+            if(menuOpen) { setMenuOpen(false); return }
+            if(crisisOpen) { setCrisisOpen(false); return }
+            if(drawerOpen) { setDrawerOpen(false); return }
+            if(gate.open) { gate.cancel(); return }
+            //* 全无且 RED 不在屏: 这是 overlayClosed 自己的收栈事件 (或陈旧哨兵层), 忽略.
+        })
+        return off
+    }, [pendingDeleteId, menuOpen, crisisOpen, drawerOpen, gate, red])
+    //! popstate handler 闭包依赖五个状态 + red — 每次状态变化重挂 (注销/重订阅), 保证读到新鲜值; 开销可忽略.
+
+    const ctx: IChatViewContext = { sessions, reloadSessions, openRequest, sendRequest, newChatRequest }
+
+    //* 抽屉视差状态类 (Task 5): 开抽屉时壳挂 drawer-aux, CSS 媒体查询据此给 .main 加 translateX(10%) 视差位移 —
+    //* 挂壳而非 .main 本体: 壳是 drawerOpen 状态的持有者, 主区样式规则纯 CSS 承载, jsdom 测试断言壳类即钉住接线.
+    const shellClass = ['shell', drawerOpen ? 'drawer-aux' : ''].filter(Boolean).join(' ')
+
+    return (
+        <div className={shellClass}>
+            <Sidebar
+                collapsed={collapsed}
+                onToggleCollapse={() => setCollapsed((c) => !c)}
+                section={section}
+                onSectionChange={handleSectionChange}
+                extensionsLabel={extensionsLabel}  //* D7: 扩展板块显示名经品牌端点下发 (SOULNOTES_EXTENSIONS_LABEL), 不再硬编码.
+                sessions={sessions ?? undefined}
+                onDeleteSession={handleRequestDeleteSession}  //* 契约语义 = 用户请求删除: 壳接确认模态, 确认后才真删 (Task 11).
+                onOpenSession={handleOpenSession}
+                onNewChat={handleNewChat}
+                menuOpen={menuOpen}
+                onMenuToggle={() => setMenuOpen((o) => !o)}  //* 菜单实体由壳在此渲染, 侧栏仅作 aria 镜像.
+                onOpenCrisis={handleOpenCrisis}  //* 契约保留位: 危机入口实体在壳的汉堡菜单 (Task 8 换 Flyout).
+                onOpenLogin={user == null ? () => { setDrawerOpen(false); gate.requireAuth(() => {}) } : undefined}
+                drawerOpen={drawerOpen}
+                onCloseDrawer={handleCloseDrawer}  //* 引用稳定 (R1 走查整改): 手势 effect 依赖, 勿用内联箭头换身份.
+                //* Task 15 侧滑手势: 屏幕左缘右滑开抽屉, 回调归壳同一状态源 (勿建平行 state).
+                //! RED 在屏互斥 (R2 核查, 收官轮收口): 开抽屉手势监听在 document 级, 会越过 z-100 的 RED 遮罩 —
+                //! RED 在场即收回 onOpenDrawer 下发面, Sidebar 手势门禁 (回调缺席不起手势) 承接互斥. aside 级手势
+                //! (关抽屉/行滑动) 原靠遮罩物理拦截 (旧裁定 "无需另设门"), 现另下发 gesturesLocked 总闸补显式门禁:
+                //! 防 stacking 回归, 且总闸翻转重挂手势 effect — 在途手势废弃 + 停靠行复位, RED 在屏零手势残留.
+                onOpenDrawer={red != null ? undefined : handleOpenDrawer}
+                gesturesLocked={red != null}
+            />
+            {/* 汉堡用户菜单 (访客/登录用户均可达 — 红线: 危机入口对访客无门): 常驻挂载 (退场动画簿记在组件内),
+                guest 态下门保护项过登录门, 登出隐藏. */}
+            <UserMenu
+                open={menuOpen}
+                guest={user == null}
+                    onClose={handleMenuClose}
+                    onOpenCrisis={handleOpenCrisis}
+                    onOpenProfile={() => handleMenuNavigate('/profile')}
+                    onOpenSettings={() => handleMenuNavigate('/settings')}
+                    onLogout={handleLogout}
+                />
+            <main className="main">
+                {/* 顶栏: 汉堡钮 (移动端抽屉唯一入口, 常驻 DOM, 桌面端 CSS display:none) + 天气胶囊 (仅登录后挂载,
+                    访客不占位; 胶囊失败/数据缺席时 fail-silent 隐藏). */}
+                <div className="topbar">
+                    <button
+                        type="button"
+                        className="drawer-hamburger pressable"
+                        aria-label={drawerOpen ? '关闭导航菜单' : '打开导航菜单'}  //* 开合两态换向标签: aria-expanded 之外再给读屏一个动词级语义.
+                        aria-expanded={drawerOpen}
+                        aria-controls="sidebar-body"
+                        onClick={() => setDrawerOpen((o) => !o)}  //* 切换而非只开: 标签随态换向 (关闭导航菜单) 时, 激活必须真的能关 — 名实一致.
+                    >
+                        <Icon name="menu" size={18} />
+                    </button>
+                </div>
+                {/* 主区路由容器 (Task 13, spec §9.1): key=pathname 驱动路由切换淡入 (.main-route), 布局契约不变. */}
+                <div className="main-route" key={pathname}>
+                    <Outlet context={ctx} />
+                </div>
+            </main>
+            {/* 危机 Flyout (Task 8): 常驻挂载, open=false 时组件自渲染 null; 菜单与 RED 双入口均落到此层 —
+                号码默认兜底 + 三级缓存刷新 (零网络首绘可用), 遮罩点击/Escape/我知道了 三路关闭, 对访客无门 (红线). */}
+            <CrisisFlyout open={crisisOpen} onClose={handleCrisisClose} />
+            {/* 删除确认模态 (Task 11, D17 无预览): 常驻挂载 open 短路 (CrisisFlyout 同形), 文案为壳持有的固定拷贝,
+                组件无 children/预览插槽 — 会话内容绝不在此复读. 取消/Escape/遮罩三路只关不删, 确认才走真删除. */}
+            <ConfirmModal
+                open={pendingDeleteId != null}
+                title="删除这条会话?"
+                body="删除后不可恢复"
+                confirmText="删除"
+                danger
+                onClose={handleCancelDelete}
+                onConfirm={handleConfirmDelete}
+            />
+            {/* 访客侧栏登录钮经 requireAuth(noop) 开门: pending 为空动作, confirm 时补发一次 no-op, cancel 丢弃, 均无副作用.
+                常驻挂载 + open 短路 (退场动画簿记在组件内). */}
+            <LoginSheet open={gate.open} onAuthed={(d) => gate.confirm(d)} onCancel={gate.cancel} />
+            {/* RED 预警弹窗挂在路由内容之外 (Task 13 brief): 路由切换不卸载, z-index 置顶盖过登录浮层;
+                关闭只经显式"我知道了"/上抛查看全部求助资源 (壳关 RED 并开危机 Flyout), 弹窗自身不响应 Escape. */}
+            {red != null && <RedAlertModal alert={red} onClose={dismissRed} onOpenResources={handleOpenResources} />}
+        </div>
+    )
+}
